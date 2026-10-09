@@ -1,0 +1,97 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
+[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="4_creature"]
+[ext_resource type="PackedScene" path="res://scenes/coral.tscn" id="5_coral"]
+[ext_resource type="Script" path="res://scripts/depth_awareness.gd" id="6_awareness"]
+[ext_resource type="Script" path="res://scripts/hud.gd" id="7_hud"]
+
+[node name="Main" type="Node2D" node_paths=PackedStringArray("player", "awareness", "creature")]
+script = ExtResource("1_main")
+player = NodePath("Player")
+awareness = NodePath("DepthAwareness")
+creature = NodePath("Creature")
+
+[node name="Darkness" type="CanvasModulate" parent="."]
+color = Color(0.02, 0.03, 0.07, 1)
+
+[node name="Floor" type="Polygon2D" parent="."]
+color = Color(0.16, 0.22, 0.27, 1)
+polygon = PackedVector2Array(0, 0, 2400, 0, 2400, 1600, 0, 1600)
+
+[node name="Walls" type="Node2D" parent="."]
+
+[node name="WallTop" type="StaticBody2D" parent="Walls"]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(-100, -100, 2500, -100, 2500, 60, 2100, 90, 1700, 50, 1200, 100, 700, 60, 300, 95, -100, 60)
+
+[node name="WallBottom" type="StaticBody2D" parent="Walls"]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(-100, 1530, 400, 1550, 900, 1510, 1500, 1560, 2000, 1500, 2500, 1540, 2500, 1700, -100, 1700)
+
+[node name="WallLeft" type="StaticBody2D" parent="Walls"]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(-100, -100, 60, -100, 90, 400, 50, 800, 100, 1200, 60, 1700, -100, 1700)
+
+[node name="WallRight" type="StaticBody2D" parent="Walls"]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(2340, -100, 2500, -100, 2500, 1700, 2340, 1700, 2300, 1300, 2360, 900, 2310, 500)
+
+[node name="Rock1" type="StaticBody2D" parent="Walls"]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(560, 650, 720, 620, 790, 760, 740, 930, 600, 960, 540, 820)
+
+[node name="Rock2" type="StaticBody2D" parent="Walls"]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1100, 420, 1300, 450, 1340, 620, 1250, 760, 1120, 700)
+
+[node name="Rock3" type="StaticBody2D" parent="Walls"]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1150, 1050, 1400, 1020, 1450, 1180, 1300, 1300, 1170, 1260)
+
+[node name="Rock4" type="StaticBody2D" parent="Walls"]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1720, 760, 1900, 720, 1960, 880, 1850, 980, 1740, 940)
+
+[node name="Corals" type="Node2D" parent="."]
+
+[node name="Coral1" parent="Corals" instance=ExtResource("5_coral")]
+position = Vector2(900, 350)
+
+[node name="Coral2" parent="Corals" instance=ExtResource("5_coral")]
+position = Vector2(1650, 1350)
+
+[node name="Coral3" parent="Corals" instance=ExtResource("5_coral")]
+position = Vector2(2050, 450)
+
+[node name="Player" parent="." instance=ExtResource("3_player")]
+position = Vector2(250, 800)
+
+[node name="Creature" parent="." node_paths=PackedStringArray("awareness", "player") instance=ExtResource("4_creature")]
+position = Vector2(1950, 1200)
+awareness = NodePath("../DepthAwareness")
+player = NodePath("../Player")
+
+[node name="DepthAwareness" type="Node" parent="."]
+script = ExtResource("6_awareness")
+
+[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("awareness", "player", "creature")]
+script = ExtResource("7_hud")
+awareness = NodePath("../DepthAwareness")
+player = NodePath("../Player")
+creature = NodePath("../Creature")
+
+[node name="AwarenessBar" type="ProgressBar" parent="Hud"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 320.0
+offset_bottom = 44.0
+show_percentage = false
+
+[node name="DebugLabel" type="Label" parent="Hud"]
+offset_left = 20.0
+offset_top = 52.0
+offset_right = 420.0
+offset_bottom = 140.0
