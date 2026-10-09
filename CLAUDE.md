@@ -1,0 +1,25 @@
+# Echo — Project Rules
+
+2D top-down co-op roguelite set in the deep ocean. Target: PC (Steam), local co-op with gamepads later.
+
+## Core idea
+The world is almost completely dark. The player emits a sonar pulse that reveals the
+surroundings for a few seconds and wakes up sparse bioluminescent corals. Every pulse
+raises the "Depth Awareness" meter (0-100), which makes creatures more aggressive.
+
+## Rules
+- **Godot 4 + GDScript only.** No C#, no GDExtension, no third-party addons unless agreed first.
+- **Typed GDScript everywhere**: typed variables, parameters and return types
+  (`var speed: float = 100.0`, `func foo(x: int) -> void:`). The project warns on untyped declarations.
+- **Small, focused scripts**: one responsibility per script. Prefer signals over tight coupling.
+- **File names in snake_case** (`player.gd`, `pulse_ring.tscn`). Class names in PascalCase via `class_name`.
+- **All tunable values are `@export` variables** (speeds, durations, radii, colors, amounts). No magic numbers in logic.
+- **No final art yet**: grey-box only (Polygon2D, `_draw()` shapes, generated light textures).
+
+## Folders
+- `scenes/` — `.tscn` scenes
+- `scripts/` — `.gd` scripts
+- `assets/` — future art/audio (empty during grey-box)
+
+## Collision layers
+1 = walls, 2 = player, 3 = creatures
