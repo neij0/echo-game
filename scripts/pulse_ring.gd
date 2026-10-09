@@ -1,17 +1,23 @@
 class_name PulseRing
 extends Node2D
-## The sonar pulse: an expanding ring + light that reveals walls, then fades.
-## Wakes up every Coral the ring passes over.
+## The sonar pulse: a faint, shadow-casting glow that expands and fades, and wakes
+## every Coral the front passes over. The visible wave front and the edge reveal
+## are drawn by SonarOverlay, which this pulse notifies when it starts.
 
 @export var max_radius: float = 650.0
 @export var expand_time: float = 0.8
-## How long the revealed area stays fully lit after the ring stops expanding.
+## How long the faint glow stays after the front stops expanding.
 @export var reveal_time: float = 2.0
 @export var fade_time: float = 0.8
-@export var ring_width: float = 4.0
-@export var ring_color: Color = Color(0.4, 0.9, 1.0)
-@export var light_energy: float = 0.9
+
+@export_group("Glow")
+## Kept low on purpose: the glowing outlines carry the reveal, not this light.
+@export var light_energy: float = 0.15
 @export var light_color: Color = Color(0.55, 0.75, 0.9)
+## 0-1: where the glow starts fading towards its edge (lower = softer).
+@export_range(0.0, 1.0) var glow_hard_edge: float = 0.2
+@export var cast_shadows: bool = true
+@export var shadow_smooth: float = 2.0
 
 var radius: float = 0.0
 var _age: float = 0.0
@@ -21,11 +27,15 @@ var _woken: Array[Coral] = []
 
 func _ready() -> void:
 	_light = PointLight2D.new()
-	_light.texture = LightTextures.radial(256, 0.9)
+	_light.texture = LightTextures.radial(256, glow_hard_edge)
 	_light.color = light_color
 	_light.energy = light_energy
+	_light.shadow_enabled = cast_shadows
+	_light.shadow_filter = Light2D.SHADOW_FILTER_PCF5
+	_light.shadow_filter_smooth = shadow_smooth
 	add_child(_light)
 	_update_light()
+	get_tree().call_group("sonar_overlay", "add_pulse", global_position, max_radius, expand_time)
 
 
 func _process(delta: float) -> void:
@@ -38,7 +48,6 @@ func _process(delta: float) -> void:
 
 	_update_light()
 	_wake_corals()
-	queue_redraw()
 
 	if _age >= fade_start + fade_time:
 		queue_free()
@@ -56,9 +65,3 @@ func _wake_corals() -> void:
 		if global_position.distance_to(coral.global_position) <= radius:
 			_woken.append(coral)
 			coral.wake()
-
-
-func _draw() -> void:
-	# Only draw the ring while it is still travelling outward.
-	if _age <= expand_time and radius > ring_width:
-		draw_arc(Vector2.ZERO, radius - ring_width, 0.0, TAU, 96, ring_color, ring_width, true)

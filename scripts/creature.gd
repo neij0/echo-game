@@ -22,6 +22,18 @@ enum State { WANDER, INVESTIGATE }
 ## How strongly lit coral zones push the creature away.
 @export var safe_zone_push: float = 400.0
 
+@export_group("Obstacle Avoidance")
+## Seconds to slide along a wall after bumping into it while investigating.
+@export var detour_time: float = 0.6
+## Small push away from the wall while sliding, so it does not scrape along it.
+@export var detour_wall_push: float = 0.2
+## Total seconds of wall contact before picking a new point near the pulse.
+@export var give_up_time: float = 2.5
+## New investigation points are picked this far from the original pulse.
+@export var retarget_distance: float = 160.0
+## After this many new points, stop investigating and wander where it is.
+@export var max_retargets: int = 3
+
 @export_group("Visual")
 @export var body_radius: float = 20.0
 @export var body_color: Color = Color(0.85, 0.25, 0.3)
@@ -30,6 +42,11 @@ var state: State = State.WANDER
 var target: Vector2
 var _home: Vector2
 var _pause_left: float = 0.0
+var _pulse_origin: Vector2
+var _detour_dir: Vector2 = Vector2.ZERO
+var _detour_left: float = 0.0
+var _blocked_time: float = 0.0
+var _retargets: int = 0
 
 @onready var _hitbox: Area2D = $Hitbox
 
@@ -45,11 +62,17 @@ func hear_pulse(origin: Vector2) -> void:
 		return
 	state = State.INVESTIGATE
 	target = origin
+	_pulse_origin = origin
 	_pause_left = 0.0
+	_retargets = 0
+	_reset_detour()
 
 
 func get_state_name() -> String:
-	return State.keys()[state]
+	var state_name: String = State.keys()[state]
+	if _detour_left > 0.0:
+		state_name += " +DETOUR"
+	return state_name
 
 
 func get_current_speed() -> float:
@@ -64,15 +87,61 @@ func _physics_process(delta: float) -> void:
 	elif global_position.distance_to(target) <= arrive_distance:
 		_on_target_reached()
 	else:
-		desired = global_position.direction_to(target) * get_current_speed()
+		desired = _steer_direction(delta) * get_current_speed()
 
 	desired += _safe_zone_push()
 	velocity = velocity.lerp(desired, 1.0 - exp(-steering * delta))
 	move_and_slide()
 
-	# If a wall blocks the way while wandering, pick another spot.
-	if state == State.WANDER and get_slide_collision_count() > 0:
+	if get_slide_collision_count() > 0:
+		if state == State.WANDER:
+			# Wandering: just pick another spot.
+			_pick_wander_target()
+		else:
+			_on_blocked_while_investigating(delta)
+
+
+func _steer_direction(delta: float) -> Vector2:
+	if _detour_left > 0.0:
+		_detour_left -= delta
+		return _detour_dir
+	return global_position.direction_to(target)
+
+
+func _on_blocked_while_investigating(delta: float) -> void:
+	_blocked_time += delta
+	if _blocked_time >= give_up_time:
+		_retarget_near_pulse()
+		return
+	if _detour_left > 0.0:
+		return
+	# Slide along the wall. Keep the same side as the last detour so it goes
+	# around the rock instead of turning back and forth.
+	var normal: Vector2 = get_slide_collision(0).get_normal()
+	var tangent: Vector2 = normal.orthogonal()
+	var reference: Vector2 = _detour_dir if _detour_dir != Vector2.ZERO else global_position.direction_to(target)
+	if tangent.dot(reference) < 0.0:
+		tangent = -tangent
+	_detour_dir = (tangent + normal * detour_wall_push).normalized()
+	_detour_left = detour_time
+
+
+func _retarget_near_pulse() -> void:
+	_retargets += 1
+	_reset_detour()
+	if _retargets > max_retargets:
+		# Give up and wander where it is.
+		_home = global_position
+		state = State.WANDER
 		_pick_wander_target()
+		return
+	target = _pulse_origin + Vector2.from_angle(randf() * TAU) * retarget_distance
+
+
+func _reset_detour() -> void:
+	_detour_dir = Vector2.ZERO
+	_detour_left = 0.0
+	_blocked_time = 0.0
 
 
 func _on_target_reached() -> void:
@@ -80,6 +149,7 @@ func _on_target_reached() -> void:
 		# Keep wandering around where the pulse was heard.
 		_home = target
 		state = State.WANDER
+	_reset_detour()
 	_pause_left = wander_pause
 	_pick_wander_target()
 

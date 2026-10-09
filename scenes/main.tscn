@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://scenes/coral.tscn" id="5_coral"]
 [ext_resource type="Script" path="res://scripts/depth_awareness.gd" id="6_awareness"]
 [ext_resource type="Script" path="res://scripts/hud.gd" id="7_hud"]
+[ext_resource type="Script" path="res://scripts/sonar_overlay.gd" id="8_sonar"]
 
 [node name="Main" type="Node2D" node_paths=PackedStringArray("player", "awareness", "creature")]
 script = ExtResource("1_main")
@@ -77,7 +78,14 @@ player = NodePath("../Player")
 [node name="DepthAwareness" type="Node" parent="."]
 script = ExtResource("6_awareness")
 
+[node name="SonarLayer" type="CanvasLayer" parent="."]
+follow_viewport_enabled = true
+
+[node name="SonarOverlay" type="Node2D" parent="SonarLayer"]
+script = ExtResource("8_sonar")
+
 [node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("awareness", "player", "creature")]
+layer = 2
 script = ExtResource("7_hud")
 awareness = NodePath("../DepthAwareness")
 player = NodePath("../Player")
