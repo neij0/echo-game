@@ -82,6 +82,20 @@ ANCIENT_DECAY = 2.2         # seconds, time constant of the fade after the swell
 ANCIENT_SHIMMER = 0.006     # detune between left/right copies, gives a slow beating
 ANCIENT_PEAK = 0.85
 
+# --- Creature alert: short harsh screech when a creature spots a diver -------
+ALERT_LENGTH = 0.45
+ALERT_FREQ_START = 700.0    # Hz, the screech rises from here...
+ALERT_FREQ_PEAK = 1500.0    # ...to here...
+ALERT_PEAK_TIME = 0.12      # ...in this many seconds, then falls back a little
+ALERT_FREQ_END = 1100.0
+ALERT_HARMONICS = [(1.0, 1.0), (2.0, 0.5), (3.0, 0.35), (4.1, 0.2)]  # slightly inharmonic = uglier
+ALERT_ROUGHNESS = 0.6       # amount of fast amplitude wobble (raspy throat)
+ALERT_ROUGH_RATE = 55.0     # Hz of that wobble
+ALERT_NOISE = 0.25
+ALERT_ATTACK = 0.01
+ALERT_DECAY = 0.16
+ALERT_PEAK = 0.8
+
 RANDOM_SEED = 7
 
 
@@ -268,6 +282,29 @@ def make_ancient() -> list[float]:
     return normalize(samples, ANCIENT_PEAK)
 
 
+def make_alert() -> list[float]:
+    rng = random.Random(RANDOM_SEED + 3)
+    count = int(ALERT_LENGTH * SAMPLE_RATE)
+    samples = []
+    phase = 0.0
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        if t < ALERT_PEAK_TIME:
+            freq = ALERT_FREQ_START + (ALERT_FREQ_PEAK - ALERT_FREQ_START) * (t / ALERT_PEAK_TIME)
+        else:
+            k = min((t - ALERT_PEAK_TIME) / (ALERT_LENGTH - ALERT_PEAK_TIME), 1.0)
+            freq = ALERT_FREQ_PEAK + (ALERT_FREQ_END - ALERT_FREQ_PEAK) * k
+        phase += 2.0 * math.pi * freq / SAMPLE_RATE
+        tone = sum(gain * math.sin(phase * ratio) for ratio, gain in ALERT_HARMONICS)
+        rough = 1.0 - ALERT_ROUGHNESS * (0.5 + 0.5 * math.sin(2.0 * math.pi * ALERT_ROUGH_RATE * t))
+        noise = rng.uniform(-1.0, 1.0) * ALERT_NOISE
+        samples.append((tone * rough + noise) * envelope(t, ALERT_ATTACK, ALERT_DECAY))
+    fade_count = int(0.03 * SAMPLE_RATE)
+    for k in range(fade_count):
+        samples[count - fade_count + k] *= 1.0 - k / fade_count
+    return normalize(samples, ALERT_PEAK)
+
+
 def write_wav(path: Path, samples: list[float]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as file:
@@ -286,3 +323,4 @@ if __name__ == "__main__":
     write_wav(OUTPUT_DIR / "oxygen_alarm.wav", make_alarm())
     write_wav(OUTPUT_DIR / "station_refill.wav", make_refill())
     write_wav(OUTPUT_DIR / "ancient_light.wav", make_ancient())
+    write_wav(OUTPUT_DIR / "creature_alert.wav", make_alert())

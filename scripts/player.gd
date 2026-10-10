@@ -19,7 +19,7 @@ signal pulse_emitted(origin: Vector2)
 
 @export_group("Pulse")
 @export var pulse_ring_scene: PackedScene
-@export var pulse_cooldown: float = 2.0
+@export var pulse_cooldown: float = 3.0
 
 @export_group("Knockback")
 ## Seconds after a knockback during which max_speed is not applied, so the

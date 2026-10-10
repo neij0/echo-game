@@ -44,12 +44,18 @@ func _process(_delta: float) -> void:
 	_bar.value = awareness.value
 	_fill_style.bg_color = calm_color.lerp(warning_color, awareness.get_ratio())
 
-	var hunting: int = 0
+	# How many creatures are in each state (WANDER / INVESTIGATE / CHASE).
+	var counts: PackedInt32Array = PackedInt32Array()
+	counts.resize(Creature.State.size())
+	counts.fill(0)
 	var creatures: Array[Node] = get_tree().get_nodes_in_group("creatures")
 	for node: Node in creatures:
 		var creature := node as Creature
-		if creature and creature.state == Creature.State.INVESTIGATE:
-			hunting += 1
+		if creature:
+			counts[creature.state] += 1
+	var state_counts: PackedStringArray = PackedStringArray()
+	for state_index: int in Creature.State.size():
+		state_counts.append("%s %d" % [Creature.State.keys()[state_index], counts[state_index]])
 
 	var lines: PackedStringArray = PackedStringArray()
 	lines.append("Awareness: %.1f / %.0f" % [awareness.value, awareness.max_value])
@@ -57,5 +63,26 @@ func _process(_delta: float) -> void:
 		for player: Player in run_manager.players:
 			var cooldown: String = "READY" if player.is_pulse_ready() else "%.1fs" % player.pulse_cooldown_left
 			lines.append("P%d pulse: %s" % [player.player_number, cooldown])
-	lines.append("Creatures investigating: %d / %d" % [hunting, creatures.size()])
+			var nearest: Creature = _nearest_creature(creatures, player.global_position)
+			if nearest:
+				lines.append("P%d nearest creature: %s (%d px)" % [
+					player.player_number,
+					nearest.get_state_name(),
+					roundi(nearest.global_position.distance_to(player.global_position)),
+				])
+	lines.append("Creatures: " + " / ".join(state_counts))
 	_debug_label.text = "\n".join(lines)
+
+
+func _nearest_creature(creatures: Array[Node], from: Vector2) -> Creature:
+	var best: Creature = null
+	var best_distance: float = INF
+	for node: Node in creatures:
+		var creature := node as Creature
+		if creature == null:
+			continue
+		var distance: float = from.distance_squared_to(creature.global_position)
+		if distance < best_distance:
+			best_distance = distance
+			best = creature
+	return best

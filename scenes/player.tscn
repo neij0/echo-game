@@ -50,7 +50,8 @@ script = ExtResource("4_shake")
 script = ExtResource("5_health")
 player = NodePath("..")
 
-[node name="Oxygen" type="Node" parent="." node_paths=PackedStringArray("health")]
+[node name="Oxygen" type="Node" parent="." node_paths=PackedStringArray("health", "player")]
 script = ExtResource("6_oxygen")
 health = NodePath("../Health")
+player = NodePath("..")
 alarm_stream = ExtResource("7_alarm")

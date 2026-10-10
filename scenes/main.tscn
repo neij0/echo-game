@@ -80,14 +80,14 @@ show_percentage = false
 [node name="DebugLabel" type="Label" parent="Hud"]
 offset_left = 20.0
 offset_top = 52.0
-offset_right = 420.0
-offset_bottom = 130.0
+offset_right = 520.0
+offset_bottom = 160.0
 
 [node name="PlayerStatuses" type="VBoxContainer" parent="Hud"]
 offset_left = 20.0
-offset_top = 140.0
+offset_top = 170.0
 offset_right = 420.0
-offset_bottom = 260.0
+offset_bottom = 290.0
 
 [node name="EndScreen" type="CanvasLayer" parent="."]
 layer = 3

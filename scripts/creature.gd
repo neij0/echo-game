@@ -1,10 +1,14 @@
 class_name Creature
 extends CharacterBody2D
-## A deep-sea creature: wanders slowly, investigates the last pulse it heard.
-## Its speed scales with Depth Awareness. Touching a player hurts them (see
+## A deep-sea creature: wanders slowly, investigates the last pulse it heard,
+## and chases a diver it spots (close and in line of sight, or pulsing nearby)
+## for a few seconds before losing track. Its speed scales with Depth Awareness. Touching a player hurts them (see
 ## PlayerHealth). Works with any number of players (no fixed player reference).
 
-enum State { WANDER, INVESTIGATE }
+enum State { WANDER, INVESTIGATE, CHASE }
+
+## Emitted when the creature spots a player and starts chasing.
+signal spotted(player: Player)
 
 ## Optional: if empty, the first node in the "depth_awareness" group is used.
 @export var awareness: DepthAwareness
@@ -22,6 +26,24 @@ enum State { WANDER, INVESTIGATE }
 @export var hearing_range: float = 1800.0
 ## How strongly lit coral zones push the creature away.
 @export var safe_zone_push: float = 400.0
+## Spots a player this close if nothing blocks the line of sight.
+@export var spot_distance: float = 220.0
+## Spots a player who pulses this close (no line of sight needed).
+@export var pulse_spot_distance: float = 350.0
+## Seconds between line-of-sight checks (raycasts).
+@export var spot_check_interval: float = 0.1
+@export_flags_2d_physics var wall_mask: int = 1
+
+@export_group("Chase")
+## Seconds the creature follows the player's real position after spotting.
+@export var chase_time: float = 3.0
+## Speed while chasing: faster than normal, slower than the diver's max speed
+## (260), so reacting quickly lets the player escape.
+@export var chase_speed: float = 215.0
+## After losing track, seconds before it can spot a player by sight again
+## (a nearby pulse still gives the player away).
+@export var respot_cooldown: float = 2.0
+@export var alert_volume_db: float = 0.0
 
 @export_group("Obstacle Avoidance")
 ## Seconds to slide along a wall after bumping into it while investigating.
@@ -53,8 +75,13 @@ var _detour_dir: Vector2 = Vector2.ZERO
 var _detour_left: float = 0.0
 var _blocked_time: float = 0.0
 var _retargets: int = 0
+var _chased: Player
+var _chase_left: float = 0.0
+var _respot_left: float = 0.0
+var _spot_timer: float = 0.0
 
 @onready var _hitbox: Area2D = $Hitbox
+@onready var _alert: AudioStreamPlayer2D = $AlertSound
 @onready var _echo: CreatureEcho = $EchoLayer/Echo
 
 
@@ -66,17 +93,78 @@ func _ready() -> void:
 	add_to_group("creatures")
 	if awareness == null:
 		awareness = get_tree().get_first_node_in_group("depth_awareness") as DepthAwareness
+	_alert.volume_db = alert_volume_db
 
 
-func hear_pulse(origin: Vector2) -> void:
-	if global_position.distance_to(origin) > hearing_range:
+## Called (via the "creatures" group) by RunManager on every pulse.
+func hear_pulse(origin: Vector2, player: Player) -> void:
+	var distance: float = global_position.distance_to(origin)
+	if player and distance <= pulse_spot_distance and _can_chase(player):
+		_spot(player)
 		return
+	if state == State.CHASE or distance > hearing_range:
+		return
+	_investigate(origin)
+
+
+func _investigate(origin: Vector2) -> void:
 	state = State.INVESTIGATE
 	target = origin
 	_pulse_origin = origin
 	_pause_left = 0.0
 	_retargets = 0
 	_reset_detour()
+
+
+func _spot(player: Player) -> void:
+	var was_chasing: bool = state == State.CHASE
+	state = State.CHASE
+	_chased = player
+	_chase_left = chase_time
+	_pause_left = 0.0
+	_reset_detour()
+	if not was_chasing:
+		_alert.play()
+		spotted.emit(player)
+
+
+## Chase over: go to the last known position and investigate there.
+func _lose_track() -> void:
+	var last_known: Vector2 = _chased.global_position if is_instance_valid(_chased) else target
+	_chased = null
+	_respot_left = respot_cooldown
+	_investigate(last_known)
+
+
+func _can_chase(player: Player) -> bool:
+	return not player.health.is_dead and not _is_player_safe(player)
+
+
+func _look_for_players(delta: float) -> void:
+	_respot_left = maxf(_respot_left - delta, 0.0)
+	_spot_timer -= delta
+	if state == State.CHASE or _respot_left > 0.0 or _spot_timer > 0.0:
+		return
+	_spot_timer = spot_check_interval
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	for player: Player in Players.all(get_tree()):
+		if global_position.distance_to(player.global_position) > spot_distance or not _can_chase(player):
+			continue
+		var query := PhysicsRayQueryParameters2D.create(global_position, player.global_position, wall_mask)
+		if space.intersect_ray(query).is_empty():
+			_spot(player)
+			return
+
+
+func _update_chase(delta: float) -> void:
+	if state != State.CHASE:
+		return
+	_chase_left -= delta
+	if _chase_left <= 0.0 or not is_instance_valid(_chased) or not _can_chase(_chased):
+		_lose_track()
+		return
+	target = _chased.global_position
+	_pulse_origin = target
 
 
 ## Called by SonarOverlay when a pulse front reaches this creature in line of sight.
@@ -93,15 +181,20 @@ func get_state_name() -> String:
 
 
 func get_current_speed() -> float:
+	if state == State.CHASE:
+		return chase_speed
 	var ratio: float = awareness.get_ratio() if awareness else 0.0
 	return lerpf(min_speed, max_speed, ratio)
 
 
 func _physics_process(delta: float) -> void:
+	_look_for_players(delta)
+	_update_chase(delta)
+
 	var desired: Vector2 = Vector2.ZERO
 	if _pause_left > 0.0:
 		_pause_left -= delta
-	elif global_position.distance_to(target) <= arrive_distance:
+	elif state != State.CHASE and global_position.distance_to(target) <= arrive_distance:
 		_on_target_reached()
 	else:
 		desired = _steer_direction(delta) * get_current_speed()
@@ -127,7 +220,8 @@ func _steer_direction(delta: float) -> Vector2:
 
 func _on_blocked_while_investigating(delta: float) -> void:
 	_blocked_time += delta
-	if _blocked_time >= give_up_time:
+	# While chasing, only slide around rocks; the chase itself ends on its timer.
+	if _blocked_time >= give_up_time and state != State.CHASE:
 		_retarget_near_pulse()
 		return
 	if _detour_left > 0.0:

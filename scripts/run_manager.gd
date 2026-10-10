@@ -47,7 +47,7 @@ func register_player(player: Player) -> void:
 	players.append(player)
 	if level:
 		player.global_position = level.get_spawn_position(player.player_number)
-	player.pulse_emitted.connect(_on_pulse_emitted)
+	player.pulse_emitted.connect(_on_pulse_emitted.bind(player))
 	player.health.hit_taken.connect(_on_hit_taken)
 	player.health.died.connect(_on_player_died)
 	player_registered.emit(player)
@@ -58,11 +58,11 @@ func restart() -> void:
 	get_tree().reload_current_scene()
 
 
-func _on_pulse_emitted(origin: Vector2) -> void:
+func _on_pulse_emitted(origin: Vector2, player: Player) -> void:
 	pulses_used += 1
 	if awareness:
 		awareness.add_pulse()
-	get_tree().call_group("creatures", "hear_pulse", origin)
+	get_tree().call_group("creatures", "hear_pulse", origin, player)
 
 
 func _on_hit_taken() -> void:

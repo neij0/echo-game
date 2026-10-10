@@ -1,15 +1,20 @@
 class_name PlayerOxygen
 extends Node
-## The diver's oxygen tank: drains steadily, refilled by oxygen stations.
-## Plays a repeating alarm while low; at zero the diver dies (PlayerHealth).
+## The diver's oxygen tank: drains steadily, and every sonar pulse costs air
+## (the sonar is powered by the suit). Refilled by oxygen stations. Plays a
+## repeating alarm while low; at zero the diver dies (PlayerHealth).
 
 signal low_changed(is_low: bool)
 
 @export var health: PlayerHealth
+## The diver whose pulses cost oxygen.
+@export var player: Player
 @export var max_oxygen: float = 100.0
-## Seconds a full tank lasts. 270 = 4.5 minutes, so a careful 6-8 minute run
-## needs at least one oxygen station.
-@export var full_tank_seconds: float = 270.0
+## Seconds a full tank lasts without pulsing. 180 = 3 minutes: together with
+## the pulse cost, a careful run needs at least 2 of the 3 stations.
+@export var full_tank_seconds: float = 180.0
+## 0-1: share of a full tank each sonar pulse costs.
+@export_range(0.0, 1.0) var pulse_cost_ratio: float = 0.03
 ## 0-1: below this the low-oxygen warning (HUD + alarm) is on.
 @export_range(0.0, 1.0) var low_threshold: float = 0.25
 
@@ -33,6 +38,8 @@ func _ready() -> void:
 	_alarm_player.stream = alarm_stream
 	_alarm_player.volume_db = alarm_volume_db
 	add_child(_alarm_player)
+	if player:
+		player.pulse_emitted.connect(_on_pulse_emitted)
 
 
 func _process(delta: float) -> void:
@@ -52,6 +59,11 @@ func get_ratio() -> float:
 
 func is_low() -> bool:
 	return _is_low
+
+
+func _on_pulse_emitted(_origin: Vector2) -> void:
+	oxygen = maxf(oxygen - max_oxygen * pulse_cost_ratio, 0.0)
+	_update_low()
 
 
 func refill() -> void:
