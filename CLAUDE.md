@@ -23,3 +23,7 @@ raises the "Depth Awareness" meter (0-100), which makes creatures more aggressiv
 
 ## Collision layers
 1 = walls, 2 = player, 3 = creatures
+
+## Git
+- **Never run `git push`.** The GitHub sign-in window opens hidden and the push hangs.
+  Commit as usual, then end the reply by telling the user to run `git push` themselves.
