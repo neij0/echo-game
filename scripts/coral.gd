@@ -1,7 +1,8 @@
 class_name Coral
 extends Node2D
-## A bioluminescent coral. When the pulse reaches it, it lights up for a while
-## and creates a small safe zone that creatures avoid.
+## A bioluminescent coral. When the pulse front reaches it in line of sight
+## (see SonarOverlay), it lights up for a while and creates a small safe zone
+## that creatures avoid.
 
 @export var lit_duration: float = 6.0
 @export var fade_time: float = 1.0
@@ -12,6 +13,8 @@ extends Node2D
 @export var light_color: Color = Color(0.3, 1.0, 0.75)
 @export var dim_color: Color = Color(0.15, 0.3, 0.28)
 @export var glow_color: Color = Color(0.5, 1.0, 0.85)
+## HDR brightness multiplier of the lit coral shapes (above 1.0 = they bloom).
+@export var glow_energy: float = 2.5
 
 var lit_time_left: float = 0.0
 var _light: PointLight2D
@@ -19,6 +22,7 @@ var _light: PointLight2D
 
 func _ready() -> void:
 	add_to_group("corals")
+	add_to_group("sonar_targets")
 	_light = PointLight2D.new()
 	_light.texture = LightTextures.radial(256, 0.4)
 	_light.texture_scale = LightTextures.scale_for_radius(_light.texture, light_radius)
@@ -36,6 +40,11 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
+## Called by SonarOverlay when a pulse front reaches this coral in line of sight.
+func on_sonar_hit(_origin: Vector2) -> void:
+	wake()
+
+
 func wake() -> void:
 	lit_time_left = lit_duration
 	_light.energy = lit_energy
@@ -51,7 +60,9 @@ func is_in_safe_zone(point: Vector2) -> bool:
 
 
 func _draw() -> void:
-	var color: Color = glow_color if is_lit() else dim_color
+	var color: Color = dim_color
+	if is_lit():
+		color = Color(glow_color.r * glow_energy, glow_color.g * glow_energy, glow_color.b * glow_energy)
 	draw_circle(Vector2(0, 0), 10.0, color)
 	draw_circle(Vector2(-12, 6), 7.0, color)
 	draw_circle(Vector2(11, 8), 6.0, color)

@@ -1,7 +1,9 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://scenes/pulse_ring.tscn" id="2_ring"]
+[ext_resource type="Script" path="res://scripts/player_body.gd" id="3_body"]
+[ext_resource type="Script" path="res://scripts/camera_shake.gd" id="4_shake"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 14.0
@@ -28,6 +30,9 @@ pulse_ring_scene = ExtResource("2_ring")
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_body")
 
+[node name="Body" type="Node2D" parent="."]
+script = ExtResource("3_body")
+
 [node name="PlayerLight" type="PointLight2D" parent="."]
 color = Color(0.7, 0.8, 1, 1)
 energy = 0.8
@@ -36,3 +41,4 @@ texture_scale = 0.9
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position_smoothing_enabled = true
+script = ExtResource("4_shake")

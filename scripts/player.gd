@@ -16,10 +16,6 @@ signal pulse_emitted(origin: Vector2)
 @export var pulse_ring_scene: PackedScene
 @export var pulse_cooldown: float = 2.0
 
-@export_group("Visual")
-@export var body_radius: float = 14.0
-@export var body_color: Color = Color(0.85, 0.9, 1.0)
-
 var pulse_cooldown_left: float = 0.0
 
 
@@ -52,7 +48,3 @@ func _emit_pulse() -> void:
 		ring.position = position
 		get_parent().add_child(ring)
 	pulse_emitted.emit(global_position)
-
-
-func _draw() -> void:
-	draw_circle(Vector2.ZERO, body_radius, body_color)

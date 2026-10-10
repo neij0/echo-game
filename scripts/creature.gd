@@ -38,6 +38,11 @@ enum State { WANDER, INVESTIGATE }
 @export var body_radius: float = 20.0
 @export var body_color: Color = Color(0.85, 0.25, 0.3)
 
+@export_group("Sonar Visibility")
+## true = invisible except for a red echo when the pulse front passes over it.
+## false = always drawn (the old version, for comparison).
+@export var hidden_until_pinged: bool = true
+
 var state: State = State.WANDER
 var target: Vector2
 var _home: Vector2
@@ -49,12 +54,14 @@ var _blocked_time: float = 0.0
 var _retargets: int = 0
 
 @onready var _hitbox: Area2D = $Hitbox
+@onready var _echo: CreatureEcho = $EchoLayer/Echo
 
 
 func _ready() -> void:
 	_home = global_position
 	target = global_position
 	_hitbox.body_entered.connect(_on_hitbox_body_entered)
+	add_to_group("sonar_targets")
 
 
 func hear_pulse(origin: Vector2) -> void:
@@ -66,6 +73,12 @@ func hear_pulse(origin: Vector2) -> void:
 	_pause_left = 0.0
 	_retargets = 0
 	_reset_detour()
+
+
+## Called by SonarOverlay when a pulse front reaches this creature in line of sight.
+func on_sonar_hit(_origin: Vector2) -> void:
+	if hidden_until_pinged:
+		_echo.flash(self, body_radius)
 
 
 func get_state_name() -> String:
@@ -182,5 +195,7 @@ func _on_hitbox_body_entered(body: Node2D) -> void:
 
 
 func _draw() -> void:
+	if hidden_until_pinged:
+		return
 	draw_circle(Vector2.ZERO, body_radius, body_color)
 	draw_circle(Vector2(body_radius * 0.45, 0.0), body_radius * 0.25, Color(1.0, 0.85, 0.3))

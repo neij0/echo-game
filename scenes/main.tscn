@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
@@ -8,6 +8,10 @@
 [ext_resource type="Script" path="res://scripts/depth_awareness.gd" id="6_awareness"]
 [ext_resource type="Script" path="res://scripts/hud.gd" id="7_hud"]
 [ext_resource type="Script" path="res://scripts/sonar_overlay.gd" id="8_sonar"]
+[ext_resource type="Script" path="res://scripts/glow_environment.gd" id="9_glow"]
+[ext_resource type="Script" path="res://scripts/sonar_audio.gd" id="10_audio"]
+[ext_resource type="AudioStream" path="res://assets/audio/sonar_ping.wav" id="11_ping"]
+[ext_resource type="AudioStream" path="res://assets/audio/sonar_tick.wav" id="12_tick"]
 
 [node name="Main" type="Node2D" node_paths=PackedStringArray("player", "awareness", "creature")]
 script = ExtResource("1_main")
@@ -83,6 +87,16 @@ follow_viewport_enabled = true
 
 [node name="SonarOverlay" type="Node2D" parent="SonarLayer"]
 script = ExtResource("8_sonar")
+
+[node name="GlowEnvironment" type="WorldEnvironment" parent="."]
+script = ExtResource("9_glow")
+
+[node name="SonarAudio" type="Node" parent="." node_paths=PackedStringArray("player", "sonar_overlay")]
+script = ExtResource("10_audio")
+player = NodePath("../Player")
+sonar_overlay = NodePath("../SonarLayer/SonarOverlay")
+ping_stream = ExtResource("11_ping")
+tick_stream = ExtResource("12_tick")
 
 [node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("awareness", "player", "creature")]
 layer = 2
