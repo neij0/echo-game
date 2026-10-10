@@ -14,6 +14,10 @@ var value: float = 0.0
 var _decay_timer: float = 0.0
 
 
+func _ready() -> void:
+	add_to_group("depth_awareness")
+
+
 func _process(delta: float) -> void:
 	if _decay_timer > 0.0:
 		_decay_timer -= delta

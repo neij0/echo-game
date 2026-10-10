@@ -1,0 +1,8 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/oxygen_station.gd" id="1_script"]
+[ext_resource type="AudioStream" path="res://assets/audio/station_refill.wav" id="2_refill"]
+
+[node name="OxygenStation" type="Node2D"]
+script = ExtResource("1_script")
+refill_stream = ExtResource("2_refill")

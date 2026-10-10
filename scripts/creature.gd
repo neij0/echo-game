@@ -1,12 +1,13 @@
 class_name Creature
 extends CharacterBody2D
 ## A deep-sea creature: wanders slowly, investigates the last pulse it heard.
-## Its speed scales with Depth Awareness. Touching the player hurts it (see PlayerHealth).
+## Its speed scales with Depth Awareness. Touching a player hurts them (see
+## PlayerHealth). Works with any number of players (no fixed player reference).
 
 enum State { WANDER, INVESTIGATE }
 
+## Optional: if empty, the first node in the "depth_awareness" group is used.
 @export var awareness: DepthAwareness
-@export var player: Player
 
 @export_group("Movement")
 @export var min_speed: float = 45.0
@@ -62,6 +63,9 @@ func _ready() -> void:
 	target = global_position
 	_hitbox.body_entered.connect(_on_hitbox_body_entered)
 	add_to_group("sonar_targets")
+	add_to_group("creatures")
+	if awareness == null:
+		awareness = get_tree().get_first_node_in_group("depth_awareness") as DepthAwareness
 
 
 func hear_pulse(origin: Vector2) -> void:
@@ -181,7 +185,12 @@ func _safe_zone_push() -> Vector2:
 	return push
 
 
-func _is_player_safe() -> bool:
+## The player closest to this creature (null if there are none).
+func get_nearest_player() -> Player:
+	return Players.nearest(get_tree(), global_position)
+
+
+func _is_player_safe(player: Player) -> bool:
 	for node: Node in get_tree().get_nodes_in_group("corals"):
 		var coral := node as Coral
 		if coral and coral.is_in_safe_zone(player.global_position):
@@ -190,7 +199,8 @@ func _is_player_safe() -> bool:
 
 
 func _on_hitbox_body_entered(body: Node2D) -> void:
-	if body == player and not _is_player_safe():
+	var player := body as Player
+	if player and not _is_player_safe(player):
 		player.health.take_hit(global_position)
 
 

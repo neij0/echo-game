@@ -1,0 +1,8 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ancient_light.gd" id="1_script"]
+[ext_resource type="AudioStream" path="res://assets/audio/ancient_light.wav" id="2_sound"]
+
+[node name="AncientLight" type="Node2D"]
+script = ExtResource("1_script")
+activation_stream = ExtResource("2_sound")

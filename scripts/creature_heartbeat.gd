@@ -35,9 +35,12 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if creature == null or creature.player == null:
+	if creature == null:
 		return
-	var distance: float = creature.global_position.distance_to(creature.player.global_position)
+	var player: Player = creature.get_nearest_player()
+	if player == null:
+		return
+	var distance: float = creature.global_position.distance_to(player.global_position)
 	if distance > start_distance:
 		_beat_timer = 0.0
 		return

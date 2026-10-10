@@ -1,10 +1,7 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
-[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
+[ext_resource type="PackedScene" path="res://scenes/descent_level.tscn" id="1_level"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
-[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="4_creature"]
-[ext_resource type="PackedScene" path="res://scenes/coral.tscn" id="5_coral"]
 [ext_resource type="Script" path="res://scripts/depth_awareness.gd" id="6_awareness"]
 [ext_resource type="Script" path="res://scripts/hud.gd" id="7_hud"]
 [ext_resource type="Script" path="res://scripts/sonar_overlay.gd" id="8_sonar"]
@@ -14,73 +11,20 @@
 [ext_resource type="AudioStream" path="res://assets/audio/sonar_tick.wav" id="12_tick"]
 [ext_resource type="Script" path="res://scripts/darkness.gd" id="13_darkness"]
 [ext_resource type="Script" path="res://scripts/hurt_vignette.gd" id="14_vignette"]
+[ext_resource type="Script" path="res://scripts/run_manager.gd" id="15_run"]
+[ext_resource type="Script" path="res://scripts/end_screen.gd" id="16_end"]
 
-[node name="Main" type="Node2D" node_paths=PackedStringArray("player", "awareness", "creature")]
-script = ExtResource("1_main")
-player = NodePath("Player")
-awareness = NodePath("DepthAwareness")
-creature = NodePath("Creature")
+[node name="Main" type="Node2D"]
 
-[node name="Darkness" type="CanvasModulate" parent="."]
+[node name="Darkness" type="CanvasModulate" parent="." node_paths=PackedStringArray("level")]
 color = Color(0.06, 0.08, 0.14, 1)
 script = ExtResource("13_darkness")
+level = NodePath("../DescentLevel")
 
-[node name="Floor" type="Polygon2D" parent="."]
-color = Color(0.16, 0.22, 0.27, 1)
-polygon = PackedVector2Array(0, 0, 2400, 0, 2400, 1600, 0, 1600)
-
-[node name="Walls" type="Node2D" parent="."]
-
-[node name="WallTop" type="StaticBody2D" parent="Walls"]
-script = ExtResource("2_wall")
-polygon = PackedVector2Array(-100, -100, 2500, -100, 2500, 60, 2100, 90, 1700, 50, 1200, 100, 700, 60, 300, 95, -100, 60)
-
-[node name="WallBottom" type="StaticBody2D" parent="Walls"]
-script = ExtResource("2_wall")
-polygon = PackedVector2Array(-100, 1530, 400, 1550, 900, 1510, 1500, 1560, 2000, 1500, 2500, 1540, 2500, 1700, -100, 1700)
-
-[node name="WallLeft" type="StaticBody2D" parent="Walls"]
-script = ExtResource("2_wall")
-polygon = PackedVector2Array(-100, -100, 60, -100, 90, 400, 50, 800, 100, 1200, 60, 1700, -100, 1700)
-
-[node name="WallRight" type="StaticBody2D" parent="Walls"]
-script = ExtResource("2_wall")
-polygon = PackedVector2Array(2340, -100, 2500, -100, 2500, 1700, 2340, 1700, 2300, 1300, 2360, 900, 2310, 500)
-
-[node name="Rock1" type="StaticBody2D" parent="Walls"]
-script = ExtResource("2_wall")
-polygon = PackedVector2Array(560, 650, 720, 620, 790, 760, 740, 930, 600, 960, 540, 820)
-
-[node name="Rock2" type="StaticBody2D" parent="Walls"]
-script = ExtResource("2_wall")
-polygon = PackedVector2Array(1100, 420, 1300, 450, 1340, 620, 1250, 760, 1120, 700)
-
-[node name="Rock3" type="StaticBody2D" parent="Walls"]
-script = ExtResource("2_wall")
-polygon = PackedVector2Array(1150, 1050, 1400, 1020, 1450, 1180, 1300, 1300, 1170, 1260)
-
-[node name="Rock4" type="StaticBody2D" parent="Walls"]
-script = ExtResource("2_wall")
-polygon = PackedVector2Array(1720, 760, 1900, 720, 1960, 880, 1850, 980, 1740, 940)
-
-[node name="Corals" type="Node2D" parent="."]
-
-[node name="Coral1" parent="Corals" instance=ExtResource("5_coral")]
-position = Vector2(900, 350)
-
-[node name="Coral2" parent="Corals" instance=ExtResource("5_coral")]
-position = Vector2(1650, 1350)
-
-[node name="Coral3" parent="Corals" instance=ExtResource("5_coral")]
-position = Vector2(2050, 450)
+[node name="DescentLevel" parent="." instance=ExtResource("1_level")]
 
 [node name="Player" parent="." instance=ExtResource("3_player")]
-position = Vector2(250, 800)
-
-[node name="Creature" parent="." node_paths=PackedStringArray("awareness", "player") instance=ExtResource("4_creature")]
-position = Vector2(1950, 1200)
-awareness = NodePath("../DepthAwareness")
-player = NodePath("../Player")
+position = Vector2(1200, 200)
 
 [node name="DepthAwareness" type="Node" parent="."]
 script = ExtResource("6_awareness")
@@ -94,21 +38,28 @@ script = ExtResource("8_sonar")
 [node name="GlowEnvironment" type="WorldEnvironment" parent="."]
 script = ExtResource("9_glow")
 
-[node name="SonarAudio" type="Node" parent="." node_paths=PackedStringArray("player", "sonar_overlay")]
+[node name="RunManager" type="Node" parent="." node_paths=PackedStringArray("level", "awareness", "ancient_light", "end_screen")]
+script = ExtResource("15_run")
+level = NodePath("../DescentLevel")
+awareness = NodePath("../DepthAwareness")
+ancient_light = NodePath("../DescentLevel/AncientLight")
+end_screen = NodePath("../EndScreen")
+
+[node name="SonarAudio" type="Node" parent="." node_paths=PackedStringArray("run_manager", "sonar_overlay")]
 script = ExtResource("10_audio")
-player = NodePath("../Player")
+run_manager = NodePath("../RunManager")
 sonar_overlay = NodePath("../SonarLayer/SonarOverlay")
 ping_stream = ExtResource("11_ping")
 tick_stream = ExtResource("12_tick")
 
-[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("awareness", "player", "creature")]
+[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("run_manager", "awareness", "level")]
 layer = 2
 script = ExtResource("7_hud")
+run_manager = NodePath("../RunManager")
 awareness = NodePath("../DepthAwareness")
-player = NodePath("../Player")
-creature = NodePath("../Creature")
+level = NodePath("../DescentLevel")
 
-[node name="HurtVignette" type="Control" parent="Hud" node_paths=PackedStringArray("health")]
+[node name="HurtVignette" type="Control" parent="Hud" node_paths=PackedStringArray("run_manager")]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -117,7 +68,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("14_vignette")
-health = NodePath("../../Player/Health")
+run_manager = NodePath("../../RunManager")
 
 [node name="AwarenessBar" type="ProgressBar" parent="Hud"]
 offset_left = 20.0
@@ -130,4 +81,14 @@ show_percentage = false
 offset_left = 20.0
 offset_top = 52.0
 offset_right = 420.0
-offset_bottom = 140.0
+offset_bottom = 130.0
+
+[node name="PlayerStatuses" type="VBoxContainer" parent="Hud"]
+offset_left = 20.0
+offset_top = 140.0
+offset_right = 420.0
+offset_bottom = 260.0
+
+[node name="EndScreen" type="CanvasLayer" parent="."]
+layer = 3
+script = ExtResource("16_end")

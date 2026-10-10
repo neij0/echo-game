@@ -1,7 +1,7 @@
 class_name CreatureEyes
 extends Node2D
 ## Two faint glowing eyes that fade in when the hidden creature is very close to
-## the player (no pulse needed), looking where it is moving.
+## the nearest player (no pulse needed), looking where it is moving.
 ## Must live on a CanvasLayer with follow_viewport_enabled, so the world's
 ## CanvasModulate darkness does not dim it.
 
@@ -36,9 +36,13 @@ var _facing: Vector2 = Vector2.RIGHT
 
 
 func _physics_process(_delta: float) -> void:
-	if creature == null or creature.player == null:
+	if creature == null:
 		return
-	var player_position: Vector2 = creature.player.global_position
+	var player: Player = creature.get_nearest_player()
+	if player == null:
+		_visible_target = 0.0
+		return
+	var player_position: Vector2 = player.global_position
 	var distance: float = creature.global_position.distance_to(player_position)
 	_visible_target = clampf((show_distance - distance) / (show_distance - full_distance), 0.0, 1.0)
 	if _visible_target > 0.0 and require_line_of_sight:

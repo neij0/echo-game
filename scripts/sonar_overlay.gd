@@ -113,6 +113,10 @@ var _pending_at: PackedFloat32Array = PackedFloat32Array()
 var _pending_strength: PackedFloat32Array = PackedFloat32Array()
 var _pending_ratio: PackedFloat32Array = PackedFloat32Array()
 var _pending_dir: PackedVector2Array = PackedVector2Array()
+# Samples that are waiting for the front or still glowing. Only these are updated
+# and drawn each frame, so big levels with thousands of samples stay cheap.
+var _active: PackedInt32Array = PackedInt32Array()
+var _is_active: PackedByteArray = PackedByteArray()
 
 
 func _ready() -> void:
@@ -142,13 +146,20 @@ func _physics_process(_delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
-	# Light up every sample the wave front has reached.
-	for i: int in _points.size():
+	# Light up every sample the wave front has reached, and drop samples that
+	# have finished glowing from the active list.
+	var still_active := PackedInt32Array()
+	for i: int in _active:
 		if _time >= _pending_at[i]:
 			_lit_at[i] = _pending_at[i]
 			_strength[i] = _pending_strength[i]
 			_pending_at[i] = INF
 			_on_sample_hit(i)
+		if _pending_at[i] < INF or _time - _lit_at[i] <= edge_fade_time:
+			still_active.append(i)
+		else:
+			_is_active[i] = 0
+	_active = still_active
 	_waves = _waves.filter(func(wave: Wave) -> bool: return not wave.scanned or wave.is_expanding(_time))
 	_sparks = _sparks.filter(func(spark: Spark) -> bool: return _time - spark.born < spark_time)
 	queue_redraw()
@@ -195,6 +206,8 @@ func _build_samples() -> void:
 	_pending_ratio.fill(0.0)
 	_pending_dir.resize(total)
 	_pending_dir.fill(Vector2.ZERO)
+	_is_active.resize(total)
+	_is_active.fill(0)
 
 
 func _scan_wave(space: PhysicsDirectSpaceState2D, wave: Wave) -> void:
@@ -215,6 +228,9 @@ func _scan_wave(space: PhysicsDirectSpaceState2D, wave: Wave) -> void:
 		_pending_strength[i] = 1.0 - distance_falloff * ratio
 		_pending_ratio[i] = ratio
 		_pending_dir[i] = wave.origin.direction_to(point)
+		if _is_active[i] == 0:
+			_is_active[i] = 1
+			_active.append(i)
 	wave.scanned = true
 
 
@@ -269,7 +285,7 @@ func _draw() -> void:
 func _draw_edges() -> void:
 	var settled: Color = _hdr(edge_color, edge_energy, 1.0)
 	var flash: Color = _hdr(flash_color, flash_energy, 1.0)
-	for i: int in _points.size():
+	for i: int in _active:
 		var j: int = _next[i]
 		# A segment shows only once the front has reached both of its ends.
 		var fade: float = minf(_fade(i), _fade(j))

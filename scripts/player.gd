@@ -1,8 +1,13 @@
 class_name Player
 extends CharacterBody2D
-## Swimming movement (acceleration, drag, glide) and the sonar pulse input.
+## A deep-sea diver walking on the ocean floor (weighted boots: acceleration,
+## drag, glide) and the sonar pulse from the helmet. Joins the "players" group so
+## creatures, the HUD and the run logic never need a fixed player reference.
 
 signal pulse_emitted(origin: Vector2)
+
+## 1 for player one, 2 for player two (used for HUD labels and spawn points).
+@export var player_number: int = 1
 
 @export_group("Swimming")
 @export var acceleration: float = 900.0
@@ -25,6 +30,11 @@ var pulse_cooldown_left: float = 0.0
 var _knockback_left: float = 0.0
 
 @onready var health: PlayerHealth = $Health
+@onready var oxygen: PlayerOxygen = $Oxygen
+
+
+func _ready() -> void:
+	add_to_group("players")
 
 
 func _physics_process(delta: float) -> void:

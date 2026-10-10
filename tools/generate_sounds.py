@@ -56,6 +56,32 @@ HEART_RUMBLE_SMOOTH = 0.995  # 0-1 low-pass of the rumble noise, higher = deeper
 HEART_RUMBLE_DECAY = 0.35   # seconds, time constant of the rumble
 HEART_PEAK = 0.9
 
+# --- Oxygen alarm: two short descending beeps, muffled like inside a helmet ---
+ALARM_FREQS = (880.0, 660.0)  # Hz of the two beeps
+ALARM_BEEP = 0.12           # seconds per beep
+ALARM_GAP = 0.06            # seconds between the beeps
+ALARM_SOFTNESS = 0.6        # 0-1 low-pass amount (helmet muffle)
+ALARM_PEAK = 0.6
+
+# --- Station refill: hiss of air with a rising bubbly tone --------------------
+REFILL_LENGTH = 1.2
+REFILL_HISS = 0.5           # amount of air noise
+REFILL_HISS_SMOOTH = 0.7    # 0-1 low-pass of the hiss
+REFILL_TONE_START = 220.0   # Hz, rising tone start...
+REFILL_TONE_END = 520.0     # ...and end
+REFILL_TONE_GAIN = 0.35
+REFILL_BUBBLE_RATE = 14.0   # bubbles per second (tremolo on the tone)
+REFILL_PEAK = 0.7
+
+# --- Ancient light: slow swelling chord with shimmer --------------------------
+ANCIENT_LENGTH = 5.0
+ANCIENT_ROOT = 110.0        # Hz
+ANCIENT_CHORD = [(1.0, 1.0), (1.5, 0.7), (2.0, 0.6), (2.5, 0.4), (3.0, 0.35), (4.0, 0.2)]
+ANCIENT_SWELL = 1.2         # seconds to reach full volume
+ANCIENT_DECAY = 2.2         # seconds, time constant of the fade after the swell
+ANCIENT_SHIMMER = 0.006     # detune between left/right copies, gives a slow beating
+ANCIENT_PEAK = 0.85
+
 RANDOM_SEED = 7
 
 
@@ -186,6 +212,62 @@ def make_heartbeat() -> list[float]:
     return normalize(samples, HEART_PEAK)
 
 
+def make_alarm() -> list[float]:
+    samples = []
+    for index, freq in enumerate(ALARM_FREQS):
+        count = int(ALARM_BEEP * SAMPLE_RATE)
+        for n in range(count):
+            t = n / SAMPLE_RATE
+            # Short fades at both ends of each beep so it does not click.
+            edge = min(t / 0.008, (ALARM_BEEP - t) / 0.008, 1.0)
+            tone = math.sin(2.0 * math.pi * freq * t) + 0.3 * math.sin(2.0 * math.pi * freq * 2.0 * t)
+            samples.append(tone * edge)
+        if index < len(ALARM_FREQS) - 1:
+            samples.extend([0.0] * int(ALARM_GAP * SAMPLE_RATE))
+    samples = one_pole_lowpass(samples, ALARM_SOFTNESS)
+    return normalize(samples, ALARM_PEAK)
+
+
+def make_refill() -> list[float]:
+    rng = random.Random(RANDOM_SEED + 2)
+    count = int(REFILL_LENGTH * SAMPLE_RATE)
+    hiss = one_pole_lowpass([rng.uniform(-1.0, 1.0) for _ in range(count)], REFILL_HISS_SMOOTH)
+    samples = []
+    phase = 0.0
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        progress = t / REFILL_LENGTH
+        freq = REFILL_TONE_START + (REFILL_TONE_END - REFILL_TONE_START) * progress
+        phase += 2.0 * math.pi * freq / SAMPLE_RATE
+        bubbles = 0.5 + 0.5 * math.sin(2.0 * math.pi * REFILL_BUBBLE_RATE * t)
+        tone = math.sin(phase) * REFILL_TONE_GAIN * bubbles
+        # Fast attack, hold, fade out over the last third.
+        env = min(t / 0.03, 1.0) * min((REFILL_LENGTH - t) / (REFILL_LENGTH / 3.0), 1.0)
+        samples.append((hiss[n] * REFILL_HISS + tone) * env)
+    return normalize(samples, REFILL_PEAK)
+
+
+def make_ancient() -> list[float]:
+    count = int(ANCIENT_LENGTH * SAMPLE_RATE)
+    samples = []
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        value = 0.0
+        for ratio, gain in ANCIENT_CHORD:
+            freq = ANCIENT_ROOT * ratio
+            value += gain * (math.sin(2.0 * math.pi * freq * t)
+                             + math.sin(2.0 * math.pi * freq * (1.0 + ANCIENT_SHIMMER) * t)) * 0.5
+        if t < ANCIENT_SWELL:
+            env = (t / ANCIENT_SWELL) ** 2
+        else:
+            env = math.exp(-(t - ANCIENT_SWELL) / ANCIENT_DECAY)
+        samples.append(value * env)
+    fade_count = int(0.3 * SAMPLE_RATE)
+    for k in range(fade_count):
+        samples[count - fade_count + k] *= 1.0 - k / fade_count
+    return normalize(samples, ANCIENT_PEAK)
+
+
 def write_wav(path: Path, samples: list[float]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as file:
@@ -201,3 +283,6 @@ if __name__ == "__main__":
     write_wav(OUTPUT_DIR / "sonar_ping.wav", make_ping())
     write_wav(OUTPUT_DIR / "sonar_tick.wav", make_tick())
     write_wav(OUTPUT_DIR / "creature_heartbeat.wav", make_heartbeat())
+    write_wav(OUTPUT_DIR / "oxygen_alarm.wav", make_alarm())
+    write_wav(OUTPUT_DIR / "station_refill.wav", make_refill())
+    write_wav(OUTPUT_DIR / "ancient_light.wav", make_ancient())

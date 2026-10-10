@@ -1,10 +1,12 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://scenes/pulse_ring.tscn" id="2_ring"]
 [ext_resource type="Script" path="res://scripts/player_body.gd" id="3_body"]
 [ext_resource type="Script" path="res://scripts/camera_shake.gd" id="4_shake"]
 [ext_resource type="Script" path="res://scripts/player_health.gd" id="5_health"]
+[ext_resource type="Script" path="res://scripts/player_oxygen.gd" id="6_oxygen"]
+[ext_resource type="AudioStream" path="res://assets/audio/oxygen_alarm.wav" id="7_alarm"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 14.0
@@ -47,3 +49,8 @@ script = ExtResource("4_shake")
 [node name="Health" type="Node" parent="." node_paths=PackedStringArray("player")]
 script = ExtResource("5_health")
 player = NodePath("..")
+
+[node name="Oxygen" type="Node" parent="." node_paths=PackedStringArray("health")]
+script = ExtResource("6_oxygen")
+health = NodePath("../Health")
+alarm_stream = ExtResource("7_alarm")

@@ -9,12 +9,12 @@ extends Node2D
 @export var light_radius: float = 170.0
 ## Creatures are pushed out of this radius while the coral is lit.
 @export var safe_radius: float = 130.0
-@export var lit_energy: float = 1.1
+@export var lit_energy: float = 0.6
 @export var light_color: Color = Color(0.3, 1.0, 0.75)
 @export var dim_color: Color = Color(0.15, 0.3, 0.28)
 @export var glow_color: Color = Color(0.5, 1.0, 0.85)
 ## HDR brightness multiplier of the lit coral shapes (above 1.0 = they bloom).
-@export var glow_energy: float = 2.5
+@export var glow_energy: float = 1.3
 
 var lit_time_left: float = 0.0
 var _light: PointLight2D

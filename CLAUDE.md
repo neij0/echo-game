@@ -3,9 +3,15 @@
 2D top-down co-op roguelite set in the deep ocean. Target: PC (Steam), local co-op with gamepads later.
 
 ## Core idea
-The world is almost completely dark. The player emits a sonar pulse that reveals the
-surroundings for a few seconds and wakes up sparse bioluminescent corals. Every pulse
-raises the "Depth Awareness" meter (0-100), which makes creatures more aggressive.
+The players are deep-sea divers in heavy suits with weighted boots, walking on the ocean
+floor. The world is almost completely dark. The diver's helmet carries a small light and
+emits a sonar pulse that reveals the surroundings for a few seconds and wakes up sparse
+bioluminescent corals (safe spots). Every pulse raises the "Depth Awareness" meter
+(0-100), which makes the hidden creatures more aggressive.
+
+A run is one descent: start at the top, walk down through 3 ever deeper and darker zones
+while oxygen drains (oxygen stations off the main path refill it), and activate the
+ancient light at the bottom. Death (creature or oxygen) restarts the run from the top.
 
 ## Rules
 - **Godot 4 + GDScript only.** No C#, no GDExtension, no third-party addons unless agreed first.
