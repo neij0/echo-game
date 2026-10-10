@@ -14,9 +14,9 @@ extends Node2D
 ## Opacity of the filled body compared to its outline.
 @export_range(0.0, 1.0) var fill_alpha: float = 0.45
 @export var outline_width: float = 2.0
-## false = the echo stays where the creature was seen (a sonar snapshot).
-## true = the echo follows the creature while it fades.
-@export var follow_target: bool = false
+## Seconds the echo follows the creature before freezing where it was, so the
+## player can read which way it is moving. 0 = freeze immediately.
+@export var follow_time: float = 0.4
 
 var _target: Node2D
 var _radius: float = 0.0
@@ -35,7 +35,7 @@ func _process(delta: float) -> void:
 	if _time_left <= 0.0:
 		return
 	_time_left = maxf(_time_left - delta, 0.0)
-	if follow_target and is_instance_valid(_target):
+	if fade_time - _time_left <= follow_time and is_instance_valid(_target):
 		global_position = _target.global_position
 	queue_redraw()
 

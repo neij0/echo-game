@@ -29,14 +29,15 @@ signal edge_hit(point: Vector2, distance_ratio: float)
 @export var ring_ray_count: int = 180
 
 @export_group("Afterglow Trail")
-## Number of faint rings drawn behind the front.
-@export var trail_count: int = 4
-## Distance in pixels between trail rings.
-@export var trail_spacing: float = 9.0
-## Opacity of the first trail ring compared to the front.
-@export_range(0.0, 1.0) var trail_alpha: float = 0.35
-## Width of the trail rings compared to the front.
-@export var trail_width_scale: float = 0.6
+## A single soft band right behind the front that fades towards the origin.
+@export var trail_enabled: bool = true
+## Length of the band in pixels behind the front.
+@export var trail_length: float = 45.0
+## Opacity of the band where it touches the front, compared to the front.
+@export_range(0.0, 1.0) var trail_alpha: float = 0.1
+## Brightness multiplier of the band. Kept at 1.0 (no bloom) so it stays soft;
+## in HDR even low alpha with a high energy looks very bright.
+@export var trail_energy: float = 1.0
 
 @export_group("Edges")
 ## Distance between outline sample points in pixels. Lower = smoother reveal, more raycasts.
@@ -288,16 +289,9 @@ func _draw_wave_fronts() -> void:
 		var t: float = pow(wave.progress_at(_time), ring_fade_power)
 		var width: float = lerpf(ring_start_width, ring_end_width, t)
 		var alpha: float = lerpf(1.0, ring_end_alpha, t) * ring_color.a
+		if trail_enabled:
+			_draw_trail(wave, radius, _hdr(ring_color, trail_energy, alpha * trail_alpha))
 		_draw_ring(wave, radius, _hdr(ring_color, ring_energy, alpha), width)
-
-		# Faint afterglow rings following behind the front.
-		for k: int in range(1, trail_count + 1):
-			var trail_radius: float = radius - k * trail_spacing
-			if trail_radius <= 0.0:
-				break
-			var trail_fade: float = trail_alpha * (1.0 - float(k - 1) / trail_count)
-			var color: Color = _hdr(ring_color, ring_energy, alpha * trail_fade)
-			_draw_ring(wave, trail_radius, color, width * trail_width_scale)
 
 
 func _draw_ring(wave: Wave, radius: float, color: Color, width: float) -> void:
@@ -312,6 +306,31 @@ func _draw_ring(wave: Wave, radius: float, color: Color, width: float) -> void:
 		var a: Vector2 = wave.origin + Vector2.from_angle(TAU * i / count) * radius
 		var b: Vector2 = wave.origin + Vector2.from_angle(TAU * j / count) * radius
 		draw_line(a, b, color, width, true)
+
+
+## A soft band from the front back towards the origin: opaque at the front,
+## fully transparent trail_length pixels behind it.
+func _draw_trail(wave: Wave, radius: float, color: Color) -> void:
+	var inner: float = maxf(radius - trail_length, 0.0)
+	if radius <= inner:
+		return
+	var clear := Color(color, 0.0)
+	var colors := PackedColorArray([color, color, clear, clear])
+	var count: int = wave.hit_distances.size()
+	for i: int in count:
+		var j: int = (i + 1) % count
+		# Same as the front: no trail where a rock has already blocked the wave.
+		if radius > wave.hit_distances[i] or radius > wave.hit_distances[j]:
+			continue
+		var dir_a: Vector2 = Vector2.from_angle(TAU * i / count)
+		var dir_b: Vector2 = Vector2.from_angle(TAU * j / count)
+		var quad := PackedVector2Array([
+			wave.origin + dir_a * radius,
+			wave.origin + dir_b * radius,
+			wave.origin + dir_b * inner,
+			wave.origin + dir_a * inner,
+		])
+		draw_polygon(quad, colors)
 
 
 func _draw_sparks() -> void:

@@ -1,7 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/creature.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/creature_echo.gd" id="2_echo"]
+[ext_resource type="Script" path="res://scripts/creature_eyes.gd" id="3_eyes"]
+[ext_resource type="Script" path="res://scripts/creature_heartbeat.gd" id="4_heart"]
+[ext_resource type="AudioStream" path="res://assets/audio/creature_heartbeat.wav" id="5_heart_sound"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 20.0
@@ -30,3 +33,13 @@ follow_viewport_enabled = true
 
 [node name="Echo" type="Node2D" parent="EchoLayer"]
 script = ExtResource("2_echo")
+
+[node name="Eyes" type="Node2D" parent="EchoLayer" node_paths=PackedStringArray("creature")]
+script = ExtResource("3_eyes")
+creature = NodePath("../..")
+
+[node name="Heartbeat" type="AudioStreamPlayer2D" parent="." node_paths=PackedStringArray("creature")]
+stream = ExtResource("5_heart_sound")
+max_polyphony = 2
+script = ExtResource("4_heart")
+creature = NodePath("..")

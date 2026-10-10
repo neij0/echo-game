@@ -1,7 +1,7 @@
 class_name Creature
 extends CharacterBody2D
 ## A deep-sea creature: wanders slowly, investigates the last pulse it heard.
-## Its speed scales with Depth Awareness. Touching the player restarts the scene.
+## Its speed scales with Depth Awareness. Touching the player hurts it (see PlayerHealth).
 
 enum State { WANDER, INVESTIGATE }
 
@@ -191,7 +191,7 @@ func _is_player_safe() -> bool:
 
 func _on_hitbox_body_entered(body: Node2D) -> void:
 	if body == player and not _is_player_safe():
-		get_tree().reload_current_scene.call_deferred()
+		player.health.take_hit(global_position)
 
 
 func _draw() -> void:

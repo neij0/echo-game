@@ -1,9 +1,10 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://scenes/pulse_ring.tscn" id="2_ring"]
 [ext_resource type="Script" path="res://scripts/player_body.gd" id="3_body"]
 [ext_resource type="Script" path="res://scripts/camera_shake.gd" id="4_shake"]
+[ext_resource type="Script" path="res://scripts/player_health.gd" id="5_health"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 14.0
@@ -35,10 +36,14 @@ script = ExtResource("3_body")
 
 [node name="PlayerLight" type="PointLight2D" parent="."]
 color = Color(0.7, 0.8, 1, 1)
-energy = 0.8
+energy = 1.6
 texture = SubResource("GradientTexture2D_light")
 texture_scale = 0.9
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position_smoothing_enabled = true
 script = ExtResource("4_shake")
+
+[node name="Health" type="Node" parent="." node_paths=PackedStringArray("player")]
+script = ExtResource("5_health")
+player = NodePath("..")

@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
@@ -12,6 +12,8 @@
 [ext_resource type="Script" path="res://scripts/sonar_audio.gd" id="10_audio"]
 [ext_resource type="AudioStream" path="res://assets/audio/sonar_ping.wav" id="11_ping"]
 [ext_resource type="AudioStream" path="res://assets/audio/sonar_tick.wav" id="12_tick"]
+[ext_resource type="Script" path="res://scripts/darkness.gd" id="13_darkness"]
+[ext_resource type="Script" path="res://scripts/hurt_vignette.gd" id="14_vignette"]
 
 [node name="Main" type="Node2D" node_paths=PackedStringArray("player", "awareness", "creature")]
 script = ExtResource("1_main")
@@ -20,7 +22,8 @@ awareness = NodePath("DepthAwareness")
 creature = NodePath("Creature")
 
 [node name="Darkness" type="CanvasModulate" parent="."]
-color = Color(0.02, 0.03, 0.07, 1)
+color = Color(0.06, 0.08, 0.14, 1)
+script = ExtResource("13_darkness")
 
 [node name="Floor" type="Polygon2D" parent="."]
 color = Color(0.16, 0.22, 0.27, 1)
@@ -104,6 +107,17 @@ script = ExtResource("7_hud")
 awareness = NodePath("../DepthAwareness")
 player = NodePath("../Player")
 creature = NodePath("../Creature")
+
+[node name="HurtVignette" type="Control" parent="Hud" node_paths=PackedStringArray("health")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("14_vignette")
+health = NodePath("../../Player/Health")
 
 [node name="AwarenessBar" type="ProgressBar" parent="Hud"]
 offset_left = 20.0

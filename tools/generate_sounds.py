@@ -41,6 +41,21 @@ TICK_NOISE_DECAY = 0.003
 TICK_SOFTNESS = 0.5         # 0-1 low-pass amount, higher = softer
 TICK_PEAK = 0.7
 
+# --- Heartbeat: low "lub-dub" thump with a rumble, looped by the creature -----
+HEART_LENGTH = 0.75         # seconds of one beat (the game repeats it)
+HEART_FREQ_START = 58.0     # Hz, each thump glides down from here...
+HEART_FREQ_END = 36.0       # ...to here
+HEART_GLIDE_TIME = 0.08     # seconds the glide takes
+HEART_SECOND_DELAY = 0.19   # seconds between "lub" and "dub"
+HEART_SECOND_GAIN = 0.65    # "dub" is quieter than "lub"
+HEART_ATTACK = 0.006
+HEART_DECAY = 0.07          # seconds, time constant of each thump
+HEART_HARMONIC = (2.0, 0.25)  # (frequency ratio, gain): a bit of body so small speakers hear it
+HEART_RUMBLE = 0.18         # amount of low noise rumble under the beat
+HEART_RUMBLE_SMOOTH = 0.995  # 0-1 low-pass of the rumble noise, higher = deeper
+HEART_RUMBLE_DECAY = 0.35   # seconds, time constant of the rumble
+HEART_PEAK = 0.9
+
 RANDOM_SEED = 7
 
 
@@ -137,6 +152,40 @@ def make_tick() -> list[float]:
     return normalize(samples, TICK_PEAK)
 
 
+def thump(t: float) -> float:
+    if t < 0.0:
+        return 0.0
+    glide = min(t / HEART_GLIDE_TIME, 1.0)
+    freq = HEART_FREQ_START + (HEART_FREQ_END - HEART_FREQ_START) * glide
+    # Phase from the integral of the gliding frequency, so the pitch drop is smooth.
+    if t < HEART_GLIDE_TIME:
+        phase = 2.0 * math.pi * (HEART_FREQ_START * t + (HEART_FREQ_END - HEART_FREQ_START) * t * t / (2.0 * HEART_GLIDE_TIME))
+    else:
+        phase = 2.0 * math.pi * (HEART_FREQ_START * HEART_GLIDE_TIME + (HEART_FREQ_END - HEART_FREQ_START) * HEART_GLIDE_TIME / 2.0
+                                 + freq * (t - HEART_GLIDE_TIME))
+    ratio, gain = HEART_HARMONIC
+    tone = math.sin(phase) + gain * math.sin(phase * ratio)
+    return tone * envelope(t, HEART_ATTACK, HEART_DECAY)
+
+
+def make_heartbeat() -> list[float]:
+    rng = random.Random(RANDOM_SEED + 1)
+    count = int(HEART_LENGTH * SAMPLE_RATE)
+    noise = one_pole_lowpass([rng.uniform(-1.0, 1.0) for _ in range(count)], HEART_RUMBLE_SMOOTH)
+    loudest_noise = max(abs(n) for n in noise) or 1.0
+    samples = []
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        beat = thump(t) + HEART_SECOND_GAIN * thump(t - HEART_SECOND_DELAY)
+        rumble = noise[n] / loudest_noise * HEART_RUMBLE * envelope(t, HEART_ATTACK, HEART_RUMBLE_DECAY)
+        samples.append(beat + rumble)
+    # Short fade at the end so the loop point does not click.
+    fade_count = int(0.02 * SAMPLE_RATE)
+    for k in range(fade_count):
+        samples[count - fade_count + k] *= 1.0 - k / fade_count
+    return normalize(samples, HEART_PEAK)
+
+
 def write_wav(path: Path, samples: list[float]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as file:
@@ -151,3 +200,4 @@ def write_wav(path: Path, samples: list[float]) -> None:
 if __name__ == "__main__":
     write_wav(OUTPUT_DIR / "sonar_ping.wav", make_ping())
     write_wav(OUTPUT_DIR / "sonar_tick.wav", make_tick())
+    write_wav(OUTPUT_DIR / "creature_heartbeat.wav", make_heartbeat())

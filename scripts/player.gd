@@ -16,7 +16,15 @@ signal pulse_emitted(origin: Vector2)
 @export var pulse_ring_scene: PackedScene
 @export var pulse_cooldown: float = 2.0
 
+@export_group("Knockback")
+## Seconds after a knockback during which max_speed is not applied, so the
+## push can be faster than normal swimming. Drag still slows it down.
+@export var knockback_time: float = 0.25
+
 var pulse_cooldown_left: float = 0.0
+var _knockback_left: float = 0.0
+
+@onready var health: PlayerHealth = $Health
 
 
 func _physics_process(delta: float) -> void:
@@ -26,9 +34,17 @@ func _physics_process(delta: float) -> void:
 	# Frame-rate independent drag: weaker drag when gliding.
 	var current_drag: float = drag if input_dir != Vector2.ZERO else glide_drag
 	velocity *= exp(-current_drag * delta)
-	velocity = velocity.limit_length(max_speed)
+	if _knockback_left > 0.0:
+		_knockback_left -= delta
+	else:
+		velocity = velocity.limit_length(max_speed)
 
 	move_and_slide()
+
+
+func knock_back(impulse: Vector2) -> void:
+	velocity = impulse
+	_knockback_left = knockback_time
 
 
 func _process(delta: float) -> void:
