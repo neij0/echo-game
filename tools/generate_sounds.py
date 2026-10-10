@@ -96,6 +96,21 @@ ALERT_ATTACK = 0.01
 ALERT_DECAY = 0.16
 ALERT_PEAK = 0.8
 
+# --- Sword swing: short airy whoosh (water resistance) ------------------------
+SWING_LENGTH = 0.22
+SWING_SMOOTH_START = 0.9    # 0-1 low-pass at the start (dull)...
+SWING_SMOOTH_PEAK = 0.55    # ...opening up in the middle of the swing (sharper)
+SWING_PEAK_TIME = 0.08      # seconds to the loudest point
+SWING_PEAK = 0.6
+
+# --- Sword hit: low thud with a short bright click -------------------------
+HIT_LENGTH = 0.25
+HIT_FREQ = 95.0             # Hz of the thud
+HIT_DECAY = 0.06
+HIT_CLICK = 0.5             # amount of the bright click on impact
+HIT_CLICK_DECAY = 0.004
+HIT_PEAK = 0.85
+
 RANDOM_SEED = 7
 
 
@@ -305,6 +320,37 @@ def make_alert() -> list[float]:
     return normalize(samples, ALERT_PEAK)
 
 
+def make_swing() -> list[float]:
+    rng = random.Random(RANDOM_SEED + 4)
+    count = int(SWING_LENGTH * SAMPLE_RATE)
+    samples = []
+    filtered = 0.0
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        # The filter opens towards the peak and closes again: a "whoosh".
+        closeness = max(0.0, 1.0 - abs(t - SWING_PEAK_TIME) / SWING_PEAK_TIME)
+        amount = SWING_SMOOTH_START + (SWING_SMOOTH_PEAK - SWING_SMOOTH_START) * closeness
+        filtered = filtered + (1.0 - amount) * (rng.uniform(-1.0, 1.0) - filtered)
+        if t < SWING_PEAK_TIME:
+            env = t / SWING_PEAK_TIME
+        else:
+            env = max(0.0, 1.0 - (t - SWING_PEAK_TIME) / (SWING_LENGTH - SWING_PEAK_TIME)) ** 2
+        samples.append(filtered * env)
+    return normalize(samples, SWING_PEAK)
+
+
+def make_hit() -> list[float]:
+    rng = random.Random(RANDOM_SEED + 5)
+    count = int(HIT_LENGTH * SAMPLE_RATE)
+    samples = []
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        thud = math.sin(2.0 * math.pi * HIT_FREQ * t * (1.0 - 0.4 * min(t / HIT_LENGTH, 1.0))) * envelope(t, 0.002, HIT_DECAY)
+        click = rng.uniform(-1.0, 1.0) * HIT_CLICK * math.exp(-t / HIT_CLICK_DECAY)
+        samples.append(thud + click)
+    return normalize(samples, HIT_PEAK)
+
+
 def write_wav(path: Path, samples: list[float]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as file:
@@ -324,3 +370,5 @@ if __name__ == "__main__":
     write_wav(OUTPUT_DIR / "station_refill.wav", make_refill())
     write_wav(OUTPUT_DIR / "ancient_light.wav", make_ancient())
     write_wav(OUTPUT_DIR / "creature_alert.wav", make_alert())
+    write_wav(OUTPUT_DIR / "sword_swing.wav", make_swing())
+    write_wav(OUTPUT_DIR / "sword_hit.wav", make_hit())

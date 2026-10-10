@@ -1,0 +1,16 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1_base"]
+[ext_resource type="Script" path="res://scripts/pulse_ability.gd" id="2_pulse"]
+[ext_resource type="PackedScene" path="res://scenes/pulse_ring.tscn" id="3_ring"]
+
+[node name="Echo" instance=ExtResource("1_base")]
+player_number = 1
+display_name = "Echo"
+input_prefix = "p1_"
+light_reveal_radius = 115.0
+
+[node name="Pulse" type="Node" parent="." node_paths=PackedStringArray("player")]
+script = ExtResource("2_pulse")
+player = NodePath("..")
+pulse_ring_scene = ExtResource("3_ring")

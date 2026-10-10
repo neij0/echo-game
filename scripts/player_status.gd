@@ -54,7 +54,10 @@ func _process(delta: float) -> void:
 	_time += delta
 	var depth: float = level.depth_at(player.global_position.y) if level else 0.0
 	var ratio: float = player.oxygen.get_ratio()
-	_depth_label.text = "P%d   Depth: %d m   Oxygen: %d%%" % [player.player_number, roundi(depth), roundi(ratio * 100.0)]
+	var downed: String = "   DOWNED" if player.health.is_downed else ""
+	_depth_label.text = "P%d %s   Depth: %d m   Oxygen: %d%%%s" % [
+		player.player_number, player.display_name, roundi(depth), roundi(ratio * 100.0), downed,
+	]
 	_oxygen_bar.value = ratio
 	var low: bool = player.oxygen.is_low()
 	_fill_style.bg_color = low_oxygen_color if low else oxygen_color

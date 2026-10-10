@@ -1,6 +1,6 @@
 class_name AncientLight
 extends Node2D
-## The goal at the bottom of the descent. A diver standing next to it for
+## The goal at the bottom of the descent. A player standing next to it for
 ## activation_time seconds wakes it: a big light, an expanding ring and a
 ## swelling chord. Emits activated, then RunManager ends the run.
 ## The visuals are drawn on a child CanvasLayer so the darkness does not dim them.
@@ -98,7 +98,7 @@ func get_charge_ratio() -> float:
 
 func _any_player_near() -> bool:
 	for player: Player in Players.all(get_tree()):
-		if not player.health.is_dead and player.global_position.distance_to(global_position) <= activation_radius:
+		if not player.health.is_downed and player.global_position.distance_to(global_position) <= activation_radius:
 			return true
 	return false
 

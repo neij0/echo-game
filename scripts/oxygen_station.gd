@@ -1,6 +1,6 @@
 class_name OxygenStation
 extends Node2D
-## An old oxygen tank on the sea floor. A diver touching it gets a full tank,
+## An old oxygen tank on the sea floor. A player touching it gets a full tank,
 ## then it is used up. A slow blinking beacon makes it findable in the dark.
 
 signal used(player: Player)
@@ -68,7 +68,7 @@ func _process(delta: float) -> void:
 
 func _on_body_entered(body: Node2D) -> void:
 	var player := body as Player
-	if is_used or player == null or player.health.is_dead:
+	if is_used or player == null or player.health.is_downed:
 		return
 	is_used = true
 	player.oxygen.refill()

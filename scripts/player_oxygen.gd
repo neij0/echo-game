@@ -1,13 +1,14 @@
 class_name PlayerOxygen
 extends Node
-## The diver's oxygen tank: drains steadily, and every sonar pulse costs air
-## (the sonar is powered by the suit). Refilled by oxygen stations. Plays a
-## repeating alarm while low; at zero the diver dies (PlayerHealth).
+## A player's own oxygen tank: drains steadily, and every sonar pulse costs air
+## (the Echo's sonar is powered by her breath). Refilled by oxygen stations. Plays a
+## repeating alarm while low; at zero the player is downed (PlayerHealth).
+## Does not drain while the player is downed.
 
 signal low_changed(is_low: bool)
 
 @export var health: PlayerHealth
-## The diver whose pulses cost oxygen.
+## The player whose pulses cost oxygen (only the Echo pulses).
 @export var player: Player
 @export var max_oxygen: float = 100.0
 ## Seconds a full tank lasts without pulsing. 180 = 3 minutes: together with
@@ -43,14 +44,14 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if health and health.is_dead:
+	if health and health.is_downed:
 		return
 	oxygen = maxf(oxygen - max_oxygen / full_tank_seconds * delta, 0.0)
 	_update_low()
 	if _is_low:
 		_update_alarm(delta)
 	if oxygen <= 0.0 and health:
-		health.kill(PlayerHealth.Cause.OXYGEN)
+		health.down(PlayerHealth.Cause.OXYGEN)
 
 
 func get_ratio() -> float:

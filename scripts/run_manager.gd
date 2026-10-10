@@ -1,9 +1,9 @@
 class_name RunManager
 extends Node
-## The run's core loop: registers players (spawn, signals), counts run stats,
-## alerts creatures and awareness on every pulse, and ends the run on death or
-## when the ancient light is activated. Never holds a single fixed player, so a
-## second player only needs to be spawned and passed to register_player().
+## The run's core loop: registers the players (spawn, signals), counts run
+## stats, alerts creatures and awareness on every pulse, and ends the run when
+## every player is downed at the same time or when the ancient light is
+## activated. Never holds a fixed player: any Player in the scene is registered.
 
 signal player_registered(player: Player)
 
@@ -18,6 +18,7 @@ var players: Array[Player] = []
 var run_time: float = 0.0
 var pulses_used: int = 0
 var hits_taken: int = 0
+var creatures_killed: int = 0
 var is_over: bool = false
 
 
@@ -27,8 +28,8 @@ func _ready() -> void:
 		ancient_light.activated.connect(_on_ancient_light_activated)
 	if end_screen:
 		end_screen.restart_requested.connect(restart)
-	# Deferred so every Player in the scene has run _ready and joined its group.
-	_register_scene_players.call_deferred()
+	# Deferred so every Player and Creature in the scene has run _ready.
+	_register_scene.call_deferred()
 
 
 func _process(delta: float) -> void:
@@ -36,9 +37,15 @@ func _process(delta: float) -> void:
 		run_time += delta
 
 
-func _register_scene_players() -> void:
-	for player: Player in Players.all(get_tree()):
+func _register_scene() -> void:
+	var scene_players: Array[Player] = Players.all(get_tree())
+	scene_players.sort_custom(func(a: Player, b: Player) -> bool: return a.player_number < b.player_number)
+	for player: Player in scene_players:
 		register_player(player)
+	for node: Node in get_tree().get_nodes_in_group("creatures"):
+		var creature := node as Creature
+		if creature:
+			creature.killed.connect(_on_creature_killed)
 
 
 func register_player(player: Player) -> void:
@@ -49,7 +56,7 @@ func register_player(player: Player) -> void:
 		player.global_position = level.get_spawn_position(player.player_number)
 	player.pulse_emitted.connect(_on_pulse_emitted.bind(player))
 	player.health.hit_taken.connect(_on_hit_taken)
-	player.health.died.connect(_on_player_died)
+	player.health.downed.connect(_on_player_downed)
 	player_registered.emit(player)
 
 
@@ -69,14 +76,21 @@ func _on_hit_taken() -> void:
 	hits_taken += 1
 
 
-func _on_player_died(cause: PlayerHealth.Cause) -> void:
-	# Single player: any death ends the run. (Co-op later: only when all are down.)
+func _on_creature_killed() -> void:
+	creatures_killed += 1
+
+
+func _on_player_downed(_cause: PlayerHealth.Cause) -> void:
 	if is_over:
 		return
+	for player: Player in players:
+		if not player.health.is_downed:
+			return
+	# Everyone is down at the same time: the run is over.
 	is_over = true
 	get_tree().paused = true
 	if end_screen:
-		end_screen.show_death(cause)
+		end_screen.show_defeat(players)
 
 
 func _on_ancient_light_activated() -> void:
@@ -86,11 +100,4 @@ func _on_ancient_light_activated() -> void:
 	await get_tree().create_timer(victory_delay).timeout
 	get_tree().paused = true
 	if end_screen:
-		end_screen.show_victory(run_time, pulses_used, hits_taken, _best_oxygen_ratio())
-
-
-func _best_oxygen_ratio() -> float:
-	var best: float = 0.0
-	for player: Player in players:
-		best = maxf(best, player.oxygen.get_ratio())
-	return best
+		end_screen.show_victory(run_time, pulses_used, hits_taken, creatures_killed, players)

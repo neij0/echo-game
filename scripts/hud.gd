@@ -61,8 +61,7 @@ func _process(_delta: float) -> void:
 	lines.append("Awareness: %.1f / %.0f" % [awareness.value, awareness.max_value])
 	if run_manager:
 		for player: Player in run_manager.players:
-			var cooldown: String = "READY" if player.is_pulse_ready() else "%.1fs" % player.pulse_cooldown_left
-			lines.append("P%d pulse: %s" % [player.player_number, cooldown])
+			lines.append("P%d %s: %s" % [player.player_number, player.display_name, _ability_text(player)])
 			var nearest: Creature = _nearest_creature(creatures, player.global_position)
 			if nearest:
 				lines.append("P%d nearest creature: %s (%d px)" % [
@@ -72,6 +71,21 @@ func _process(_delta: float) -> void:
 				])
 	lines.append("Creatures: " + " / ".join(state_counts))
 	_debug_label.text = "\n".join(lines)
+
+
+func _ability_text(player: Player) -> String:
+	if player.health.is_downed:
+		return "DOWNED"
+	if player.is_reviving():
+		return "reviving (hold action)"
+	var pulse := player.get_node_or_null("Pulse") as PulseAbility
+	if pulse:
+		return "pulse READY" if pulse.is_ready() else "pulse %.1fs" % pulse.cooldown_left
+	var sword := player.get_node_or_null("UnlitLayer/Sword") as SwordAbility
+	if sword:
+		var light: String = "in light" if sword.is_in_echo_light() else "in dark"
+		return "combo hit %d (%s)" % [sword.hit_index + 1, light] if sword.is_attacking() else "sword ready (%s)" % light
+	return ""
 
 
 func _nearest_creature(creatures: Array[Node], from: Vector2) -> Creature:

@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="1_base"]
+
+[node name="CreatureUnkillable" instance=ExtResource("1_base")]
+unkillable = true
+stagger_scale = 0.35
+look = 1
+body_radius = 22.0
+body_color = Color(0.55, 0.3, 0.95, 1)
+eye_color = Color(0.85, 1, 0.4, 1)
+
+[node name="Echo" parent="EchoLayer" index="0"]
+color = Color(0.65, 0.3, 1, 1)

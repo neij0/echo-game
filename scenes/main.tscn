@@ -1,7 +1,9 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/descent_level.tscn" id="1_level"]
-[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
+[ext_resource type="PackedScene" path="res://scenes/echo.tscn" id="3_echo"]
+[ext_resource type="PackedScene" path="res://scenes/guardian.tscn" id="4_guardian"]
+[ext_resource type="Script" path="res://scripts/shared_camera.gd" id="17_camera"]
 [ext_resource type="Script" path="res://scripts/depth_awareness.gd" id="6_awareness"]
 [ext_resource type="Script" path="res://scripts/hud.gd" id="7_hud"]
 [ext_resource type="Script" path="res://scripts/sonar_overlay.gd" id="8_sonar"]
@@ -23,8 +25,16 @@ level = NodePath("../DescentLevel")
 
 [node name="DescentLevel" parent="." instance=ExtResource("1_level")]
 
-[node name="Player" parent="." instance=ExtResource("3_player")]
+[node name="Echo" parent="." instance=ExtResource("3_echo")]
 position = Vector2(1200, 200)
+
+[node name="Guardian" parent="." instance=ExtResource("4_guardian")]
+position = Vector2(1300, 200)
+
+[node name="SharedCamera" type="Camera2D" parent="." node_paths=PackedStringArray("run_manager")]
+position = Vector2(1250, 200)
+script = ExtResource("17_camera")
+run_manager = NodePath("../RunManager")
 
 [node name="DepthAwareness" type="Node" parent="."]
 script = ExtResource("6_awareness")
@@ -81,13 +91,13 @@ show_percentage = false
 offset_left = 20.0
 offset_top = 52.0
 offset_right = 520.0
-offset_bottom = 160.0
+offset_bottom = 215.0
 
 [node name="PlayerStatuses" type="VBoxContainer" parent="Hud"]
 offset_left = 20.0
-offset_top = 170.0
+offset_top = 225.0
 offset_right = 420.0
-offset_bottom = 290.0
+offset_bottom = 345.0
 
 [node name="EndScreen" type="CanvasLayer" parent="."]
 layer = 3

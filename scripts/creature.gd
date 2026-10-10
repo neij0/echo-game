@@ -1,14 +1,19 @@
 class_name Creature
 extends CharacterBody2D
-## A deep-sea creature: wanders slowly, investigates the last pulse it heard,
-## and chases a diver it spots (close and in line of sight, or pulsing nearby)
-## for a few seconds before losing track. Its speed scales with Depth Awareness. Touching a player hurts them (see
-## PlayerHealth). Works with any number of players (no fixed player reference).
+## A hostile deep-sea creature: wanders slowly, investigates pulses and sword
+## noise it hears, and chases the nearest player it spots (close and in line of
+## sight, or pulsing nearby) for a few seconds before losing track. Its speed
+## scales with Depth Awareness. Touching a player hurts them (see PlayerHealth).
+## The Guardian's sword can damage it only while it is revealed (in the Echo's
+## light, or shortly after a pulse front passed over it). The unkillable type
+## ignores damage and only staggers briefly.
 
 enum State { WANDER, INVESTIGATE, CHASE }
+enum Look { ROUND, SPIKY }
 
 ## Emitted when the creature spots a player and starts chasing.
 signal spotted(player: Player)
+signal killed
 
 ## Optional: if empty, the first node in the "depth_awareness" group is used.
 @export var awareness: DepthAwareness
@@ -37,8 +42,8 @@ signal spotted(player: Player)
 @export_group("Chase")
 ## Seconds the creature follows the player's real position after spotting.
 @export var chase_time: float = 3.0
-## Speed while chasing: faster than normal, slower than the diver's max speed
-## (260), so reacting quickly lets the player escape.
+## Speed while chasing: faster than normal, slower than the Echo's max speed
+## (260) and close to the Guardian's (230), so reacting quickly lets players escape.
 @export var chase_speed: float = 215.0
 ## After losing track, seconds before it can spot a player by sight again
 ## (a nearby pulse still gives the player away).
@@ -57,13 +62,32 @@ signal spotted(player: Player)
 ## After this many new points, stop investigating and wander where it is.
 @export var max_retargets: int = 3
 
+@export_group("Combat")
+## Damage needed to kill it (one full Guardian combo = 1 + 1 + 2 = 4).
+@export var max_health: int = 4
+## Ignores damage, only staggers (players must avoid it).
+@export var unkillable: bool = false
+## Multiplies the stagger time of every hit (lower = shrugs hits off faster).
+@export var stagger_scale: float = 1.0
+## Seconds it stays revealed (hittable) after a pulse front passed over it.
+@export var pulse_reveal_time: float = 1.5
+## Seconds of the white flash when hit.
+@export var hit_flash_time: float = 0.12
+@export var hit_flash_color: Color = Color(1.0, 1.0, 1.0)
+
 @export_group("Visual")
+@export var look: Look = Look.ROUND
 @export var body_radius: float = 20.0
 @export var body_color: Color = Color(0.85, 0.25, 0.3)
+@export var eye_color: Color = Color(1.0, 0.85, 0.3)
+## Number of spikes for the SPIKY look.
+@export var spike_count: int = 7
+## Spike length compared to body_radius for the SPIKY look.
+@export var spike_length: float = 0.55
 
 @export_group("Sonar Visibility")
-## true = invisible except for a red echo when the pulse front passes over it.
-## false = always drawn (the old version, for comparison).
+## true = invisible except for a red echo when the pulse front passes over it,
+## and its body inside the Echo's light. false = always drawn (for comparison).
 @export var hidden_until_pinged: bool = true
 
 var state: State = State.WANDER
@@ -79,6 +103,12 @@ var _chased: Player
 var _chase_left: float = 0.0
 var _respot_left: float = 0.0
 var _spot_timer: float = 0.0
+var health: int = 0
+var _stagger_left: float = 0.0
+var _revealed_left: float = 0.0
+var _flash_left: float = 0.0
+var _dying: bool = false
+var _was_in_light: bool = false
 
 @onready var _hitbox: Area2D = $Hitbox
 @onready var _alert: AudioStreamPlayer2D = $AlertSound
@@ -91,9 +121,8 @@ func _ready() -> void:
 	_hitbox.body_entered.connect(_on_hitbox_body_entered)
 	add_to_group("sonar_targets")
 	add_to_group("creatures")
-	if awareness == null:
-		awareness = get_tree().get_first_node_in_group("depth_awareness") as DepthAwareness
 	_alert.volume_db = alert_volume_db
+	health = max_health
 
 
 ## Called (via the "creatures" group) by RunManager on every pulse.
@@ -105,6 +134,65 @@ func hear_pulse(origin: Vector2, player: Player) -> void:
 	if state == State.CHASE or distance > hearing_range:
 		return
 	_investigate(origin)
+
+
+## Called (via the "creatures" group) by the Guardian's sword on every swing.
+func hear_noise(origin: Vector2, radius: float) -> void:
+	if _dying or state == State.CHASE or global_position.distance_to(origin) > radius:
+		return
+	_investigate(origin)
+
+
+## True while the Guardian can hurt it: inside a revealing light (the Echo's)
+## or shortly after a pulse front passed over it.
+func is_revealed() -> bool:
+	return _revealed_left > 0.0 or is_in_echo_light()
+
+
+func is_in_echo_light() -> bool:
+	for player: Player in Players.all(get_tree()):
+		if player.light_reveal_radius <= 0.0 or player.health.is_downed:
+			continue
+		if player.global_position.distance_to(global_position) <= player.light_reveal_radius + body_radius:
+			return true
+	return false
+
+
+## Looked up on first use: the level (and its creatures) is ready before the
+## DepthAwareness node has joined its group.
+func _get_awareness() -> DepthAwareness:
+	if awareness == null:
+		awareness = get_tree().get_first_node_in_group("depth_awareness") as DepthAwareness
+	return awareness
+
+
+func is_dying() -> bool:
+	return _dying
+
+
+func take_damage(amount: int, from_position: Vector2, stagger_time: float, knockback: float) -> void:
+	if _dying:
+		return
+	_stagger_left = stagger_time * stagger_scale
+	velocity = from_position.direction_to(global_position) * knockback
+	_flash_left = hit_flash_time
+	_echo.flash(self, body_radius)
+	queue_redraw()
+	if unkillable:
+		return
+	health -= amount
+	if health <= 0:
+		_die()
+
+
+func _die() -> void:
+	_dying = true
+	killed.emit()
+	set_physics_process(false)
+	_hitbox.set_deferred("monitoring", false)
+	remove_from_group("creatures")
+	remove_from_group("sonar_targets")
+	queue_free()
 
 
 func _investigate(origin: Vector2) -> void:
@@ -137,7 +225,7 @@ func _lose_track() -> void:
 
 
 func _can_chase(player: Player) -> bool:
-	return not player.health.is_dead and not _is_player_safe(player)
+	return not player.health.is_downed and not _is_player_safe(player)
 
 
 func _look_for_players(delta: float) -> void:
@@ -146,14 +234,20 @@ func _look_for_players(delta: float) -> void:
 	if state == State.CHASE or _respot_left > 0.0 or _spot_timer > 0.0:
 		return
 	_spot_timer = spot_check_interval
+	# Spot the nearest player that is close, in line of sight and not downed.
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	var best: Player = null
+	var best_distance: float = spot_distance
 	for player: Player in Players.all(get_tree()):
-		if global_position.distance_to(player.global_position) > spot_distance or not _can_chase(player):
+		var distance: float = global_position.distance_to(player.global_position)
+		if distance > best_distance or not _can_chase(player):
 			continue
 		var query := PhysicsRayQueryParameters2D.create(global_position, player.global_position, wall_mask)
 		if space.intersect_ray(query).is_empty():
-			_spot(player)
-			return
+			best = player
+			best_distance = distance
+	if best:
+		_spot(best)
 
 
 func _update_chase(delta: float) -> void:
@@ -169,6 +263,7 @@ func _update_chase(delta: float) -> void:
 
 ## Called by SonarOverlay when a pulse front reaches this creature in line of sight.
 func on_sonar_hit(_origin: Vector2) -> void:
+	_revealed_left = pulse_reveal_time
 	if hidden_until_pinged:
 		_echo.flash(self, body_radius)
 
@@ -183,11 +278,19 @@ func get_state_name() -> String:
 func get_current_speed() -> float:
 	if state == State.CHASE:
 		return chase_speed
-	var ratio: float = awareness.get_ratio() if awareness else 0.0
+	var meter: DepthAwareness = _get_awareness()
+	var ratio: float = meter.get_ratio() if meter else 0.0
 	return lerpf(min_speed, max_speed, ratio)
 
 
 func _physics_process(delta: float) -> void:
+	_update_reveal(delta)
+	if _stagger_left > 0.0:
+		# Staggered: no steering, just slide out the knockback.
+		_stagger_left -= delta
+		velocity = velocity.lerp(Vector2.ZERO, 1.0 - exp(-steering * delta))
+		move_and_slide()
+		return
 	_look_for_players(delta)
 	_update_chase(delta)
 
@@ -292,14 +395,35 @@ func _is_player_safe(player: Player) -> bool:
 	return false
 
 
+func _update_reveal(delta: float) -> void:
+	_revealed_left = maxf(_revealed_left - delta, 0.0)
+	var in_light: bool = is_in_echo_light()
+	if in_light != _was_in_light or _flash_left > 0.0:
+		_was_in_light = in_light
+		_flash_left = maxf(_flash_left - delta, 0.0)
+		queue_redraw()
+
+
 func _on_hitbox_body_entered(body: Node2D) -> void:
 	var player := body as Player
+	if _dying or _stagger_left > 0.0:
+		return
 	if player and not _is_player_safe(player):
 		player.health.take_hit(global_position)
 
 
 func _draw() -> void:
-	if hidden_until_pinged:
+	# Hidden creatures only show their body inside the Echo's light (drawn in the
+	# world, so the light itself makes it visible).
+	if hidden_until_pinged and not _was_in_light:
 		return
-	draw_circle(Vector2.ZERO, body_radius, body_color)
-	draw_circle(Vector2(body_radius * 0.45, 0.0), body_radius * 0.25, Color(1.0, 0.85, 0.3))
+	var color: Color = hit_flash_color if _flash_left > 0.0 else body_color
+	if look == Look.SPIKY:
+		var points := PackedVector2Array()
+		for i: int in spike_count * 2:
+			var radius: float = body_radius * (1.0 + spike_length if i % 2 == 0 else 0.8)
+			points.append(Vector2.from_angle(TAU * i / (spike_count * 2)) * radius)
+		draw_colored_polygon(points, color)
+	else:
+		draw_circle(Vector2.ZERO, body_radius, color)
+	draw_circle(Vector2(body_radius * 0.45, 0.0), body_radius * 0.25, eye_color)

@@ -1,9 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/descent_level.gd" id="1_level"]
 [ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
 [ext_resource type="PackedScene" path="res://scenes/coral.tscn" id="3_coral"]
 [ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="4_creature"]
+[ext_resource type="PackedScene" path="res://scenes/creature_unkillable.tscn" id="7_unkillable"]
 [ext_resource type="PackedScene" path="res://scenes/oxygen_station.tscn" id="5_station"]
 [ext_resource type="PackedScene" path="res://scenes/ancient_light.tscn" id="6_light"]
 
@@ -173,7 +174,7 @@ position = Vector2(1100, 5350)
 [node name="Creature4" parent="Creatures" instance=ExtResource("4_creature")]
 position = Vector2(1250, 6450)
 
-[node name="Creature5" parent="Creatures" instance=ExtResource("4_creature")]
+[node name="Unkillable1" parent="Creatures" instance=ExtResource("7_unkillable")]
 position = Vector2(1000, 7500)
 
 [node name="Creature6" parent="Creatures" instance=ExtResource("4_creature")]

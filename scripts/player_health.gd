@@ -2,27 +2,32 @@ class_name PlayerHealth
 extends Node
 ## Decides what happens when a creature touches the player. With grace on, the
 ## first touch only knocks the player back and gives a short invulnerability; a
-## second touch within second_hit_window kills. With grace off, any touch kills.
-## Death is only reported (died signal); RunManager decides what happens next.
+## second touch within second_hit_window downs the player. With grace off, any
+## touch downs. A downed player cannot move or act until the partner revives
+## them (ReviveHelper). RunManager ends the run when every player is downed.
 
 enum Cause { CREATURE, OXYGEN }
 
-## Emitted on every creature touch that is not ignored (lethal or not).
+## Emitted on every creature touch that is not ignored (downing or not).
 signal hit_taken
-## Emitted on a non-lethal hit (used for the red screen-edge flash).
+## Emitted on a non-downing hit (used for the red screen-edge flash).
 signal hurt
-signal died(cause: Cause)
+signal downed(cause: Cause)
+signal revived
 
 @export var player: Player
-## Off = the first touch kills.
+## Off = the first touch downs the player.
 @export var grace_enabled: bool = true
 @export var invulnerable_time: float = 1.5
-## A second touch within this many seconds of the first one kills.
+## A second touch within this many seconds of the first one downs the player.
 @export var second_hit_window: float = 5.0
 ## Speed of the knockback push away from the creature.
 @export var knockback_speed: float = 650.0
+## Seconds of invulnerability right after being revived.
+@export var revive_invulnerable_time: float = 2.0
 
-var is_dead: bool = false
+var is_downed: bool = false
+var last_cause: Cause = Cause.CREATURE
 var _invulnerable_left: float = 0.0
 var _window_left: float = 0.0
 
@@ -37,11 +42,11 @@ func is_invulnerable() -> bool:
 
 
 func take_hit(from_position: Vector2) -> void:
-	if is_dead or is_invulnerable():
+	if is_downed or is_invulnerable():
 		return
 	hit_taken.emit()
 	if not grace_enabled or _window_left > 0.0:
-		kill(Cause.CREATURE)
+		down(Cause.CREATURE)
 		return
 	_invulnerable_left = invulnerable_time
 	_window_left = second_hit_window
@@ -50,8 +55,20 @@ func take_hit(from_position: Vector2) -> void:
 	hurt.emit()
 
 
-func kill(cause: Cause) -> void:
-	if is_dead:
+func down(cause: Cause) -> void:
+	if is_downed:
 		return
-	is_dead = true
-	died.emit(cause)
+	is_downed = true
+	last_cause = cause
+	if player:
+		player.velocity = Vector2.ZERO
+	downed.emit(cause)
+
+
+func revive() -> void:
+	if not is_downed:
+		return
+	is_downed = false
+	_window_left = 0.0
+	_invulnerable_left = revive_invulnerable_time
+	revived.emit()

@@ -1,0 +1,43 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1_base"]
+[ext_resource type="Script" path="res://scripts/sword_ability.gd" id="2_sword"]
+[ext_resource type="AudioStream" path="res://assets/audio/sword_swing.wav" id="3_swing"]
+[ext_resource type="AudioStream" path="res://assets/audio/sword_hit.wav" id="4_hit"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_body"]
+radius = 13.0
+height = 46.0
+
+[node name="Guardian" instance=ExtResource("1_base")]
+player_number = 2
+display_name = "Guardian"
+input_prefix = "p2_"
+light_reveal_radius = 0.0
+acceleration = 600.0
+max_speed = 230.0
+drag = 2.5
+glide_drag = 1.6
+
+[node name="CollisionShape2D" parent="." index="0"]
+shape = SubResource("CapsuleShape2D_body")
+
+[node name="Body" parent="." index="1"]
+body_radius = 13.0
+body_height = 46.0
+body_color = Color(0.22, 0.22, 0.27, 1)
+
+[node name="PlayerLight" parent="." index="2"]
+color = Color(0.55, 0.65, 0.9, 1)
+energy = 0.35
+texture_scale = 0.45
+
+[node name="Overlay" parent="UnlitLayer" index="0"]
+outline_enabled = true
+outline_size = Vector2(32, 52)
+
+[node name="Sword" type="Node2D" parent="UnlitLayer" node_paths=PackedStringArray("player")]
+script = ExtResource("2_sword")
+player = NodePath("../..")
+swing_stream = ExtResource("3_swing")
+hit_stream = ExtResource("4_hit")

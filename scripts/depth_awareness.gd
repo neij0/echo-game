@@ -1,6 +1,7 @@
 class_name DepthAwareness
 extends Node
-## The "Depth Awareness" meter (0-100). Pulses raise it, time slowly lowers it.
+## The "Depth Awareness" meter (0-100). Pulses and sword swings raise it,
+## time slowly lowers it.
 
 signal value_changed(value: float)
 
@@ -28,6 +29,12 @@ func _process(delta: float) -> void:
 
 func add_pulse() -> void:
 	_set_value(value + per_pulse)
+	_decay_timer = decay_delay
+
+
+## Any other noise (e.g. a Guardian sword swing).
+func add_noise(amount: float) -> void:
+	_set_value(value + amount)
 	_decay_timer = decay_delay
 
 
