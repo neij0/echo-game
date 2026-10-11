@@ -23,6 +23,7 @@ var _light: PointLight2D
 func _ready() -> void:
 	add_to_group("corals")
 	add_to_group("sonar_targets")
+	add_to_group("light_sources")
 	_light = PointLight2D.new()
 	_light.texture = LightTextures.radial(256, 0.4)
 	_light.texture_scale = LightTextures.scale_for_radius(_light.texture, light_radius)
@@ -53,6 +54,11 @@ func wake() -> void:
 
 func is_lit() -> bool:
 	return lit_time_left > 0.0
+
+
+## Used by light-attracted creatures (LightHunter): is this point lit by me?
+func lights_point(point: Vector2) -> bool:
+	return is_lit() and global_position.distance_to(point) <= light_radius
 
 
 func is_in_safe_zone(point: Vector2) -> bool:

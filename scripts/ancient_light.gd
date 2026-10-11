@@ -53,6 +53,8 @@ var _audio: AudioStreamPlayer
 
 
 func _ready() -> void:
+	add_to_group("ancient_light")
+	add_to_group("light_sources")
 	_light = PointLight2D.new()
 	_light.texture = LightTextures.radial(256, 0.0)
 	_light.texture_scale = LightTextures.scale_for_radius(_light.texture, idle_light_radius)
@@ -90,6 +92,14 @@ func _process(delta: float) -> void:
 		if charge >= activation_time:
 			_activate()
 	_visual.queue_redraw()
+
+
+## Used by light-attracted creatures (LightHunter): is this point lit by me?
+func lights_point(point: Vector2) -> bool:
+	var radius: float = idle_light_radius
+	if is_active:
+		radius = lerpf(idle_light_radius, active_light_radius, clampf(_active_time / bloom_time, 0.0, 1.0))
+	return global_position.distance_to(point) <= radius
 
 
 func get_charge_ratio() -> float:

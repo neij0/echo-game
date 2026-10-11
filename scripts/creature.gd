@@ -5,11 +5,13 @@ extends CharacterBody2D
 ## sight, or pulsing nearby) for a few seconds before losing track. Its speed
 ## scales with Depth Awareness. Touching a player hurts them (see PlayerHealth).
 ## The Guardian's sword can damage it only while it is revealed (in the Echo's
-## light, or shortly after a pulse front passed over it). The unkillable type
-## ignores damage and only staggers briefly.
+## light, or shortly after a pulse front passed over it). A pulse front also
+## makes it Exposed for a short time: a Guardian finisher on an Exposed creature
+## kills it instantly. The unkillable type ignores damage and only staggers.
+## Subclasses (LightHunter) override the targeting hooks below.
 
 enum State { WANDER, INVESTIGATE, CHASE }
-enum Look { ROUND, SPIKY }
+enum Look { ROUND, SPIKY, ARROW }
 
 ## Emitted when the creature spots a player and starts chasing.
 signal spotted(player: Player)
@@ -63,14 +65,18 @@ signal killed
 @export var max_retargets: int = 3
 
 @export_group("Combat")
-## Damage needed to kill it (one full Guardian combo = 1 + 1 + 2 = 4).
-@export var max_health: int = 4
+## Damage needed to kill it. One full Guardian combo = 1 + 1 + 2 = 4, so 8 =
+## about two combos (or one finisher while it is Exposed).
+@export var max_health: int = 8
 ## Ignores damage, only staggers (players must avoid it).
 @export var unkillable: bool = false
 ## Multiplies the stagger time of every hit (lower = shrugs hits off faster).
 @export var stagger_scale: float = 1.0
 ## Seconds it stays revealed (hittable) after a pulse front passed over it.
 @export var pulse_reveal_time: float = 1.5
+## Seconds it stays Exposed after a pulse front passed over it. A Guardian
+## finisher landing in that time kills it instantly.
+@export var exposed_time: float = 1.5
 ## Seconds of the white flash when hit.
 @export var hit_flash_time: float = 0.12
 @export var hit_flash_color: Color = Color(1.0, 1.0, 1.0)
@@ -109,6 +115,7 @@ var _revealed_left: float = 0.0
 var _flash_left: float = 0.0
 var _dying: bool = false
 var _was_in_light: bool = false
+var _exposed_left: float = 0.0
 
 @onready var _hitbox: Area2D = $Hitbox
 @onready var _alert: AudioStreamPlayer2D = $AlertSound
@@ -170,19 +177,47 @@ func is_dying() -> bool:
 	return _dying
 
 
-func take_damage(amount: int, from_position: Vector2, stagger_time: float, knockback: float) -> void:
+func is_exposed() -> bool:
+	return _exposed_left > 0.0
+
+
+## 1 right after the pulse front hit, 0 when Exposed runs out.
+func get_exposed_ratio() -> float:
+	return _exposed_left / exposed_time if exposed_time > 0.0 else 0.0
+
+
+## Applies a sword hit. Returns true if it was an Exposed kill (a finisher on an
+## Exposed creature), so the attacker can play the big hit effect.
+func take_damage(amount: int, attacker: Player, stagger_time: float, knockback: float, is_finisher: bool = false) -> bool:
 	if _dying:
-		return
+		return false
 	_stagger_left = stagger_time * stagger_scale
-	velocity = from_position.direction_to(global_position) * knockback
+	velocity = attacker.global_position.direction_to(global_position) * knockback
 	_flash_left = hit_flash_time
 	_echo.flash(self, body_radius)
 	queue_redraw()
+	_on_damaged(attacker)
 	if unkillable:
-		return
+		return false
+	if is_finisher and is_exposed():
+		_exposed_left = 0.0
+		health = 0
+		_die()
+		return true
 	health -= amount
 	if health <= 0:
 		_die()
+	return false
+
+
+## Hook for subclasses: called on every sword hit.
+func _on_damaged(_attacker: Player) -> void:
+	pass
+
+
+## Hook for subclasses: can touching this player hurt them?
+func _can_hurt(_player: Player) -> bool:
+	return true
 
 
 func _die() -> void:
@@ -264,6 +299,8 @@ func _update_chase(delta: float) -> void:
 ## Called by SonarOverlay when a pulse front reaches this creature in line of sight.
 func on_sonar_hit(_origin: Vector2) -> void:
 	_revealed_left = pulse_reveal_time
+	if not unkillable:
+		_exposed_left = exposed_time
 	if hidden_until_pinged:
 		_echo.flash(self, body_radius)
 
@@ -397,7 +434,11 @@ func _is_player_safe(player: Player) -> bool:
 
 func _update_reveal(delta: float) -> void:
 	_revealed_left = maxf(_revealed_left - delta, 0.0)
+	_exposed_left = maxf(_exposed_left - delta, 0.0)
 	var in_light: bool = is_in_echo_light()
+	# The ARROW look points where it moves, so it needs a redraw every frame.
+	if look == Look.ARROW and in_light:
+		queue_redraw()
 	if in_light != _was_in_light or _flash_left > 0.0:
 		_was_in_light = in_light
 		_flash_left = maxf(_flash_left - delta, 0.0)
@@ -408,7 +449,7 @@ func _on_hitbox_body_entered(body: Node2D) -> void:
 	var player := body as Player
 	if _dying or _stagger_left > 0.0:
 		return
-	if player and not _is_player_safe(player):
+	if player and _can_hurt(player) and not _is_player_safe(player):
 		player.health.take_hit(global_position)
 
 
@@ -424,6 +465,15 @@ func _draw() -> void:
 			var radius: float = body_radius * (1.0 + spike_length if i % 2 == 0 else 0.8)
 			points.append(Vector2.from_angle(TAU * i / (spike_count * 2)) * radius)
 		draw_colored_polygon(points, color)
+	elif look == Look.ARROW:
+		# A thin arrowhead pointing where it is moving.
+		var forward: Vector2 = velocity.normalized() if velocity.length() > 1.0 else Vector2.RIGHT
+		var side: Vector2 = forward.orthogonal()
+		var tip: Vector2 = forward * body_radius * 1.6
+		var back: Vector2 = -forward * body_radius * 0.9
+		draw_colored_polygon(PackedVector2Array([tip, back + side * body_radius, back * 0.4, back - side * body_radius]), color)
+		draw_circle(forward * body_radius * 0.6, body_radius * 0.22, eye_color)
+		return
 	else:
 		draw_circle(Vector2.ZERO, body_radius, color)
 	draw_circle(Vector2(body_radius * 0.45, 0.0), body_radius * 0.25, eye_color)

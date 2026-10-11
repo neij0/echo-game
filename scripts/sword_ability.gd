@@ -4,12 +4,15 @@ extends Node2D
 ## quick slashes, hit 3 is a slower, stronger finisher with a wider arc.
 ## Pressing again during a hit or within combo_window continues the combo,
 ## otherwise it resets. Only revealed creatures take damage (Creature.is_revealed).
+## A finisher on an Exposed creature (just hit by the Echo's pulse front) kills
+## it instantly, with a hit-stop, a gold burst, its own sound and a big shake.
 ## Every swing makes noise: raises Depth Awareness and alerts nearby creatures.
 ## Lives on a CanvasLayer with follow_viewport_enabled (drawn unlit, so the
 ## player can always see where the sword points); follows the player each frame.
 
 signal swung(hit_index: int)
 signal hit_landed(creature: Creature, damage: int)
+signal exposed_kill(creature_position: Vector2)
 
 @export var player: Player
 
@@ -33,6 +36,22 @@ signal hit_landed(creature: Creature, damage: int)
 @export var finisher_knockback: float = 320.0
 ## Seconds after the finisher before a new combo can start.
 @export var finisher_recovery: float = 0.35
+
+@export_group("Exposed Kill")
+## Real-time seconds the game freezes on an Exposed kill.
+@export var hit_stop_duration: float = 0.08
+## Engine time scale during the hit-stop (0 = full freeze).
+@export_range(0.0, 1.0) var hit_stop_time_scale: float = 0.02
+@export var exposed_kill_stream: AudioStream
+@export var exposed_kill_volume_db: float = 0.0
+@export var burst_color: Color = Color(1.0, 0.8, 0.3)
+@export var burst_energy: float = 4.0
+@export var burst_radius: float = 95.0
+@export var burst_time: float = 0.45
+@export var burst_ray_count: int = 10
+@export var burst_width: float = 4.0
+@export var kill_shake_strength: float = 9.0
+@export var kill_shake_duration: float = 0.3
 
 @export_group("Combo")
 ## Seconds after a hit ends during which pressing continues the combo.
@@ -78,11 +97,16 @@ var _swing_dir: Vector2 = Vector2.DOWN
 var _awareness: DepthAwareness
 var _swing_audio: AudioStreamPlayer2D
 var _hit_audio: AudioStreamPlayer2D
+var _kill_audio: AudioStreamPlayer2D
+# Gold bursts of Exposed kills: world position and age in seconds.
+var _burst_positions: PackedVector2Array = PackedVector2Array()
+var _burst_ages: PackedFloat32Array = PackedFloat32Array()
 
 
 func _ready() -> void:
 	_swing_audio = _make_audio(swing_stream, swing_volume_db)
 	_hit_audio = _make_audio(hit_stream, hit_volume_db)
+	_kill_audio = _make_audio(exposed_kill_stream, exposed_kill_volume_db)
 
 
 func _process(delta: float) -> void:
@@ -98,6 +122,7 @@ func _process(delta: float) -> void:
 		_on_attack_pressed()
 	if hit_index >= 0:
 		_update_hit(delta)
+	_update_bursts(delta)
 	queue_redraw()
 
 
@@ -176,12 +201,43 @@ func _apply_damage() -> void:
 		if not creature.is_revealed():
 			continue
 		var damage: int = finisher_damage if is_finisher else quick_damage
-		creature.take_damage(damage, player.global_position,
+		var creature_position: Vector2 = creature.global_position
+		var killed_exposed: bool = creature.take_damage(damage, player,
 			finisher_stagger if is_finisher else quick_stagger,
-			finisher_knockback if is_finisher else quick_knockback)
-		if hit_stream:
+			finisher_knockback if is_finisher else quick_knockback, is_finisher)
+		if killed_exposed:
+			_on_exposed_kill(creature_position)
+		elif hit_stream:
 			_hit_audio.play()
 		hit_landed.emit(creature, damage)
+
+
+func _on_exposed_kill(creature_position: Vector2) -> void:
+	_burst_positions.append(creature_position)
+	_burst_ages.append(0.0)
+	if exposed_kill_stream:
+		_kill_audio.global_position = creature_position
+		_kill_audio.play()
+	var camera := get_viewport().get_camera_2d() as SharedCamera
+	if camera:
+		camera.shake_with(kill_shake_strength, kill_shake_duration)
+	exposed_kill.emit(creature_position)
+	_hit_stop()
+
+
+func _hit_stop() -> void:
+	Engine.time_scale = hit_stop_time_scale
+	# This timer ignores the time scale, so it ends after real seconds.
+	await get_tree().create_timer(hit_stop_duration, true, false, true).timeout
+	Engine.time_scale = 1.0
+
+
+func _update_bursts(delta: float) -> void:
+	for i: int in range(_burst_ages.size() - 1, -1, -1):
+		_burst_ages[i] += delta
+		if _burst_ages[i] >= burst_time:
+			_burst_ages.remove_at(i)
+			_burst_positions.remove_at(i)
 
 
 func _make_noise() -> void:
@@ -210,6 +266,7 @@ static func _hdr(color: Color, energy: float, alpha: float) -> Color:
 
 
 func _draw() -> void:
+	_draw_bursts()
 	if player == null or player.health.is_downed:
 		return
 	var lit: bool = is_in_echo_light()
@@ -235,6 +292,18 @@ func _draw() -> void:
 
 	var base: Vector2 = direction * sword_offset
 	draw_line(base, base + direction * sword_length, sword_color, sword_width, true)
+
+
+func _draw_bursts() -> void:
+	for i: int in _burst_ages.size():
+		var t: float = _burst_ages[i] / burst_time
+		var center: Vector2 = _burst_positions[i] - global_position
+		var color: Color = _hdr(burst_color, burst_energy, 1.0 - t)
+		var radius: float = burst_radius * (0.3 + 0.7 * t)
+		draw_arc(center, radius, 0.0, TAU, 48, color, burst_width * (1.0 - t) + 1.0, true)
+		for r: int in burst_ray_count:
+			var direction: Vector2 = Vector2.from_angle(TAU * r / burst_ray_count)
+			draw_line(center + direction * radius * 0.3, center + direction * radius * 1.15, color, 2.0, true)
 
 
 func _draw_arc_shape(reach: float, half_arc: float, fade: float) -> void:

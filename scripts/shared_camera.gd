@@ -22,6 +22,8 @@ extends Camera2D
 @export var shake_duration: float = 0.15
 
 var _shake_left: float = 0.0
+var _shake_total: float = 0.0
+var _shake_amount: float = 0.0
 var _snapped: bool = false
 
 
@@ -39,8 +41,15 @@ func _on_pulse_emitted(_origin: Vector2) -> void:
 
 
 func shake() -> void:
-	if shake_enabled:
-		_shake_left = shake_duration
+	shake_with(shake_strength, shake_duration)
+
+
+## A shake with its own strength (e.g. the big one on an Exposed kill).
+func shake_with(strength: float, duration: float) -> void:
+	if shake_enabled and duration > 0.0:
+		_shake_left = duration
+		_shake_total = duration
+		_shake_amount = strength
 
 
 func _process(delta: float) -> void:
@@ -72,5 +81,5 @@ func _update_shake(delta: float) -> void:
 		return
 	_shake_left = maxf(_shake_left - delta, 0.0)
 	# Quadratic falloff: strongest at the start, settles smoothly.
-	var amount: float = shake_strength * pow(_shake_left / shake_duration, 2.0)
+	var amount: float = _shake_amount * pow(_shake_left / _shake_total, 2.0)
 	offset = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * amount

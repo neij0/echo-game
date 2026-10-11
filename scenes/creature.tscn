@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/creature.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/creature_echo.gd" id="2_echo"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/creature_heartbeat.gd" id="4_heart"]
 [ext_resource type="AudioStream" path="res://assets/audio/creature_heartbeat.wav" id="5_heart_sound"]
 [ext_resource type="AudioStream" path="res://assets/audio/creature_alert.wav" id="6_alert"]
+[ext_resource type="Script" path="res://scripts/exposed_mark.gd" id="7_mark"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 20.0
@@ -48,3 +49,7 @@ creature = NodePath("..")
 [node name="AlertSound" type="AudioStreamPlayer2D" parent="."]
 stream = ExtResource("6_alert")
 max_distance = 1400.0
+
+[node name="ExposedMark" type="Node2D" parent="EchoLayer" node_paths=PackedStringArray("creature")]
+script = ExtResource("7_mark")
+creature = NodePath("../..")

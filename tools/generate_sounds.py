@@ -111,6 +111,18 @@ HIT_CLICK = 0.5             # amount of the bright click on impact
 HIT_CLICK_DECAY = 0.004
 HIT_PEAK = 0.85
 
+# --- Exposed kill: heavy impact + bright metallic ring (pulse + finisher combo) ---
+KILL_LENGTH = 1.4
+KILL_BOOM_FREQ = 55.0       # Hz of the low impact
+KILL_BOOM_DECAY = 0.18
+KILL_CRACK = 0.7            # amount of the noise crack on impact
+KILL_CRACK_DECAY = 0.02
+KILL_RING_ROOT = 880.0      # Hz, the metallic ring...
+KILL_RING_PARTIALS = [(1.0, 1.0), (2.76, 0.6), (5.4, 0.35), (8.9, 0.2)]  # bell-like (inharmonic)
+KILL_RING_DECAY = 0.45
+KILL_RING_GAIN = 0.45
+KILL_PEAK = 0.9
+
 RANDOM_SEED = 7
 
 
@@ -351,6 +363,23 @@ def make_hit() -> list[float]:
     return normalize(samples, HIT_PEAK)
 
 
+def make_exposed_kill() -> list[float]:
+    rng = random.Random(RANDOM_SEED + 6)
+    count = int(KILL_LENGTH * SAMPLE_RATE)
+    samples = []
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        boom = math.sin(2.0 * math.pi * KILL_BOOM_FREQ * t * (1.0 - 0.3 * min(t / 0.3, 1.0))) * envelope(t, 0.003, KILL_BOOM_DECAY)
+        crack = rng.uniform(-1.0, 1.0) * KILL_CRACK * math.exp(-t / KILL_CRACK_DECAY)
+        ring = sum(gain * math.sin(2.0 * math.pi * KILL_RING_ROOT * ratio * t) * math.exp(-t * ratio / (KILL_RING_DECAY * 2.0))
+                   for ratio, gain in KILL_RING_PARTIALS)
+        samples.append(boom + crack + ring * KILL_RING_GAIN * envelope(t, 0.002, KILL_RING_DECAY * 3.0))
+    fade_count = int(0.1 * SAMPLE_RATE)
+    for k in range(fade_count):
+        samples[count - fade_count + k] *= 1.0 - k / fade_count
+    return normalize(samples, KILL_PEAK)
+
+
 def write_wav(path: Path, samples: list[float]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as file:
@@ -372,3 +401,4 @@ if __name__ == "__main__":
     write_wav(OUTPUT_DIR / "creature_alert.wav", make_alert())
     write_wav(OUTPUT_DIR / "sword_swing.wav", make_swing())
     write_wav(OUTPUT_DIR / "sword_hit.wav", make_hit())
+    write_wav(OUTPUT_DIR / "exposed_kill.wav", make_exposed_kill())

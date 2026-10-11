@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="1_base"]
+[ext_resource type="Script" path="res://scripts/light_hunter.gd" id="2_script"]
+
+[node name="LightHunter" instance=ExtResource("1_base")]
+script = ExtResource("2_script")
+max_health = 4
+look = 2
+body_radius = 16.0
+body_color = Color(1, 0.35, 0.75, 1)
+eye_color = Color(1, 1, 0.85, 1)
+
+[node name="Echo" parent="EchoLayer" index="0"]
+color = Color(1, 0.35, 0.8, 1)

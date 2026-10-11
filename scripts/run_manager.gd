@@ -62,6 +62,8 @@ func register_player(player: Player) -> void:
 
 func restart() -> void:
 	get_tree().paused = false
+	# In case a hit-stop (SwordAbility) was still running.
+	Engine.time_scale = 1.0
 	get_tree().reload_current_scene()
 
 
