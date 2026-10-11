@@ -45,7 +45,7 @@ var facing: Vector2 = Vector2.DOWN
 var _knockback_left: float = 0.0
 
 @onready var health: PlayerHealth = $Health
-@onready var oxygen: PlayerOxygen = $Oxygen
+@onready var pressure: PlayerPressure = $Pressure
 
 
 func _ready() -> void:

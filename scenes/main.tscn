@@ -1,6 +1,7 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=21 format=3]
 
-[ext_resource type="PackedScene" path="res://scenes/descent_level.tscn" id="1_level"]
+[ext_resource type="Script" path="res://scripts/stage_builder.gd" id="1_stage"]
+[ext_resource type="Resource" path="res://worlds/ocean.tres" id="2_world"]
 [ext_resource type="PackedScene" path="res://scenes/echo.tscn" id="3_echo"]
 [ext_resource type="PackedScene" path="res://scenes/guardian.tscn" id="4_guardian"]
 [ext_resource type="Script" path="res://scripts/shared_camera.gd" id="17_camera"]
@@ -18,12 +19,14 @@
 
 [node name="Main" type="Node2D"]
 
-[node name="Darkness" type="CanvasModulate" parent="." node_paths=PackedStringArray("level")]
+[node name="Darkness" type="CanvasModulate" parent="." node_paths=PackedStringArray("stage_builder")]
 color = Color(0.06, 0.08, 0.14, 1)
 script = ExtResource("13_darkness")
-level = NodePath("../DescentLevel")
+stage_builder = NodePath("../Stage")
 
-[node name="DescentLevel" parent="." instance=ExtResource("1_level")]
+[node name="Stage" type="Node2D" parent="."]
+script = ExtResource("1_stage")
+world = ExtResource("2_world")
 
 [node name="Echo" parent="." instance=ExtResource("3_echo")]
 position = Vector2(1200, 200)
@@ -48,11 +51,11 @@ script = ExtResource("8_sonar")
 [node name="GlowEnvironment" type="WorldEnvironment" parent="."]
 script = ExtResource("9_glow")
 
-[node name="RunManager" type="Node" parent="." node_paths=PackedStringArray("level", "awareness", "ancient_light", "end_screen")]
+[node name="RunManager" type="Node" parent="." node_paths=PackedStringArray("stage_builder", "awareness", "end_screen")]
 script = ExtResource("15_run")
-level = NodePath("../DescentLevel")
+world = ExtResource("2_world")
+stage_builder = NodePath("../Stage")
 awareness = NodePath("../DepthAwareness")
-ancient_light = NodePath("../DescentLevel/AncientLight")
 end_screen = NodePath("../EndScreen")
 
 [node name="SonarAudio" type="Node" parent="." node_paths=PackedStringArray("run_manager", "sonar_overlay")]
@@ -62,12 +65,12 @@ sonar_overlay = NodePath("../SonarLayer/SonarOverlay")
 ping_stream = ExtResource("11_ping")
 tick_stream = ExtResource("12_tick")
 
-[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("run_manager", "awareness", "level")]
+[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("run_manager", "awareness", "stage_builder")]
 layer = 2
 script = ExtResource("7_hud")
 run_manager = NodePath("../RunManager")
 awareness = NodePath("../DepthAwareness")
-level = NodePath("../DescentLevel")
+stage_builder = NodePath("../Stage")
 
 [node name="HurtVignette" type="Control" parent="Hud" node_paths=PackedStringArray("run_manager")]
 layout_mode = 3
@@ -90,14 +93,14 @@ show_percentage = false
 [node name="DebugLabel" type="Label" parent="Hud"]
 offset_left = 20.0
 offset_top = 52.0
-offset_right = 520.0
-offset_bottom = 215.0
+offset_right = 620.0
+offset_bottom = 240.0
 
 [node name="PlayerStatuses" type="VBoxContainer" parent="Hud"]
 offset_left = 20.0
-offset_top = 225.0
+offset_top = 250.0
 offset_right = 420.0
-offset_bottom = 345.0
+offset_bottom = 370.0
 
 [node name="EndScreen" type="CanvasLayer" parent="."]
 layer = 3

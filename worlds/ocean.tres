@@ -1,0 +1,115 @@
+[gd_resource type="Resource" script_class="WorldConfig" load_steps=32 format=3]
+
+[ext_resource type="Script" path="res://scripts/world_config.gd" id="1_world"]
+[ext_resource type="Script" path="res://scripts/stage_spawns.gd" id="2_stage"]
+[ext_resource type="Script" path="res://scripts/creature_spawn.gd" id="3_spawn"]
+[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="4_creature"]
+[ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="5_hunter"]
+[ext_resource type="PackedScene" path="res://scenes/creature_unkillable.tscn" id="6_unkillable"]
+[ext_resource type="PackedScene" path="res://scenes/coral.tscn" id="7_coral"]
+[ext_resource type="PackedScene" path="res://scenes/pressure_station.tscn" id="8_station"]
+[ext_resource type="PackedScene" path="res://scenes/ancient_light.tscn" id="9_goal"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/start_a.tscn" id="chunk_start_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/start_b.tscn" id="chunk_start_b"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/corridor_a.tscn" id="chunk_corridor_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/corridor_b.tscn" id="chunk_corridor_b"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/cave_a.tscn" id="chunk_cave_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/cave_b.tscn" id="chunk_cave_b"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/narrow_a.tscn" id="chunk_narrow_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/narrow_b.tscn" id="chunk_narrow_b"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/pocket_a.tscn" id="chunk_pocket_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/pocket_b.tscn" id="chunk_pocket_b"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/goal_a.tscn" id="chunk_goal_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/goal_b.tscn" id="chunk_goal_b"]
+
+[sub_resource type="Resource" id="Spawn_stage1_creature"]
+script = ExtResource("3_spawn")
+scene = ExtResource("4_creature")
+count = 3
+
+[sub_resource type="Resource" id="Spawn_stage1_hunter"]
+script = ExtResource("3_spawn")
+scene = ExtResource("5_hunter")
+count = 1
+
+[sub_resource type="Resource" id="Stage1"]
+script = ExtResource("2_stage")
+creatures = Array[ExtResource("3_spawn")]([SubResource("Spawn_stage1_creature"), SubResource("Spawn_stage1_hunter")])
+corals = 5
+stations = 2
+station_distance_bias = 0.0
+middle_chunks_min = 5
+middle_chunks_max = 6
+
+[sub_resource type="Resource" id="Spawn_stage2_creature"]
+script = ExtResource("3_spawn")
+scene = ExtResource("4_creature")
+count = 5
+
+[sub_resource type="Resource" id="Spawn_stage2_hunter"]
+script = ExtResource("3_spawn")
+scene = ExtResource("5_hunter")
+count = 2
+
+[sub_resource type="Resource" id="Stage2"]
+script = ExtResource("2_stage")
+creatures = Array[ExtResource("3_spawn")]([SubResource("Spawn_stage2_creature"), SubResource("Spawn_stage2_hunter")])
+corals = 4
+stations = 2
+station_distance_bias = 0.5
+middle_chunks_min = 5
+middle_chunks_max = 7
+
+[sub_resource type="Resource" id="Spawn_stage3_creature"]
+script = ExtResource("3_spawn")
+scene = ExtResource("4_creature")
+count = 6
+
+[sub_resource type="Resource" id="Spawn_stage3_hunter"]
+script = ExtResource("3_spawn")
+scene = ExtResource("5_hunter")
+count = 2
+
+[sub_resource type="Resource" id="Spawn_stage3_unkillable"]
+script = ExtResource("3_spawn")
+scene = ExtResource("6_unkillable")
+count = 1
+
+[sub_resource type="Resource" id="Stage3"]
+script = ExtResource("2_stage")
+creatures = Array[ExtResource("3_spawn")]([SubResource("Spawn_stage3_creature"), SubResource("Spawn_stage3_hunter"), SubResource("Spawn_stage3_unkillable")])
+corals = 3
+stations = 2
+station_distance_bias = 1.0
+middle_chunks_min = 6
+middle_chunks_max = 7
+
+[resource]
+script = ExtResource("1_world")
+world_name = "Ocean"
+start_chunks = Array[PackedScene]([ExtResource("chunk_start_a"), ExtResource("chunk_start_b")])
+middle_chunks = Array[PackedScene]([ExtResource("chunk_corridor_a"), ExtResource("chunk_corridor_b"), ExtResource("chunk_cave_a"), ExtResource("chunk_cave_b"), ExtResource("chunk_narrow_a"), ExtResource("chunk_narrow_b")])
+pocket_chunks = Array[PackedScene]([ExtResource("chunk_pocket_a"), ExtResource("chunk_pocket_b")])
+goal_chunks = Array[PackedScene]([ExtResource("chunk_goal_a"), ExtResource("chunk_goal_b")])
+stages = Array[ExtResource("2_stage")]([SubResource("Stage1"), SubResource("Stage2"), SubResource("Stage3")])
+coral_scene = ExtResource("7_coral")
+station_scene = ExtResource("8_station")
+goal_scene = ExtResource("9_goal")
+surface_depth_m = 200.0
+meters_per_pixel = 0.1
+stage_depth_step_m = 400.0
+ambient_color = Color(0.06, 0.08, 0.14, 1)
+deep_ambient_color = Color(0.02, 0.025, 0.05, 1)
+floor_color_shallow = Color(0.16, 0.22, 0.27, 1)
+floor_color_deep = Color(0.08, 0.11, 0.14, 1)
+rock_color = Color(0.45, 0.42, 0.4, 1)
+ring_color = Color(0.4, 0.9, 1, 0.9)
+edge_color = Color(0.45, 0.95, 1, 1)
+pressure_name = "Oxygen"
+pressure_drain_seconds = 180.0
+pressure_low_threshold = 0.25
+pressure_stage_refill = 0.4
+pressure_color = Color(0.35, 0.8, 1, 1)
+pulse_radius = 650.0
+pulse_expand_time = 0.8
+pulse_cost_ratio = 0.03

@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/player_body.gd" id="3_body"]
 [ext_resource type="Script" path="res://scripts/player_health.gd" id="5_health"]
-[ext_resource type="Script" path="res://scripts/player_oxygen.gd" id="6_oxygen"]
+[ext_resource type="Script" path="res://scripts/player_pressure.gd" id="6_pressure"]
 [ext_resource type="AudioStream" path="res://assets/audio/oxygen_alarm.wav" id="7_alarm"]
 [ext_resource type="Script" path="res://scripts/revive_helper.gd" id="8_revive"]
 [ext_resource type="Script" path="res://scripts/player_overlay.gd" id="9_overlay"]
@@ -45,8 +45,8 @@ texture_scale = 0.9
 script = ExtResource("5_health")
 player = NodePath("..")
 
-[node name="Oxygen" type="Node" parent="." node_paths=PackedStringArray("health", "player")]
-script = ExtResource("6_oxygen")
+[node name="Pressure" type="Node" parent="." node_paths=PackedStringArray("health", "player")]
+script = ExtResource("6_pressure")
 health = NodePath("../Health")
 player = NodePath("..")
 alarm_stream = ExtResource("7_alarm")

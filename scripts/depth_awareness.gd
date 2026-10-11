@@ -27,6 +27,12 @@ func _process(delta: float) -> void:
 		_set_value(value - decay_per_second * delta)
 
 
+## Back to calm (a new stage starts).
+func reset() -> void:
+	_decay_timer = 0.0
+	_set_value(0.0)
+
+
 func add_pulse() -> void:
 	_set_value(value + per_pulse)
 	_decay_timer = decay_delay

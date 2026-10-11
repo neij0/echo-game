@@ -1,11 +1,12 @@
 class_name Hud
 extends CanvasLayer
-## Awareness bar, a debug label, and one PlayerStatus (depth + oxygen) per
-## registered player. Never holds a single fixed player.
+## Awareness bar, a debug label (seed, stage, abilities, creatures), and one
+## PlayerStatus (depth + pressure meter) per registered player. Never holds a
+## single fixed player.
 
 @export var run_manager: RunManager
 @export var awareness: DepthAwareness
-@export var level: DescentLevel
+@export var stage_builder: StageBuilder
 
 @export_group("Awareness Bar")
 @export var calm_color: Color = Color(0.2, 0.55, 1.0)
@@ -36,7 +37,7 @@ func _ready() -> void:
 
 func _on_player_registered(player: Player) -> void:
 	var status := PlayerStatus.new()
-	status.setup(player, level)
+	status.setup(player, stage_builder, run_manager.world if run_manager else null)
 	_statuses.add_child(status)
 
 
@@ -58,6 +59,11 @@ func _process(_delta: float) -> void:
 		state_counts.append("%s %d" % [Creature.State.keys()[state_index], counts[state_index]])
 
 	var lines: PackedStringArray = PackedStringArray()
+	if run_manager and stage_builder:
+		lines.append("Stage %d / %d   Seed: run %d, stage %d (try %d)" % [
+			run_manager.stage_index + 1, run_manager.get_stage_count(),
+			stage_builder.run_seed, stage_builder.stage_seed, stage_builder.attempts_used,
+		])
 	lines.append("Awareness: %.1f / %.0f" % [awareness.value, awareness.max_value])
 	if run_manager:
 		for player: Player in run_manager.players:

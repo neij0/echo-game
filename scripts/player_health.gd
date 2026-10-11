@@ -6,7 +6,8 @@ extends Node
 ## touch downs. A downed player cannot move or act until the partner revives
 ## them (ReviveHelper). RunManager ends the run when every player is downed.
 
-enum Cause { CREATURE, OXYGEN }
+## PRESSURE = the world's survival meter ran out (Oxygen in the Ocean).
+enum Cause { CREATURE, PRESSURE }
 
 ## Emitted on every creature touch that is not ignored (downing or not).
 signal hit_taken

@@ -40,6 +40,11 @@ func _on_pulse_emitted(_origin: Vector2) -> void:
 	shake()
 
 
+## Jump straight to the players on the next frame (e.g. a new stage).
+func snap_to_players() -> void:
+	_snapped = false
+
+
 func shake() -> void:
 	shake_with(shake_strength, shake_duration)
 

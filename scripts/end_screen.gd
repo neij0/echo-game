@@ -53,31 +53,49 @@ func _ready() -> void:
 
 
 ## Both players are down: show what took each of them, then restart.
-func show_defeat(players: Array[Player]) -> void:
+func show_defeat(players: Array[Player], stage_number: int, stage_count: int) -> void:
 	_title.text = "Both of you are down"
 	_title.add_theme_color_override("font_color", death_title_color)
 	var lines: PackedStringArray = PackedStringArray()
 	for player: Player in players:
-		var reason: String = "out of oxygen" if player.health.last_cause == PlayerHealth.Cause.OXYGEN else "caught by a creature"
+		var reason: String = "caught by a creature"
+		if player.health.last_cause == PlayerHealth.Cause.PRESSURE:
+			reason = "out of %s" % player.pressure.pressure_name.to_lower()
 		lines.append("%s: %s" % [player.display_name, reason])
-	_body.text = "%s\n\nRestarting from the top..." % "\n".join(lines)
+	_body.text = "%s\nReached stage %d / %d\n\nRestarting from stage 1..." % ["\n".join(lines), stage_number, stage_count]
+	_button.visible = true
 	_open()
 	await get_tree().create_timer(death_restart_delay, true).timeout
 	if _root.visible:
 		restart_requested.emit()
 
 
-func show_victory(run_time: float, pulses: int, hits: int, kills: int, players: Array[Player]) -> void:
+## Short screen between two stages (no button; RunManager hides it).
+func show_stage_cleared(stages_cleared: int, stage_count: int) -> void:
+	_title.text = "Stage %d cleared" % stages_cleared
+	_title.add_theme_color_override("font_color", victory_title_color)
+	_body.text = "Going deeper... (stage %d / %d)" % [stages_cleared + 1, stage_count]
+	_button.visible = false
+	_root.visible = true
+
+
+func hide_screen() -> void:
+	_root.visible = false
+
+
+func show_victory(run_time: float, pulses: int, hits: int, kills: int, stages_cleared: int, stage_count: int, players: Array[Player]) -> void:
 	_title.text = "The ancient light is awake"
 	_title.add_theme_color_override("font_color", victory_title_color)
 	var minutes: int = floori(run_time / 60.0)
 	var seconds: int = floori(run_time) % 60
-	var oxygen_parts: PackedStringArray = PackedStringArray()
+	var pressure_parts: PackedStringArray = PackedStringArray()
+	var pressure_name: String = players[0].pressure.pressure_name if not players.is_empty() else "Pressure"
 	for player: Player in players:
-		oxygen_parts.append("%s %d%%" % [player.display_name, roundi(player.oxygen.get_ratio() * 100.0)])
-	_body.text = "Time: %d:%02d\nPulses used: %d\nHits taken: %d\nCreatures killed: %d\nOxygen left: %s" % [
-		minutes, seconds, pulses, hits, kills, " / ".join(oxygen_parts),
+		pressure_parts.append("%s %d%%" % [player.display_name, roundi(player.pressure.get_ratio() * 100.0)])
+	_body.text = "Stages cleared: %d / %d\nTime: %d:%02d\nPulses used: %d\nHits taken: %d\nCreatures killed: %d\n%s left: %s" % [
+		stages_cleared, stage_count, minutes, seconds, pulses, hits, kills, pressure_name, " / ".join(pressure_parts),
 	]
+	_button.visible = true
 	_open()
 
 

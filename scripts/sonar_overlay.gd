@@ -121,8 +121,24 @@ var _is_active: PackedByteArray = PackedByteArray()
 
 func _ready() -> void:
 	add_to_group("sonar_overlay")
-	# Deferred so every RockWall has run _ready and joined its group.
-	_build_samples.call_deferred()
+	add_to_group("world_listeners")
+
+
+## Called (via the "world_listeners" group) by RunManager.
+func apply_world(world: WorldConfig) -> void:
+	ring_color = world.ring_color
+	edge_color = world.edge_color
+
+
+## Called (via group) by the StageBuilder after it built a new stage: forget
+## the old rock outlines and sample the new ones.
+func rebuild_samples() -> void:
+	_points.clear()
+	_next.clear()
+	_active.clear()
+	_waves.clear()
+	_sparks.clear()
+	_build_samples()
 
 
 ## Called (via group) by PulseRing when a pulse starts.

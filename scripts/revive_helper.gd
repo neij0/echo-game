@@ -10,9 +10,9 @@ signal revived_partner(partner: Player)
 @export var revive_time: float = 2.0
 ## Progress lost per second while the button is not held (seconds of progress).
 @export var drain_speed: float = 2.0
-## 0-1: oxygen the revived partner gets at least (so oxygen-downed partners do
-## not go down again immediately).
-@export_range(0.0, 1.0) var revive_oxygen_ratio: float = 0.2
+## 0-1: pressure meter the revived partner gets at least (so partners downed by
+## an empty meter do not go down again immediately).
+@export_range(0.0, 1.0) var revive_pressure_ratio: float = 0.2
 
 var progress: float = 0.0
 var _target: Player
@@ -58,6 +58,6 @@ func _finish() -> void:
 	var partner: Player = _target
 	progress = 0.0
 	_target = null
-	partner.oxygen.oxygen = maxf(partner.oxygen.oxygen, partner.oxygen.max_oxygen * revive_oxygen_ratio)
+	partner.pressure.ensure_ratio(revive_pressure_ratio)
 	partner.health.revive()
 	revived_partner.emit(partner)

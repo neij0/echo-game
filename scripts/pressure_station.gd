@@ -1,7 +1,8 @@
-class_name OxygenStation
+class_name PressureStation
 extends Node2D
-## An old oxygen tank on the sea floor. A player touching it gets a full tank,
-## then it is used up. A slow blinking beacon makes it findable in the dark.
+## A refill station for the world's pressure meter (an old oxygen tank in the
+## Ocean). A player touching it gets a full meter, then it is used up. A slow
+## blinking beacon makes it findable in the dark.
 
 signal used(player: Player)
 
@@ -71,7 +72,7 @@ func _on_body_entered(body: Node2D) -> void:
 	if is_used or player == null or player.health.is_downed:
 		return
 	is_used = true
-	player.oxygen.refill()
+	player.pressure.refill()
 	_beacon.enabled = false
 	if refill_stream:
 		_audio.play()

@@ -1,0 +1,39 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/level_chunk.gd" id="1_chunk"]
+[ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
+
+[node name="PocketA" type="Node2D"]
+script = ExtResource("1_chunk")
+chunk_type = 4
+height = 0.0
+
+[node name="Floor" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, -300, -800, -300, -800, 300, 0, 300)
+
+[node name="WallTop" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(0, -300, 0, -80, -220, -80, -220, -250, -700, -250, -700, -300)
+
+[node name="WallBottom" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(0, 80, 0, 300, -700, 300, -700, 250, -220, 250, -220, 80)
+
+[node name="WallBack" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(-700, -300, -800, -300, -800, 300, -700, 300)
+
+[node name="Rock1" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(-480, -60, -400, -60, -400, 60, -480, 60)
+
+[node name="Spawns" type="Node2D" parent="."]
+
+[node name="Station1" type="Marker2D" parent="Spawns"]
+position = Vector2(-300, 0)
+
+[node name="Station2" type="Marker2D" parent="Spawns"]
+position = Vector2(-620, 160)
+
+[node name="Coral1" type="Marker2D" parent="Spawns"]
+position = Vector2(-600, -170)
