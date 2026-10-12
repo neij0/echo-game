@@ -1,7 +1,8 @@
 class_name CreatureEyes
 extends Node2D
 ## Two faint glowing eyes that fade in when the hidden creature is very close to
-## the nearest player (no pulse needed), looking where it is moving.
+## the nearest player (no pulse needed), or faintly when it is a silhouette in
+## the Echo's light (Creature.silhouette_ratio), looking where it is moving.
 ## Must live on a CanvasLayer with follow_viewport_enabled, so the world's
 ## CanvasModulate darkness does not dim it.
 
@@ -29,6 +30,10 @@ extends Node2D
 @export var eye_forward: float = 9.0
 ## How fast the eyes fade in/out (alpha per second).
 @export var fade_speed: float = 4.0
+## Eyes of a creature seen as a silhouette in the Echo's light (between her
+## full reveal and the edge of her light): this share of max_alpha at full
+## silhouette, so they stay faint.
+@export_range(0.0, 1.0) var silhouette_eye_share: float = 0.45
 
 var _alpha: float = 0.0
 var _visible_target: float = 0.0
@@ -49,6 +54,7 @@ func _physics_process(_delta: float) -> void:
 		var query := PhysicsRayQueryParameters2D.create(creature.global_position, player_position, wall_mask)
 		if not get_world_2d().direct_space_state.intersect_ray(query).is_empty():
 			_visible_target = 0.0
+	_visible_target = maxf(_visible_target, creature.silhouette_ratio * silhouette_eye_share)
 
 
 func _process(delta: float) -> void:

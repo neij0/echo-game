@@ -73,8 +73,12 @@ walls and corridors readable. Everything near is seen through **real lights**, n
    (first stage only).
 5. **Brightness** (Options, 70-130 %): scales the ambient and the players' lights a little;
    the narrow range keeps far areas unreadable. The pulse and sonar are never affected.
-6. **Gameplay reveals** (pulse, sonar edges, creature echoes) are unchanged. Creatures are
-   only drawn within the Echo's `light_reveal_radius` (115 px), not in her whole light.
+6. **Creature visibility zones** (all outside them stay invisible, except the close-range
+   eyes and pulse reveals):
+   - within the Echo's `light_reveal_radius` (115 px): full body, hittable, can be Exposed;
+   - from there to the edge of her light (~280 px): only a dark moving silhouette with faint
+     eyes, fading in as it gets closer; no outline, not hittable, not Exposed; hidden when a
+     rock blocks her light (`Creature` "Silhouette" group, `CreatureEyes.silhouette_eye_share`).
 - **Hit flash** (`HurtVignette`): thin red band on the screen edges only, low opacity, 0.4 s.
 Note: 2D renders in HDR (linear). Screenshots taken with `get_viewport().get_texture()` are
 linear float data and look much darker than the screen; convert each pixel with

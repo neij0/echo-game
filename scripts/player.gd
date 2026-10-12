@@ -46,6 +46,7 @@ var _knockback_left: float = 0.0
 
 @onready var health: PlayerHealth = $Health
 @onready var pressure: PlayerPressure = $Pressure
+@onready var light: PlayerLight = $PlayerLight
 
 
 func _ready() -> void:
@@ -82,6 +83,11 @@ func get_partner() -> Player:
 
 ## True when this player's action button was just pressed and may be used by an
 ## ability (not downed, and not busy reviving the partner).
+## How far this player's own light reaches (0 if it has none).
+func get_light_radius() -> float:
+	return light.radius if light else 0.0
+
+
 func try_action_pressed() -> bool:
 	if health.is_downed or is_reviving():
 		return false

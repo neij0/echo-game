@@ -99,6 +99,18 @@ signal killed
 ## and its body inside the Echo's light. false = always drawn (for comparison).
 @export var hidden_until_pinged: bool = true
 
+@export_group("Silhouette")
+## Between the Echo's light_reveal_radius (full reveal, hittable) and the edge
+## of her light, the creature shows only as a dark moving silhouette (no
+## outline, not hittable, not Exposed) with faint eyes (CreatureEyes). It fades
+## in as it gets closer. Hidden when a rock blocks her light.
+@export var silhouette_enabled: bool = true
+@export var silhouette_color: Color = Color(0.01, 0.015, 0.025)
+## Opacity of the silhouette right at the edge of the full reveal.
+@export_range(0.0, 1.0) var silhouette_max_alpha: float = 0.9
+## Seconds between line-of-sight checks to the Echo (her light casts shadows).
+@export var silhouette_check_interval: float = 0.1
+
 var state: State = State.WANDER
 var target: Vector2
 var _home: Vector2
@@ -119,6 +131,10 @@ var _flash_left: float = 0.0
 var _dying: bool = false
 var _was_in_light: bool = false
 var _exposed_left: float = 0.0
+## 0 = no silhouette, 1 = full silhouette (see the Silhouette group).
+var silhouette_ratio: float = 0.0
+var _silhouette_check_left: float = 0.0
+var _silhouette_blocked: bool = false
 
 @onready var _hitbox: Area2D = $Hitbox
 @onready var _alert: AudioStreamPlayer2D = $AlertSound
@@ -446,6 +462,39 @@ func _update_reveal(delta: float) -> void:
 		_was_in_light = in_light
 		_flash_left = maxf(_flash_left - delta, 0.0)
 		queue_redraw()
+	var previous_silhouette: float = silhouette_ratio
+	silhouette_ratio = 0.0 if in_light else _compute_silhouette(delta)
+	if silhouette_ratio > 0.0 or previous_silhouette > 0.0:
+		queue_redraw()
+
+
+## 1 at the edge of the Echo's full reveal, 0 at the edge of her light.
+func _compute_silhouette(delta: float) -> float:
+	if not silhouette_enabled or not hidden_until_pinged:
+		return 0.0
+	var best: float = 0.0
+	var source: Player = null
+	for player: Player in Players.all(get_tree()):
+		if player.light_reveal_radius <= 0.0 or player.health.is_downed:
+			continue
+		var inner: float = player.light_reveal_radius + body_radius
+		var outer: float = player.get_light_radius()
+		var distance: float = global_position.distance_to(player.global_position)
+		if outer <= inner or distance >= outer:
+			continue
+		var ratio: float = smoothstep(outer, inner, distance)
+		if ratio > best:
+			best = ratio
+			source = player
+	if source == null:
+		return 0.0
+	# Her light casts shadows: no silhouette behind a rock.
+	_silhouette_check_left -= delta
+	if _silhouette_check_left <= 0.0:
+		_silhouette_check_left = silhouette_check_interval
+		var query := PhysicsRayQueryParameters2D.create(source.global_position, global_position, wall_mask)
+		_silhouette_blocked = not get_world_2d().direct_space_state.intersect_ray(query).is_empty()
+	return 0.0 if _silhouette_blocked else best
 
 
 func _on_hitbox_body_entered(body: Node2D) -> void:
@@ -460,8 +509,14 @@ func _draw() -> void:
 	# Hidden creatures only show their body inside the Echo's light (drawn in the
 	# world, so the light itself makes it visible).
 	if hidden_until_pinged and not _was_in_light:
+		if silhouette_ratio > 0.0:
+			# Dark shape only: no outline and no eye dot (CreatureEyes adds faint eyes).
+			_draw_body(Color(silhouette_color, silhouette_ratio * silhouette_max_alpha), false)
 		return
-	var color: Color = hit_flash_color if _flash_left > 0.0 else body_color
+	_draw_body(hit_flash_color if _flash_left > 0.0 else body_color, true)
+
+
+func _draw_body(color: Color, with_eye: bool) -> void:
 	if look == Look.SPIKY:
 		var points := PackedVector2Array()
 		for i: int in spike_count * 2:
@@ -475,8 +530,10 @@ func _draw() -> void:
 		var tip: Vector2 = forward * body_radius * 1.6
 		var back: Vector2 = -forward * body_radius * 0.9
 		draw_colored_polygon(PackedVector2Array([tip, back + side * body_radius, back * 0.4, back - side * body_radius]), color)
-		draw_circle(forward * body_radius * 0.6, body_radius * 0.22, eye_color)
+		if with_eye:
+			draw_circle(forward * body_radius * 0.6, body_radius * 0.22, eye_color)
 		return
 	else:
 		draw_circle(Vector2.ZERO, body_radius, color)
-	draw_circle(Vector2(body_radius * 0.45, 0.0), body_radius * 0.25, eye_color)
+	if with_eye:
+		draw_circle(Vector2(body_radius * 0.45, 0.0), body_radius * 0.25, eye_color)
