@@ -105,3 +105,4 @@ p2_action={
 
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)
 viewport/hdr_2d=true
+anti_aliasing/quality/use_debanding=true

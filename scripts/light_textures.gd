@@ -16,6 +16,8 @@ static func radial(size: int, hard_edge: float) -> GradientTexture2D:
 	texture.fill_to = Vector2(1.0, 0.5)
 	texture.width = size
 	texture.height = size
+	# Float texture: no visible rings (banding) in the dark soft fade.
+	texture.use_hdr = true
 	return texture
 
 

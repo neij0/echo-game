@@ -27,8 +27,8 @@ const STRINGS: Dictionary = {
 	"options": {"en": "Options", "ar": "الإعدادات"},
 	"brightness": {"en": "Brightness: %d%%", "ar": "السطوع: %d%%"},
 	"brightness_desc": {
-		"en": "Changes how much you see close around you. The far darkness, the Echo's light and the pulse are not affected.",
-		"ar": "يغيّر ما تريانه حولكما عن قرب فقط. الظلام البعيد وضوء إيكو والنبضة لا تتأثر.",
+		"en": "Makes the water and your lights a little brighter or darker. The pulse is not affected, and far areas stay dark.",
+		"ar": "يجعل الماء وأضواءكما أفتح أو أعتم قليلاً. النبضة لا تتأثر، والمناطق البعيدة تبقى مظلمة.",
 	},
 	"back": {"en": "Back", "ar": "رجوع"},
 	"confirm_new_game": {

@@ -19,6 +19,11 @@ signal level_built(level_index: int)
 ## Seed step between two tries of the same build.
 @export var attempt_seed_step: int = 7919
 
+## Solid rock drawn around the whole level (this many pixels beyond its walls),
+## so outside the playable area looks like rock fading into darkness instead
+## of a hard black edge. Not a wall: no collision, no shadow, no sonar edge.
+@export var outer_rock_margin: float = 3000.0
+
 @export_group("Validation")
 @export var validator_cell_size: float = 20.0
 ## Free space a player needs (player radius + margin).
@@ -227,6 +232,7 @@ func _instantiate(layout: Layout) -> void:
 	var floor_color: Color = world.floor_color_shallow.lerp(world.floor_color_deep, progress)
 	for chunk: LevelChunk in layout.chunks:
 		_apply_palette(chunk, floor_color)
+	_add_outer_rock(layout, floor_color.lightened(world.rock_fill_lift))
 	# Floors first (all chunks), so pocket floors never cover a neighbour's walls.
 	for chunk: LevelChunk in layout.chunks:
 		_level.add_child(chunk)
@@ -249,6 +255,23 @@ func _instantiate(layout: Layout) -> void:
 		_goal = _spawn(world.goal_scene, layout.goal) as AncientLight
 	# The sonar overlay samples the new rock outlines.
 	get_tree().call_group("sonar_overlay", "rebuild_samples")
+
+
+func _add_outer_rock(layout: Layout, rock_color: Color) -> void:
+	var bounds := Rect2()
+	var first: bool = true
+	for chunk: LevelChunk in layout.chunks:
+		for polygon: PackedVector2Array in chunk.get_wall_polygons():
+			for point: Vector2 in polygon:
+				bounds = Rect2(point, Vector2.ZERO) if first else bounds.expand(point)
+				first = false
+	bounds = bounds.grow(outer_rock_margin)
+	var rock := Polygon2D.new()
+	rock.name = "OuterRock"
+	rock.color = rock_color
+	rock.polygon = PackedVector2Array([bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end, Vector2(bounds.position.x, bounds.end.y)])
+	# First child = drawn under every chunk.
+	_level.add_child(rock)
 
 
 func _spawn_boss(at: Vector2) -> Creature:

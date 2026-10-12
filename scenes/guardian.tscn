@@ -29,9 +29,9 @@ body_height = 46.0
 body_color = Color(0.22, 0.22, 0.27, 1)
 
 [node name="PlayerLight" parent="." index="2"]
-color = Color(0.55, 0.65, 0.9, 1)
-energy = 0.35
-texture_scale = 0.45
+radius = 70.0
+base_energy = 0.35
+light_color = Color(0.55, 0.65, 0.9, 1)
 
 [node name="Overlay" parent="UnlitLayer" index="0"]
 outline_enabled = true

@@ -2,12 +2,12 @@ class_name Darkness
 extends CanvasModulate
 ## The ambient layer: everything in the world not lit by a light is multiplied
 ## by this colour. A near-black deep blue, so the level cannot be read from a
-## distance; what is close to the players is shown by their local visibility
-## light (PlayerVisibility), the far layout only by the pulse's sonar edges.
+## distance: what is near is shown by real lights (the Echo's PlayerLight,
+## corals, the ancient light), the far layout only by the pulse's sonar edges.
 ## Each stage has its own colours (StageDefinition): stage 1 is the brightest,
 ## the last one the darkest, and it fades a little darker as the players go
 ## down through the stage's levels (shared screen: uses their average depth).
-## Not affected by the Brightness setting (that scales the local visibility).
+## The Brightness setting (Game.brightness, a narrow range) scales it a little.
 
 @export var level_builder: LevelBuilder
 ## 0-1 stage progress (0 = top of level 1, 1 = bottom of the last level) where
@@ -28,7 +28,7 @@ func _ready() -> void:
 func apply_stage(stage: StageDefinition) -> void:
 	ambient_color = stage.ambient_color
 	deep_ambient_color = stage.deep_ambient_color
-	color = ambient_color
+	color = _with_brightness(ambient_color)
 
 
 func _process(_delta: float) -> void:
@@ -42,4 +42,8 @@ func _process(_delta: float) -> void:
 		total += level_builder.stage_progress_at(player.global_position.y)
 	var progress: float = total / players.size()
 	var t: float = clampf((progress - darken_start_progress) / (darken_end_progress - darken_start_progress), 0.0, 1.0)
-	color = ambient_color.lerp(deep_ambient_color, t)
+	color = _with_brightness(ambient_color.lerp(deep_ambient_color, t))
+
+
+func _with_brightness(base: Color) -> Color:
+	return Color(base.r * Game.brightness, base.g * Game.brightness, base.b * Game.brightness, base.a)

@@ -14,9 +14,6 @@ extends Resource
 ## Base darkness at the bottom of the stage's last level (it fades towards
 ## this as the players go down).
 @export var deep_ambient_color: Color = Color(0.16, 0.23, 0.28)
-## Brightness of the local visibility around each player (see WorldConfig
-## "Local Visibility"). Lower in deeper stages.
-@export var visibility_energy: float = 0.25
 ## 0 = no light shafts from above. 1 = the world's full shaft brightness.
 @export_range(0.0, 1.0) var light_shaft_strength: float = 0.0
 

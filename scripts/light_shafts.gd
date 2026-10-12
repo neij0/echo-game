@@ -9,7 +9,6 @@ extends Node2D
 
 @export var level_builder: LevelBuilder
 ## Soft edges: each shaft is drawn as this many nested bands.
-@export var soft_layers: int = 8
 ## Seed for the shafts' positions and widths (the same layout every time).
 @export var layout_seed: int = 7
 
@@ -89,16 +88,19 @@ func _draw() -> void:
 	for i: int in _offsets.size():
 		var sway: float = sin(_time * TAU * sway_speed + _phases[i]) * sway_amount
 		var x: float = fposmod(_offsets[i] * span - camera_x * parallax + sway, span) - width_max - maxf(slant, 0.0)
-		for layer: int in soft_layers:
-			# Nested bands: the narrower ones add up in the middle (soft edges).
-			var width: float = _widths[i] * (1.0 - float(layer) / soft_layers)
-			var top := Color(color, shaft_alpha / soft_layers)
-			var bottom := Color(color, 0.0)
-			var points := PackedVector2Array([
-				Vector2(x - width * 0.5, 0.0), Vector2(x + width * 0.5, 0.0),
-				Vector2(x + width * 0.5 + slant, screen.y), Vector2(x - width * 0.5 + slant, screen.y),
-			])
-			draw_polygon(points, PackedColorArray([top, top, bottom, bottom]))
+		# One smooth gradient: brightest along the middle line, fading to nothing
+		# at both sides and towards the bottom of the screen.
+		var half: float = _widths[i] * 0.5
+		var top_mid := Vector2(x, 0.0)
+		var bottom_mid := Vector2(x + slant, screen.y)
+		var middle := Color(color, shaft_alpha)
+		var clear := Color(color, 0.0)
+		draw_polygon(
+			PackedVector2Array([top_mid - Vector2(half, 0.0), top_mid, bottom_mid, bottom_mid - Vector2(half, 0.0)]),
+			PackedColorArray([clear, middle, clear, clear]))
+		draw_polygon(
+			PackedVector2Array([top_mid, top_mid + Vector2(half, 0.0), bottom_mid + Vector2(half, 0.0), bottom_mid]),
+			PackedColorArray([middle, clear, clear, clear]))
 
 
 ## 0 at the top of the stage, 1 at its bottom (average of the players).

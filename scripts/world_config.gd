@@ -47,16 +47,6 @@ extends Resource
 @export var ring_color: Color = Color(0.4, 0.9, 1.0, 0.9)
 @export var edge_color: Color = Color(0.45, 0.95, 1.0)
 
-@export_group("Local Visibility")
-## A soft light around each player, so the floor and rocks close by are
-## faintly visible as dark silhouettes. Its brightness is set per stage
-## (StageDefinition.visibility_energy) and scaled by the Brightness setting.
-## Fully visible up to this distance from a player (pixels)...
-@export var visibility_radius: float = 280.0
-## ...then it fades smoothly to nothing over this many more pixels.
-@export var visibility_falloff: float = 140.0
-@export var visibility_color: Color = Color(0.5, 0.75, 0.9)
-
 @export_group("Marine Snow")
 ## Tiny glowing particles drifting across the whole level (around the camera).
 @export var snow_count: int = 140

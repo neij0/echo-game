@@ -31,12 +31,12 @@ signal language_changed
 @export var default_mode: SaveData.Mode = SaveData.Mode.CALM
 
 @export_group("Brightness")
-## Brightness setting: multiplies the local visibility around the players only
-## (never the far darkness, the Echo's light, the pulse or any other gameplay
-## reveal), so even the maximum cannot make the far level readable. 1 = as designed.
+## Brightness setting: scales the ambient darkness and the players' lights a
+## little (never the pulse or any other gameplay reveal). The range is kept
+## narrow so even the maximum cannot make the far level readable. 1 = as designed.
 @export var default_brightness: float = 1.0
-@export var min_brightness: float = 0.5
-@export var max_brightness: float = 2.0
+@export var min_brightness: float = 0.7
+@export var max_brightness: float = 1.3
 
 ## Current progress. Always set; has_save() tells if it is on disk.
 var save: SaveData

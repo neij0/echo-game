@@ -102,15 +102,11 @@ func _check_level(builder: LevelBuilder, definition: LevelDefinition, label: Str
 func _check_lighting(world: WorldConfig) -> bool:
 	var ok: bool = true
 	var previous: float = INF
-	var previous_visibility: float = INF
 	for stage_index: int in world.get_stage_count():
 		var stage: StageDefinition = world.stages[stage_index]
 		var brightness: float = stage.ambient_color.get_luminance()
-		print("Stage %d lighting: ambient luminance %.3f (deep %.3f), local visibility %.2f, light shafts %.2f" % [
-			stage_index + 1, brightness, stage.deep_ambient_color.get_luminance(), stage.visibility_energy, stage.light_shaft_strength])
-		if stage.visibility_energy > previous_visibility:
-			ok = _fail("stage %d sees further than the stage before" % (stage_index + 1))
-		previous_visibility = stage.visibility_energy
+		print("Stage %d lighting: ambient luminance %.3f (deep %.3f), light shafts %.2f" % [
+			stage_index + 1, brightness, stage.deep_ambient_color.get_luminance(), stage.light_shaft_strength])
 		if brightness >= previous:
 			ok = _fail("stage %d is not darker than the stage before" % (stage_index + 1))
 		if stage.deep_ambient_color.get_luminance() > brightness:

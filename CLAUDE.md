@@ -55,20 +55,26 @@ Controls: P1 Echo = WASD + Space (pulse) or gamepad 1. P2 Guardian = arrow keys 
 
 ## Lighting (layers)
 The pulse is the main way to read the layout from a distance; nothing else may make far
-walls and corridors readable.
+walls and corridors readable. Everything near is seen through **real lights**, never a mask.
 1. **Ambient** (`Darkness`, a CanvasModulate): near-black deep blue, per stage in each
    `StageDefinition` (stage 1 brightest, stage 3 darkest; a little darker down a stage).
-2. **Local visibility** (`PlayerVisibility`): a soft light (no shadows) on each player, so
-   floor and rocks within `visibility_radius` (~280 px) show as faint silhouettes, fading to
-   nothing over `visibility_falloff` (WorldConfig "Local Visibility"). Its brightness is
-   `StageDefinition.visibility_energy` x the Brightness setting (Options). Brightness never
-   touches the ambient, so even its maximum cannot make the far level readable.
+2. **Real lights** (with shadows: every rock has a LightOccluder2D):
+   - The Echo's `PlayerLight` is the main light: warm, soft, ~280 px.
+   - The Guardian's `PlayerLight` is tiny and faint (~70 px): he is almost blind and has to
+     stay near the Echo to see.
+   - Corals (when woken by the pulse) and the ancient light are local lights too.
+   - Light textures are float (`use_hdr`) and debanding is on, so soft fades show no rings.
 3. **Rock fill**: the floor colour lightened by `rock_fill_lift` (small, so walls only read
-   up close). The glowing sonar edges only come with a pulse.
+   up close). Around the whole level the `LevelBuilder` draws solid "outer rock" (same fill,
+   no collision/shadow/sonar), so the level edge fades into darkness instead of a hard black
+   strip. The glowing sonar edges only come with a pulse.
 4. **Environment light**: marine snow (`MarineSnow`) everywhere; very faint light shafts
-   (`LightShafts`) where `StageDefinition.light_shaft_strength` > 0 (first stage only).
-5. **Gameplay reveals** (Echo light, pulse, sonar edges, creature echoes) are unchanged.
-   Creatures are only drawn inside the Echo's light.
+   (`LightShafts`, one smooth gradient each) where `StageDefinition.light_shaft_strength` > 0
+   (first stage only).
+5. **Brightness** (Options, 70-130 %): scales the ambient and the players' lights a little;
+   the narrow range keeps far areas unreadable. The pulse and sonar are never affected.
+6. **Gameplay reveals** (pulse, sonar edges, creature echoes) are unchanged. Creatures are
+   only drawn within the Echo's `light_reveal_radius` (115 px), not in her whole light.
 - **Hit flash** (`HurtVignette`): thin red band on the screen edges only, low opacity, 0.4 s.
 Note: 2D renders in HDR (linear). Screenshots taken with `get_viewport().get_texture()` are
 linear float data and look much darker than the screen; convert each pixel with

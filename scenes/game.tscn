@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_builder.gd" id="1_level"]
 [ext_resource type="Resource" path="res://worlds/ocean.tres" id="2_world"]
@@ -18,7 +18,6 @@
 [ext_resource type="Script" path="res://scripts/end_screen.gd" id="16_end"]
 [ext_resource type="Script" path="res://scripts/marine_snow.gd" id="18_snow"]
 [ext_resource type="Script" path="res://scripts/light_shafts.gd" id="19_shafts"]
-[ext_resource type="Script" path="res://scripts/player_visibility.gd" id="20_visibility"]
 
 [node name="Game" type="Node2D"]
 
@@ -52,10 +51,6 @@ position = Vector2(1300, 200)
 [node name="SharedCamera" type="Camera2D" parent="." node_paths=PackedStringArray("stage_manager")]
 position = Vector2(1250, 200)
 script = ExtResource("17_camera")
-stage_manager = NodePath("../StageManager")
-
-[node name="PlayerVisibility" type="Node" parent="." node_paths=PackedStringArray("stage_manager")]
-script = ExtResource("20_visibility")
 stage_manager = NodePath("../StageManager")
 
 [node name="DepthAwareness" type="Node" parent="."]
