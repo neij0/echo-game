@@ -285,7 +285,7 @@ func _spawn(scene: PackedScene, at: Vector2) -> Node2D:
 func _apply_palette(chunk: LevelChunk, floor_color: Color) -> void:
 	for node: Node in chunk.find_children("*", "", true, false):
 		if node is RockWall:
-			(node as RockWall).color = world.rock_color
+			(node as RockWall).color = floor_color.lightened(world.rock_fill_lift)
 		elif node is Polygon2D:
 			(node as Polygon2D).color = floor_color
 

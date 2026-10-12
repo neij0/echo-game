@@ -39,12 +39,23 @@ extends Resource
 ## The base darkness (ambient colour) is set per stage, in each StageDefinition.
 @export var floor_color_shallow: Color = Color(0.2, 0.3, 0.36)
 @export var floor_color_deep: Color = Color(0.15, 0.23, 0.29)
-## Rock fill: a bit lighter than the floor, so the level shape reads as a faint
-## silhouette in the ambient light. The glowing sonar edges only come with a pulse.
-@export var rock_color: Color = Color(0.3, 0.36, 0.4)
+## Rock fill = the floor colour lightened by this much (0-1). Kept small, so
+## walls only read as faint silhouettes near the players and not from a
+## distance. The glowing sonar edges only come with a pulse.
+@export_range(0.0, 1.0) var rock_fill_lift: float = 0.09
 ## Sonar colours (wave front and revealed edges).
 @export var ring_color: Color = Color(0.4, 0.9, 1.0, 0.9)
 @export var edge_color: Color = Color(0.45, 0.95, 1.0)
+
+@export_group("Local Visibility")
+## A soft light around each player, so the floor and rocks close by are
+## faintly visible as dark silhouettes. Its brightness is set per stage
+## (StageDefinition.visibility_energy) and scaled by the Brightness setting.
+## Fully visible up to this distance from a player (pixels)...
+@export var visibility_radius: float = 280.0
+## ...then it fades smoothly to nothing over this many more pixels.
+@export var visibility_falloff: float = 140.0
+@export var visibility_color: Color = Color(0.5, 0.75, 0.9)
 
 @export_group("Marine Snow")
 ## Tiny glowing particles drifting across the whole level (around the camera).

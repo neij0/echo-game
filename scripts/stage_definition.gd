@@ -7,13 +7,16 @@ extends Resource
 @export var levels: Array[LevelDefinition] = []
 
 @export_group("Lighting")
-## Base darkness (CanvasModulate) at the top of the stage's first level. Deeper
-## stages use darker colours. Bright enough that rocks and the floor show as
-## faint silhouettes; creatures stay hidden anyway (drawn only in the Echo's light).
-@export var ambient_color: Color = Color(0.36, 0.52, 0.62)
+## Base darkness (CanvasModulate) at the top of the stage's first level: near
+## black, so the level cannot be read from a distance (the pulse's sonar edges
+## are the way to see far). Deeper stages use darker colours.
+@export var ambient_color: Color = Color(0.18, 0.26, 0.31)
 ## Base darkness at the bottom of the stage's last level (it fades towards
 ## this as the players go down).
-@export var deep_ambient_color: Color = Color(0.32, 0.47, 0.57)
+@export var deep_ambient_color: Color = Color(0.16, 0.23, 0.28)
+## Brightness of the local visibility around each player (see WorldConfig
+## "Local Visibility"). Lower in deeper stages.
+@export var visibility_energy: float = 0.25
 ## 0 = no light shafts from above. 1 = the world's full shaft brightness.
 @export_range(0.0, 1.0) var light_shaft_strength: float = 0.0
 

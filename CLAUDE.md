@@ -54,19 +54,25 @@ Controls: P1 Echo = WASD + Space (pulse) or gamepad 1. P2 Guardian = arrow keys 
 (attack) or gamepad 2. Holding the action button next to a downed partner revives them.
 
 ## Lighting (layers)
-1. **Ambient** (`Darkness`, a CanvasModulate): deep blue/teal, set per stage in each
-   `StageDefinition` (stage 1 brightest, stage 3 darkest; fades a little darker down a stage).
-   Rocks and floor read as faint silhouettes (~10-20%). Creatures stay hidden: their body is
-   only drawn inside the Echo's light. The Brightness setting (Options) scales this layer only.
-2. **Rock fill**: `rock_color` slightly lighter than the floor colours (WorldConfig Palette).
-   The glowing sonar edges still only come with a pulse.
-3. **Environment light**: marine snow (`MarineSnow`) everywhere, light shafts (`LightShafts`)
-   where `StageDefinition.light_shaft_strength` > 0 (first stage only). Look values live in
-   the WorldConfig groups "Marine Snow" and "Light Shafts".
-4. **Gameplay reveals** (Echo light, pulse, sonar edges, creature echoes) are unchanged and
-   never affected by Brightness.
+The pulse is the main way to read the layout from a distance; nothing else may make far
+walls and corridors readable.
+1. **Ambient** (`Darkness`, a CanvasModulate): near-black deep blue, per stage in each
+   `StageDefinition` (stage 1 brightest, stage 3 darkest; a little darker down a stage).
+2. **Local visibility** (`PlayerVisibility`): a soft light (no shadows) on each player, so
+   floor and rocks within `visibility_radius` (~280 px) show as faint silhouettes, fading to
+   nothing over `visibility_falloff` (WorldConfig "Local Visibility"). Its brightness is
+   `StageDefinition.visibility_energy` x the Brightness setting (Options). Brightness never
+   touches the ambient, so even its maximum cannot make the far level readable.
+3. **Rock fill**: the floor colour lightened by `rock_fill_lift` (small, so walls only read
+   up close). The glowing sonar edges only come with a pulse.
+4. **Environment light**: marine snow (`MarineSnow`) everywhere; very faint light shafts
+   (`LightShafts`) where `StageDefinition.light_shaft_strength` > 0 (first stage only).
+5. **Gameplay reveals** (Echo light, pulse, sonar edges, creature echoes) are unchanged.
+   Creatures are only drawn inside the Echo's light.
+- **Hit flash** (`HurtVignette`): thin red band on the screen edges only, low opacity, 0.4 s.
 Note: 2D renders in HDR (linear). Screenshots taken with `get_viewport().get_texture()` are
-linear and look much darker than the screen; convert them to sRGB before judging.
+linear float data and look much darker than the screen; convert each pixel with
+`Color.linear_to_srgb()` before saving (8-bit linear PNGs lose the dark detail).
 
 ## Rules
 - **Godot 4 + GDScript only.** No C#, no GDExtension, no third-party addons unless agreed first.
