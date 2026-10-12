@@ -3,7 +3,7 @@ extends Node
 ## A player's own survival meter for the current world's pressure (Ocean =
 ## Oxygen, Snow = Cold, Desert = Heat...). It drains steadily, and every Echo
 ## pulse costs a share of it. Refilled by pressure stations and partly at every
-## new stage. Plays a repeating alarm while low; at zero the player is downed
+## new level of a stage. Plays a repeating alarm while low; at zero the player is downed
 ## (PlayerHealth). Does not drain while the player is downed. All
 ## world-specific values come from the WorldConfig (apply_world).
 
@@ -27,7 +27,9 @@ var pressure_name: String = "Pressure"
 var drain_seconds: float = 180.0
 var low_threshold: float = 0.25
 var pulse_cost_ratio: float = 0.0
-var stage_refill_ratio: float = 0.0
+var level_refill_ratio: float = 0.0
+## Set by the StageManager: Calm mode makes the meter last longer (> 1).
+var drain_multiplier: float = 1.0
 
 var value: float = 0.0
 var _is_low: bool = false
@@ -46,19 +48,19 @@ func _ready() -> void:
 		player.pulse_emitted.connect(_on_pulse_emitted)
 
 
-## Called (via the "world_listeners" group) by RunManager.
+## Called (via the "world_listeners" group) by StageManager.
 func apply_world(world: WorldConfig) -> void:
 	pressure_name = world.pressure_name
 	drain_seconds = world.pressure_drain_seconds
 	low_threshold = world.pressure_low_threshold
 	pulse_cost_ratio = world.pulse_cost_ratio
-	stage_refill_ratio = world.pressure_stage_refill
+	level_refill_ratio = world.pressure_level_refill
 
 
 func _process(delta: float) -> void:
 	if health and health.is_downed:
 		return
-	value = maxf(value - max_value / drain_seconds * delta, 0.0)
+	value = maxf(value - max_value / (drain_seconds * drain_multiplier) * delta, 0.0)
 	_update_low()
 	if _is_low:
 		_update_alarm(delta)
@@ -84,7 +86,7 @@ func refill() -> void:
 	_update_low()
 
 
-## Adds a share (0-1) of a full meter, e.g. at the start of a new stage.
+## Adds a share (0-1) of a full meter, e.g. at the start of a new level.
 func add_ratio(ratio: float) -> void:
 	value = minf(value + max_value * ratio, max_value)
 	_update_low()

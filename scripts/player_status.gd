@@ -11,7 +11,7 @@ extends VBoxContainer
 @export var warning_blink_speed: float = 2.0
 
 var player: Player
-var stage_builder: StageBuilder
+var level_builder: LevelBuilder
 var pressure_color: Color = Color(0.35, 0.8, 1.0)
 
 var _depth_label: Label
@@ -21,9 +21,9 @@ var _warning_label: Label
 var _time: float = 0.0
 
 
-func setup(target_player: Player, target_stage_builder: StageBuilder, world: WorldConfig) -> void:
+func setup(target_player: Player, target_level_builder: LevelBuilder, world: WorldConfig) -> void:
 	player = target_player
-	stage_builder = target_stage_builder
+	level_builder = target_level_builder
 	if world:
 		pressure_color = world.pressure_color
 
@@ -53,7 +53,7 @@ func _process(delta: float) -> void:
 	if player == null:
 		return
 	_time += delta
-	var depth: float = stage_builder.depth_at(player.global_position.y) if stage_builder else 0.0
+	var depth: float = level_builder.depth_at(player.global_position.y) if level_builder else 0.0
 	var pressure: PlayerPressure = player.pressure
 	var ratio: float = pressure.get_ratio()
 	var downed: String = "   DOWNED" if player.health.is_downed else ""

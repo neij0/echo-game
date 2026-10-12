@@ -3,7 +3,7 @@ extends Control
 ## Flashes the screen edges red when a player takes a non-lethal hit.
 ## (Co-op with a shared screen: any player's hit flashes it.)
 
-@export var run_manager: RunManager
+@export var stage_manager: StageManager
 @export var color: Color = Color(0.9, 0.05, 0.05)
 ## Opacity of the edges right at the hit.
 @export_range(0.0, 1.0) var max_alpha: float = 0.7
@@ -28,8 +28,8 @@ func _ready() -> void:
 	_texture.fill_from = Vector2(0.5, 0.5)
 	_texture.fill_to = Vector2(1.0, 0.5)
 
-	if run_manager:
-		run_manager.player_registered.connect(_on_player_registered)
+	if stage_manager:
+		stage_manager.player_registered.connect(_on_player_registered)
 
 
 func _on_player_registered(player: Player) -> void:

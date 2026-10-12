@@ -4,7 +4,8 @@ extends Node
 ## first touch only knocks the player back and gives a short invulnerability; a
 ## second touch within second_hit_window downs the player. With grace off, any
 ## touch downs. A downed player cannot move or act until the partner revives
-## them (ReviveHelper). RunManager ends the run when every player is downed.
+## them (ReviveHelper). When every player is downed, the StageManager restarts
+## the level (Calm) or the stage (Challenge).
 
 ## PRESSURE = the world's survival meter ran out (Oxygen in the Ocean).
 enum Cause { CREATURE, PRESSURE }

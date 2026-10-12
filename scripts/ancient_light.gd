@@ -2,7 +2,7 @@ class_name AncientLight
 extends Node2D
 ## The goal at the bottom of the descent. A player standing next to it for
 ## activation_time seconds wakes it: a big light, an expanding ring and a
-## swelling chord. Emits activated, then RunManager ends the run.
+## swelling chord. Emits activated, then the StageManager clears the level.
 ## The visuals are drawn on a child CanvasLayer so the darkness does not dim them.
 
 signal activated

@@ -15,17 +15,40 @@ Pillars:
 1. **One sees, one fights.**
 2. **Everything has a cost:** every pulse and every sword hit attracts danger (raises the
    "Depth Awareness" meter and alerts hostile creatures).
-3. **Every run is a new darkness.**
+3. **Levels are hand-designed, but the darkness stays unknown:** creatures, corals and
+   stations move to different spots on every attempt.
 
-A run is a descent through a world's stages (3 in the Ocean). Every stage is assembled
-from hand-made chunks with a seed, so every run has a new layout. Go down each stage while
-each player's survival pressure drains (Oxygen in the Ocean; stations in side pockets refill
-it), and activate the ancient light at the bottom to clear the stage. The pressure meter
-carries over between stages with a partial refill. A caught player is downed and can be
-revived by the partner; if both are downed at the same time, the run restarts from stage 1.
+## Game structure
+```
+World (5, in this order: Ocean, Caves, Forest, Desert, Snow)
+ └─ 3 Stages per world          (progress is saved after each completed stage)
+     └─ 3 Levels per stage      (the last level of each stage ends in a boss arena)
+After the 3rd stage of a world: a story text screen, then the World Map.
+```
+- **Level** = one descent: a fixed, hand-designed list of chunks (`LevelDefinition`). Go down
+  while each player's survival pressure drains (Oxygen in the Ocean; stations in side pockets
+  refill it) and activate the ancient light at the bottom to clear the level. The pressure
+  meter carries over between the levels of a stage with a partial refill.
+- **Boss level** (last level of a stage): ends in a boss arena chunk; beating the boss
+  completes the stage. The boss is a placeholder for now (`scenes/boss_placeholder.tscn`: a
+  bigger creature with much more health; real bosses come later).
+- **Every attempt** (retries included) reshuffles creature, coral and station spawn points
+  with a new seed, so a retry never plays exactly the same.
+- **Downed**: a caught player can be revived by the partner. If both are downed at the same
+  time, it depends on the mode (main menu, changeable later):
+  **Calm** = restart the current level (and the meter drains slower);
+  **Challenge** = restart the current stage from level 1.
+- **Save** (`user://save.json`, `SaveData`): current world, current stage, unlocked worlds,
+  mode, chosen skills. Settings (`user://settings.json`): language (English/Arabic), mode.
+- **Screens**: main menu (Continue if a save exists, New Game, Mode, Language, Quit) →
+  stage (`game.tscn`) → stage summary → next stage, or story screen → World Map.
+- **Skill choice hook**: `StageManager._between_levels()` runs between two levels (paused);
+  the skill choice screen goes there and stores the picks in `Game.save.skills`.
+- **Testing one stage**: run `game.tscn` on its own (F6). The `StageManager` then uses its
+  `world`, `test_stage_index` and `test_mode` exports and never writes the save.
 
-The game will have 5 worlds (Ocean, Caves, Desert, Forest, Snow), each with its own chunks,
-colours, creatures, survival pressure and pulse behaviour. Only the Ocean exists so far.
+The game will have 5 worlds, each with its own chunks, colours, creatures, survival pressure
+and pulse behaviour. Only the Ocean exists so far.
 
 Controls: P1 Echo = WASD + Space (pulse) or gamepad 1. P2 Guardian = arrow keys + Enter
 (attack) or gamepad 2. Holding the action button next to a downed partner revives them.
@@ -38,16 +61,37 @@ Controls: P1 Echo = WASD + Space (pulse) or gamepad 1. P2 Guardian = arrow keys 
 - **File names in snake_case** (`player.gd`, `pulse_ring.tscn`). Class names in PascalCase via `class_name`.
 - **All tunable values are `@export` variables** (speeds, durations, radii, colors, amounts). No magic numbers in logic.
 - **No final art yet**: grey-box only (Polygon2D, `_draw()` shapes, generated light textures).
+- **Terminology**: World > Stage > Level, everywhere (classes, files, signals, UI text).
+  "Run" is not used any more.
+- **All menu / screen text is bilingual** (English + Arabic): add new strings to
+  `scripts/ui_text.gd` and read them with `Game.text(key)`. Arabic screens are laid out
+  right-to-left (`Game.apply_direction`). The UI font is Tajawal (`assets/fonts/`, OFL),
+  set as the project's custom font so Arabic renders everywhere.
 
 ## Folders
-- `scenes/` — `.tscn` scenes
+- `scenes/` — `.tscn` scenes (`main_menu`, `game`, `story_screen`, `world_map`, and
+  `game_state.tscn` = the `Game` autoload)
 - `scenes/chunks/<world>/` — the hand-made level chunks of each world
 - `scripts/` — `.gd` scripts
 - `worlds/` — one `WorldConfig` resource (`.tres`) per world
+- `worlds/<world>/` — the world's `LevelDefinition`s (`level_<stage>_<level>.tres`)
+- `story/` — story text per world and language (`<world>_end_en.txt`, `<world>_end_ar.txt`;
+  one line per line, empty lines skipped). Not a Godot resource: when exporting, add `*.txt`
+  to the export preset's "non-resource files" filter.
 - `assets/audio/` — procedural placeholder sounds (generated by `tools/generate_sounds.py`)
+- `assets/fonts/` — UI font (Tajawal, with its OFL licence)
 - `assets/concepts/` — concept art references (not imported by Godot: has a `.gdignore`)
-- `tools/` — helper scripts outside the game: `generate_sounds.py` (Python) and
-  `check_stages.gd` (layout check: `godot --headless --path . -s res://tools/check_stages.gd`)
+- `tools/` — helper scripts outside the game:
+  - `generate_sounds.py` (Python)
+  - `check_levels.gd`: loads every level of a world and validates it (BFS) with many spawn
+    seeds, plus the structure and the generator:
+    `godot --headless --path . -s res://tools/check_levels.gd`
+  - `test_save.gd`: save/load test (uses its own test files in `user://`):
+    `godot --headless --path . -s res://tools/test_save.gd`
+  - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
+    proposes a new random `LevelDefinition` from the world's chunk pools, validates it and
+    saves it as `worlds/<world>/proposed_<seed>.tres` to edit by hand.
+  - Note: `-s` tools run without autoloads, so they must not load scripts that use `Game`.
 - `docs/` — design notes (e.g. `skills.md`: skill ideas for later, not implemented)
 
 ## Adding a new world
@@ -56,16 +100,21 @@ them through the `world_listeners` group (`apply_world(world)`), never hard-code
 1. Build its chunks in `scenes/chunks/<world>/` (root script `LevelChunk`, see the contract at
    the top of `scripts/level_chunk.gd`): start chunks (Player1/Player2 markers, top cap), middle
    chunks (corridor, cave, narrow; Creature/Coral markers, optional SideLeft/SideRight openings),
-   pocket chunks (Station markers) and goal chunks (Goal marker, bottom cap).
-2. Duplicate `worlds/ocean.tres` as `worlds/<world>.tres` and set: the chunk lists, one
-   `StageSpawns` per stage (creature types and counts, corals, stations, station distance,
-   number of middle chunks), the palette, the pressure (name, drain, low warning, stage refill,
-   colour) and the pulse modifiers (radius, speed, cost).
-3. New creature types: a scene inheriting `scenes/creature.tscn` (or a script extending
-   `Creature`), then add it to the stages' `creatures` lists.
-4. Point the `world` export of `Stage` and `RunManager` in `scenes/main.tscn` to the new
-   `.tres` (a world-select screen will do this later).
-5. Run `tools/check_stages.gd` with the new world path to confirm every stage is completable.
+   pocket chunks (Station markers), goal chunks (Goal marker, bottom cap) and boss arena chunks
+   (Boss marker, bottom cap).
+2. Design its 9 levels as `LevelDefinition`s in `worlds/<world>/` (or start from
+   `tools/propose_level.gd`): the ordered chunks (start, middles, goal or boss arena), one
+   pocket per side opening, creature types and counts, corals, stations, station distance,
+   and on each stage's last level the boss scene and its health.
+3. Duplicate `worlds/ocean.tres` as `worlds/<world>.tres` and set: `world_id` (must match
+   `Game.world_ids`), 3 `StageDefinition`s with their 3 levels each, the chunk pools (for
+   the generator), the palette, the pressure (name, drain, low warning, level refill, colour)
+   and the pulse modifiers (radius, speed, cost).
+4. New creature types: a scene inheriting `scenes/creature.tscn` (or a script extending
+   `Creature`), then add it to the levels' `creatures` lists.
+5. Add the `.tres` to the `worlds` list of `scenes/game_state.tscn` (the `Game` autoload),
+   and write `story/<world>_end_en.txt` and `story/<world>_end_ar.txt`.
+6. Run `tools/check_levels.gd` with the new world path to confirm every level is valid.
 A pressure that works differently from a draining meter (e.g. heat that rises near fire)
 gets its own logic next to `PlayerPressure`, but its numbers still go in the `WorldConfig`.
 

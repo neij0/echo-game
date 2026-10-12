@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="LevelDefinition" load_steps=17 format=3]
+
+[ext_resource type="Script" path="res://scripts/level_definition.gd" id="1_level"]
+[ext_resource type="Script" path="res://scripts/creature_spawn.gd" id="2_spawn"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/start_a.tscn" id="chunk_start_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/cave_b.tscn" id="chunk_cave_b"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/narrow_b.tscn" id="chunk_narrow_b"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/corridor_a.tscn" id="chunk_corridor_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/cave_a.tscn" id="chunk_cave_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/narrow_a.tscn" id="chunk_narrow_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/corridor_b.tscn" id="chunk_corridor_b"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/goal_a.tscn" id="chunk_goal_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/pocket_a.tscn" id="chunk_pocket_a"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/pocket_b.tscn" id="chunk_pocket_b"]
+[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_creature"]
+[ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_hunter"]
+
+[sub_resource type="Resource" id="Spawn_creature"]
+script = ExtResource("2_spawn")
+scene = ExtResource("creature_creature")
+count = 6
+
+[sub_resource type="Resource" id="Spawn_hunter"]
+script = ExtResource("2_spawn")
+scene = ExtResource("creature_hunter")
+count = 2
+
+[resource]
+script = ExtResource("1_level")
+chunks = Array[PackedScene]([ExtResource("chunk_start_a"), ExtResource("chunk_cave_b"), ExtResource("chunk_narrow_b"), ExtResource("chunk_corridor_a"), ExtResource("chunk_cave_a"), ExtResource("chunk_narrow_a"), ExtResource("chunk_corridor_b"), ExtResource("chunk_goal_a")])
+pockets = Array[PackedScene]([ExtResource("chunk_pocket_a"), ExtResource("chunk_pocket_b")])
+creatures = Array[ExtResource("2_spawn")]([SubResource("Spawn_creature"), SubResource("Spawn_hunter")])
+corals = 3
+stations = 2
+station_distance_bias = 1.0

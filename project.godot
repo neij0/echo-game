@@ -11,8 +11,12 @@ config_version=5
 [application]
 
 config/name="Echo"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
+
+[autoload]
+
+Game="*res://scenes/game_state.tscn"
 
 [debug]
 
@@ -22,6 +26,10 @@ gdscript/warnings/untyped_declaration=1
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+
+[gui]
+
+theme/custom_font="res://assets/fonts/tajawal_regular.ttf"
 
 [input]
 

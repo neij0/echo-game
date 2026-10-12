@@ -4,7 +4,7 @@ extends Camera2D
 ## so both stay on screen, down to min_zoom (the players' leash keeps them
 ## within that). Also does the small shake on every Echo pulse.
 
-@export var run_manager: RunManager
+@export var stage_manager: StageManager
 ## How fast the camera catches up with the midpoint (higher = snappier).
 @export var follow_speed: float = 5.0
 ## How fast the zoom changes.
@@ -28,8 +28,8 @@ var _snapped: bool = false
 
 
 func _ready() -> void:
-	if run_manager:
-		run_manager.player_registered.connect(_on_player_registered)
+	if stage_manager:
+		stage_manager.player_registered.connect(_on_player_registered)
 
 
 func _on_player_registered(player: Player) -> void:
@@ -40,7 +40,7 @@ func _on_pulse_emitted(_origin: Vector2) -> void:
 	shake()
 
 
-## Jump straight to the players on the next frame (e.g. a new stage).
+## Jump straight to the players on the next frame (e.g. a new level).
 func snap_to_players() -> void:
 	_snapped = false
 

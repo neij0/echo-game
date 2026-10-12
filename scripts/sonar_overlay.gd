@@ -124,13 +124,13 @@ func _ready() -> void:
 	add_to_group("world_listeners")
 
 
-## Called (via the "world_listeners" group) by RunManager.
+## Called (via the "world_listeners" group) by StageManager.
 func apply_world(world: WorldConfig) -> void:
 	ring_color = world.ring_color
 	edge_color = world.edge_color
 
 
-## Called (via group) by the StageBuilder after it built a new stage: forget
+## Called (via group) by the LevelBuilder after it built a new level: forget
 ## the old rock outlines and sample the new ones.
 func rebuild_samples() -> void:
 	_points.clear()

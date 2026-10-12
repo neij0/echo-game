@@ -1,12 +1,12 @@
 class_name Hud
 extends CanvasLayer
-## Awareness bar, a debug label (seed, stage, abilities, creatures), and one
+## Awareness bar, a debug label (stage, level, mode, seed, abilities, creatures), and one
 ## PlayerStatus (depth + pressure meter) per registered player. Never holds a
 ## single fixed player.
 
-@export var run_manager: RunManager
+@export var stage_manager: StageManager
 @export var awareness: DepthAwareness
-@export var stage_builder: StageBuilder
+@export var level_builder: LevelBuilder
 
 @export_group("Awareness Bar")
 @export var calm_color: Color = Color(0.2, 0.55, 1.0)
@@ -31,13 +31,13 @@ func _ready() -> void:
 	background_style.bg_color = background_color
 	_bar.add_theme_stylebox_override("background", background_style)
 
-	if run_manager:
-		run_manager.player_registered.connect(_on_player_registered)
+	if stage_manager:
+		stage_manager.player_registered.connect(_on_player_registered)
 
 
 func _on_player_registered(player: Player) -> void:
 	var status := PlayerStatus.new()
-	status.setup(player, stage_builder, run_manager.world if run_manager else null)
+	status.setup(player, level_builder, stage_manager.world if stage_manager else null)
 	_statuses.add_child(status)
 
 
@@ -59,14 +59,16 @@ func _process(_delta: float) -> void:
 		state_counts.append("%s %d" % [Creature.State.keys()[state_index], counts[state_index]])
 
 	var lines: PackedStringArray = PackedStringArray()
-	if run_manager and stage_builder:
-		lines.append("Stage %d / %d   Seed: run %d, stage %d (try %d)" % [
-			run_manager.stage_index + 1, run_manager.get_stage_count(),
-			stage_builder.run_seed, stage_builder.stage_seed, stage_builder.attempts_used,
+	if stage_manager and level_builder:
+		lines.append("Stage %d   Level %d / %d%s   Mode: %s   Spawn seed %d (try %d)" % [
+			stage_manager.stage_index + 1, stage_manager.level_index + 1, stage_manager.get_level_count(),
+			" (boss)" if stage_manager.is_boss_level() else "",
+			SaveData.Mode.keys()[stage_manager.mode].capitalize(),
+			level_builder.spawn_seed, level_builder.attempts_used,
 		])
 	lines.append("Awareness: %.1f / %.0f" % [awareness.value, awareness.max_value])
-	if run_manager:
-		for player: Player in run_manager.players:
+	if stage_manager:
+		for player: Player in stage_manager.players:
 			lines.append("P%d %s: %s" % [player.player_number, player.display_name, _ability_text(player)])
 			var nearest: Creature = _nearest_creature(creatures, player.global_position)
 			if nearest:

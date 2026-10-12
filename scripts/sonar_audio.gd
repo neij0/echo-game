@@ -2,9 +2,9 @@ class_name SonarAudio
 extends Node
 ## Sonar sounds: a deep ping on each pulse, and a soft tick when the wave front
 ## hits rock edges (rate-limited, quieter for far edges). Listens to every
-## player registered by the RunManager.
+## player registered by the StageManager.
 
-@export var run_manager: RunManager
+@export var stage_manager: StageManager
 @export var sonar_overlay: SonarOverlay
 
 @export_group("Ping")
@@ -34,8 +34,8 @@ var _tick_cooldown: float = 0.0
 func _ready() -> void:
 	_ping_player = _make_player(ping_stream, ping_polyphony)
 	_tick_player = _make_player(tick_stream, tick_polyphony)
-	if run_manager:
-		run_manager.player_registered.connect(_on_player_registered)
+	if stage_manager:
+		stage_manager.player_registered.connect(_on_player_registered)
 	if sonar_overlay:
 		sonar_overlay.edge_hit.connect(_on_edge_hit)
 

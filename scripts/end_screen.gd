@@ -1,12 +1,15 @@
 class_name EndScreen
 extends CanvasLayer
-## The end-of-run screens: a short death screen with the cause (restarts on its
-## own after death_restart_delay), and the summary after activating the ancient
-## light. Works while the game is paused. Builds its UI in code (grey-box).
+## The in-game screens: the defeat screen (cause per player; retries on its own
+## after death_restart_delay), the short "Level cleared" screen between levels,
+## and the stage summary after the boss (its Continue button moves on).
+## Works while the game is paused. Builds its UI in code (grey-box). Text comes
+## from Game.text, in the language picked in the main menu.
 
 signal restart_requested
+signal continue_requested
 
-## Seconds the death screen stays before the run restarts from the top.
+## Seconds the defeat screen stays before the retry starts on its own.
 @export var death_restart_delay: float = 3.0
 @export var backdrop_color: Color = Color(0.0, 0.0, 0.0, 0.75)
 @export var death_title_color: Color = Color(1.0, 0.3, 0.25)
@@ -20,6 +23,9 @@ var _title: Label
 var _body: Label
 var _button: Button
 var _root: Control
+var _button_emits_continue: bool = false
+## Counts defeat screens, so an old auto-retry timer never fires on a newer one.
+var _defeat_count: int = 0
 
 
 func _ready() -> void:
@@ -44,38 +50,48 @@ func _ready() -> void:
 	column.add_child(_body)
 
 	_button = Button.new()
-	_button.text = "Restart"
 	_button.add_theme_font_size_override("font_size", text_font_size)
-	_button.pressed.connect(_on_restart_pressed)
+	_button.pressed.connect(_on_button_pressed)
 	column.add_child(_button)
 
 	_root.visible = false
 
 
-## Both players are down: show what took each of them, then restart.
-func show_defeat(players: Array[Player], stage_number: int, stage_count: int) -> void:
-	_title.text = "Both of you are down"
+## Both players are down: show what took each of them, then retry (the level
+## in Calm, the stage from level 1 in Challenge).
+func show_defeat(players: Array[Player], stage_number: int, level_number: int, level_count: int, mode: SaveData.Mode) -> void:
+	_title.text = Game.text("defeat_title")
 	_title.add_theme_color_override("font_color", death_title_color)
 	var lines: PackedStringArray = PackedStringArray()
 	for player: Player in players:
-		var reason: String = "caught by a creature"
+		var reason: String = Game.text("cause_creature")
 		if player.health.last_cause == PlayerHealth.Cause.PRESSURE:
-			reason = "out of %s" % player.pressure.pressure_name.to_lower()
+			reason = Game.text("cause_pressure") % _pressure_name(player)
 		lines.append("%s: %s" % [player.display_name, reason])
-	_body.text = "%s\nReached stage %d / %d\n\nRestarting from stage 1..." % ["\n".join(lines), stage_number, stage_count]
-	_button.visible = true
+	lines.append(Game.text("reached") % [stage_number, level_number, level_count])
+	lines.append("")
+	if mode == SaveData.Mode.CALM:
+		lines.append(Game.text("restart_level") % level_number)
+	else:
+		lines.append(Game.text("restart_stage"))
+	_body.text = "\n".join(lines)
+	_show_button(Game.text("retry"), false)
 	_open()
+	_defeat_count += 1
+	var this_defeat: int = _defeat_count
 	await get_tree().create_timer(death_restart_delay, true).timeout
-	if _root.visible:
+	if _root.visible and not _button_emits_continue and this_defeat == _defeat_count:
+		_root.visible = false
 		restart_requested.emit()
 
 
-## Short screen between two stages (no button; RunManager hides it).
-func show_stage_cleared(stages_cleared: int, stage_count: int) -> void:
-	_title.text = "Stage %d cleared" % stages_cleared
+## Short screen between two levels (no button; the StageManager hides it).
+func show_level_cleared(level_number: int, level_count: int) -> void:
+	_title.text = Game.text("level_cleared") % level_number
 	_title.add_theme_color_override("font_color", victory_title_color)
-	_body.text = "Going deeper... (stage %d / %d)" % [stages_cleared + 1, stage_count]
+	_body.text = Game.text("going_deeper") % [level_number + 1, level_count]
 	_button.visible = false
+	Game.apply_direction(_root)
 	_root.visible = true
 
 
@@ -83,23 +99,46 @@ func hide_screen() -> void:
 	_root.visible = false
 
 
-func show_victory(run_time: float, pulses: int, hits: int, kills: int, stages_cleared: int, stage_count: int, players: Array[Player]) -> void:
-	_title.text = "The ancient light is awake"
+## The stage is complete (the boss fell): stats, then Continue.
+func show_stage_cleared(stage_number: int, beat_boss: bool, saved: bool, stage_time: float, pulses: int, hits: int, kills: int, players: Array[Player]) -> void:
+	_title.text = Game.text("stage_cleared") % stage_number
 	_title.add_theme_color_override("font_color", victory_title_color)
-	var minutes: int = floori(run_time / 60.0)
-	var seconds: int = floori(run_time) % 60
+	var minutes: int = floori(stage_time / 60.0)
+	var seconds: int = floori(stage_time) % 60
 	var pressure_parts: PackedStringArray = PackedStringArray()
-	var pressure_name: String = players[0].pressure.pressure_name if not players.is_empty() else "Pressure"
 	for player: Player in players:
 		pressure_parts.append("%s %d%%" % [player.display_name, roundi(player.pressure.get_ratio() * 100.0)])
-	_body.text = "Stages cleared: %d / %d\nTime: %d:%02d\nPulses used: %d\nHits taken: %d\nCreatures killed: %d\n%s left: %s" % [
-		stages_cleared, stage_count, minutes, seconds, pulses, hits, kills, pressure_name, " / ".join(pressure_parts),
-	]
-	_button.visible = true
+	var pressure_name: String = _pressure_name(players[0]) if not players.is_empty() else ""
+	var lines: PackedStringArray = PackedStringArray()
+	if beat_boss:
+		lines.append(Game.text("boss_down"))
+	lines.append(Game.text("stat_time") % [minutes, seconds])
+	lines.append(Game.text("stat_pulses") % pulses)
+	lines.append(Game.text("stat_hits") % hits)
+	lines.append(Game.text("stat_kills") % kills)
+	lines.append(Game.text("stat_pressure") % [pressure_name.capitalize(), " / ".join(pressure_parts)])
+	if saved:
+		lines.append("")
+		lines.append(Game.text("progress_saved"))
+	_body.text = "\n".join(lines)
+	_show_button(Game.text("continue"), true)
 	_open()
 
 
+func _pressure_name(player: Player) -> String:
+	var key: String = "pressure_" + player.pressure.pressure_name
+	var translated: String = Game.text(key)
+	return player.pressure.pressure_name.to_lower() if translated == key else translated
+
+
+func _show_button(label: String, emits_continue: bool) -> void:
+	_button.text = label
+	_button_emits_continue = emits_continue
+	_button.visible = true
+
+
 func _open() -> void:
+	Game.apply_direction(_root)
 	_root.visible = true
 	_button.grab_focus()
 
@@ -111,6 +150,9 @@ func _make_label(font_size: int) -> Label:
 	return label
 
 
-func _on_restart_pressed() -> void:
+func _on_button_pressed() -> void:
 	_root.visible = false
-	restart_requested.emit()
+	if _button_emits_continue:
+		continue_requested.emit()
+	else:
+		restart_requested.emit()

@@ -70,6 +70,9 @@ signal killed
 @export var max_health: int = 8
 ## Ignores damage, only staggers (players must avoid it).
 @export var unkillable: bool = false
+## true = a finisher on an Exposed creature kills it instantly. Off for bosses:
+## the finisher then only deals its normal damage.
+@export var exposed_finisher_kills: bool = true
 ## Multiplies the stagger time of every hit (lower = shrugs hits off faster).
 @export var stagger_scale: float = 1.0
 ## Seconds it stays revealed (hittable) after a pulse front passed over it.
@@ -132,7 +135,7 @@ func _ready() -> void:
 	health = max_health
 
 
-## Called (via the "creatures" group) by RunManager on every pulse.
+## Called (via the "creatures" group) by StageManager on every pulse.
 func hear_pulse(origin: Vector2, player: Player) -> void:
 	var distance: float = global_position.distance_to(origin)
 	if player and distance <= pulse_spot_distance and _can_chase(player):
@@ -199,7 +202,7 @@ func take_damage(amount: int, attacker: Player, stagger_time: float, knockback: 
 	_on_damaged(attacker)
 	if unkillable:
 		return false
-	if is_finisher and is_exposed():
+	if is_finisher and is_exposed() and exposed_finisher_kills:
 		_exposed_left = 0.0
 		health = 0
 		_die()
@@ -299,7 +302,7 @@ func _update_chase(delta: float) -> void:
 ## Called by SonarOverlay when a pulse front reaches this creature in line of sight.
 func on_sonar_hit(_origin: Vector2) -> void:
 	_revealed_left = pulse_reveal_time
-	if not unkillable:
+	if not unkillable and exposed_finisher_kills:
 		_exposed_left = exposed_time
 	if hidden_until_pinged:
 		_echo.flash(self, body_radius)

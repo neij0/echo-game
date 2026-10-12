@@ -1,20 +1,23 @@
+@tool
 class_name LevelChunk
 extends Node2D
-## One hand-made piece of a stage (a room, corridor, pocket...). Contract so any
+## One hand-made piece of a level (a room, corridor, pocket...). Contract so any
 ## chunk connects to any other:
-## - Main chunks (start, corridor, cave, narrow, goal) span x = -100..1700 and
+## - Main chunks (start, corridor, cave, narrow, goal, boss arena) span x = -100..1700 and
 ##   y = 0..height. The walkable area at y = 0 and y = height always includes
 ##   x = 560..1040 (the connector). Their side walls fill everything else in
-##   that band, so stacking chunks keeps the stage sealed.
+##   that band, so stacking chunks keeps the level sealed.
 ## - A side opening is a 160 px tall gap through the side wall, marked by a
 ##   Marker2D named "SideLeft" (at x = -100) or "SideRight" (at x = 1700).
-##   The StageBuilder attaches a pocket chunk to every side opening.
+##   The LevelBuilder attaches a pocket chunk to every side opening.
 ## - Pocket chunks have their opening at their local (0, 0) and extend to -x
 ##   (they are mirrored for right openings).
 ## - Spawn points are Marker2D children of "Spawns" named Player1/Player2,
-##   Goal, Creature*, Coral* or Station*.
+##   Goal (goal chunks), Boss (boss arena chunks), Creature*, Coral* or Station*.
+## @tool only so the editor tool tools/propose_level.gd can call these methods
+## (it has no callbacks, so nothing runs in the editor).
 
-enum ChunkType { START, CORRIDOR, CAVE, NARROW, POCKET, GOAL }
+enum ChunkType { START, CORRIDOR, CAVE, NARROW, POCKET, GOAL, BOSS_ARENA }
 
 @export var chunk_type: ChunkType = ChunkType.CORRIDOR
 ## Height of the chunk in pixels (the next chunk starts below it).

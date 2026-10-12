@@ -4,7 +4,7 @@ extends CharacterBody2D
 ## drag, glide), per-player input, the soft leash to the partner and the
 ## downed state. Abilities (pulse, sword) are child nodes that read input
 ## through try_action_pressed(). Joins the "players" group so creatures, the HUD
-## and the run logic never need a fixed player reference.
+## and the stage logic never need a fixed player reference.
 
 ## Emitted by the PulseAbility (Echo only). Lives here so every system can
 ## listen to any player the same way.

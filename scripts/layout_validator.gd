@@ -1,8 +1,8 @@
 class_name LayoutValidator
 extends RefCounted
-## Grid flood fill (BFS) over a stage's wall polygons, before anything is added
+## Grid flood fill (BFS) over a level's wall polygons, before anything is added
 ## to the world: is every important point reachable from the start for a body
-## of the players' size, and is the stage sealed (no way out into the void)?
+## of the players' size, and is the level sealed (no way out into the void)?
 
 ## Size of one grid cell in pixels.
 var cell_size: float = 20.0

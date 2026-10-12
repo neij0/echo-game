@@ -18,7 +18,7 @@ func _ready() -> void:
 	add_to_group("world_listeners")
 
 
-## Called (via the "world_listeners" group) by RunManager.
+## Called (via the "world_listeners" group) by StageManager.
 func apply_world(world: WorldConfig) -> void:
 	pulse_radius = world.pulse_radius
 	pulse_expand_time = world.pulse_expand_time

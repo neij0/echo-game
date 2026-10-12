@@ -1,7 +1,10 @@
+@tool
 class_name RockWall
 extends StaticBody2D
 ## A grey-box rock wall: one polygon used for the visual, the collision and the
 ## light occluder. Its outline is drawn by SonarOverlay when a pulse hits it.
+## @tool only so the editor tool tools/propose_level.gd can read the walls;
+## _ready does nothing in the editor.
 
 @export var polygon: PackedVector2Array = PackedVector2Array()
 @export var color: Color = Color(0.45, 0.42, 0.40)
@@ -10,6 +13,8 @@ extends StaticBody2D
 
 
 func _ready() -> void:
+	if Engine.is_editor_hint():
+		return
 	add_to_group("rock_walls")
 
 	var visual := Polygon2D.new()

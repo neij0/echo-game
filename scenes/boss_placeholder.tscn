@@ -1,0 +1,23 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="1_base"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_boss_body"]
+radius = 46.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_boss_hitbox"]
+radius = 50.0
+
+[node name="BossPlaceholder" instance=ExtResource("1_base")]
+max_health = 40
+exposed_finisher_kills = false
+stagger_scale = 0.4
+body_radius = 46.0
+body_color = Color(0.95, 0.35, 0.2, 1)
+eye_color = Color(1, 0.95, 0.4, 1)
+
+[node name="CollisionShape2D" parent="." index="0"]
+shape = SubResource("CircleShape2D_boss_body")
+
+[node name="CollisionShape2D" parent="Hitbox" index="0"]
+shape = SubResource("CircleShape2D_boss_hitbox")
