@@ -89,6 +89,10 @@ walls and corridors readable. Everything near is seen through **real lights**, n
   `SwordAbility` draws the dark blade (gold edge only inside the Echo's light), the trailing
   slash arc, and gives a visual lunge per hit (`get_lunge_offset`); the finisher pulls back
   first and has a wider, brighter arc.
+  Rest pose: the Guardian faces right or left (flips only when the horizontal input changes
+  sign; straight up/down keeps it) and the sword hangs `rest_angle_degrees` (45) below
+  horizontal on that side, blending over `rest_transition_time` (0.12 s) after a flip or a
+  combo. Attacks still aim along `player.facing`.
 - **Creatures** (`Creature.draw_shape`): fully revealed = dark body with a glowing outline in
   the type colour (= its sonar echo colour) plus tendrils / fins / spikes with procedural
   motion; the same shape is used for the silhouette zone and the pulse echo.

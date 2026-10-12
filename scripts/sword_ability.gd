@@ -9,6 +9,11 @@ extends Node2D
 ## Every swing makes noise: raises Depth Awareness and alerts nearby creatures.
 ## Lives on a CanvasLayer with follow_viewport_enabled (drawn unlit, so the
 ## player can always see where the sword points); follows the player each frame.
+## Rest pose (not attacking): the Guardian faces right or left (it flips only
+## when the horizontal input changes sign; moving straight up or down keeps it)
+## and the sword hangs lowered beside him, rest_angle_degrees below horizontal
+## on that side. Flips and the return after a combo blend over rest_transition_time.
+## Attacks are unchanged: each hit aims along player.facing.
 ## Look: a dark blade whose edge glows gold inside the Echo's light, a bright
 ## slash arc that trails the swing, and a small body lunge per hit (visual
 ## only, read by GuardianVisual; the finisher pulls back first, then lunges further).
@@ -87,6 +92,15 @@ signal exposed_kill(creature_position: Vector2)
 ## ...and outside of it.
 @export var dark_color: Color = Color(0.32, 0.32, 0.36)
 
+@export_group("Rest Pose")
+## Degrees below horizontal the lowered sword points, on the facing side
+## (45 = down-right when facing right, down-left when facing left).
+@export_range(0.0, 90.0) var rest_angle_degrees: float = 45.0
+## Seconds to blend into the rest pose (after a flip or a combo).
+@export var rest_transition_time: float = 0.12
+## Horizontal input needed to flip the facing (ignores near-vertical input).
+@export_range(0.0, 1.0) var facing_flip_threshold: float = 0.3
+
 @export_group("Slash Arc")
 @export var arc_color: Color = Color(0.85, 0.9, 1.0)
 @export var arc_energy: float = 2.2
@@ -118,12 +132,24 @@ var _awareness: DepthAwareness
 var _swing_audio: AudioStreamPlayer2D
 var _hit_audio: AudioStreamPlayer2D
 var _kill_audio: AudioStreamPlayer2D
+## 1 = facing right, -1 = facing left (rest pose only).
+var facing_sign: float = 1.0
+var _pose_angle: float = 0.0
+var _pose_from: float = 0.0
+var _pose_to: float = 0.0
+var _pose_t: float = 1.0
+var _was_attacking: bool = false
+## Angle of the blade as last drawn (to blend back from an attack).
+var _drawn_angle: float = 0.0
 # Gold bursts of Exposed kills: world position and age in seconds.
 var _burst_positions: PackedVector2Array = PackedVector2Array()
 var _burst_ages: PackedFloat32Array = PackedFloat32Array()
 
 
 func _ready() -> void:
+	_pose_angle = _rest_angle(facing_sign)
+	_pose_to = _pose_angle
+	_drawn_angle = _pose_angle
 	_swing_audio = _make_audio(swing_stream, swing_volume_db)
 	_hit_audio = _make_audio(hit_stream, hit_volume_db)
 	_kill_audio = _make_audio(exposed_kill_stream, exposed_kill_volume_db)
@@ -142,6 +168,7 @@ func _process(delta: float) -> void:
 		_on_attack_pressed()
 	if hit_index >= 0:
 		_update_hit(delta)
+	_update_rest_pose(delta)
 	_update_bursts(delta)
 	queue_redraw()
 
@@ -163,6 +190,36 @@ func get_lunge_offset() -> Vector2:
 	var start: float = -windup_pull if hit_index == 2 else 0.0
 	var peak: float = finisher_lunge if hit_index == 2 else quick_lunge
 	return _swing_dir * lerpf(start, peak, minf(t * 3.0, 1.0)) * (1.0 - smoothstep(0.5, 1.0, t))
+
+
+## Godot angle of the rest pose for a facing (y points down, so "below
+## horizontal" is a positive angle: 45 = down-right, 180 - 45 = down-left).
+func _rest_angle(side_sign: float) -> float:
+	var below: float = deg_to_rad(rest_angle_degrees)
+	return below if side_sign > 0.0 else PI - below
+
+
+func _update_rest_pose(delta: float) -> void:
+	if absf(player.facing.x) >= facing_flip_threshold:
+		facing_sign = signf(player.facing.x)
+	if hit_index >= 0:
+		_was_attacking = true
+		return
+	var target: float = _rest_angle(facing_sign)
+	if _was_attacking:
+		# Combo over (or between hits): blend from where the blade ended.
+		_was_attacking = false
+		_start_pose_blend(_drawn_angle, target)
+	elif not is_equal_approx(target, _pose_to):
+		_start_pose_blend(_pose_angle, target)
+	_pose_t = minf(_pose_t + delta / maxf(rest_transition_time, 0.001), 1.0)
+	_pose_angle = lerp_angle(_pose_from, _pose_to, smoothstep(0.0, 1.0, _pose_t))
+
+
+func _start_pose_blend(from: float, to: float) -> void:
+	_pose_from = from
+	_pose_to = to
+	_pose_t = 0.0
 
 
 func is_in_echo_light() -> bool:
@@ -306,7 +363,7 @@ func _draw() -> void:
 		return
 	var lit: bool = is_in_echo_light()
 	var edge_color: Color = _hdr(lit_color, lit_energy, 1.0) if lit else dark_color
-	var direction: Vector2 = player.facing
+	var direction: Vector2 = Vector2.from_angle(_pose_angle)
 
 	if hit_index >= 0:
 		var is_finisher: bool = hit_index == 2
@@ -325,6 +382,7 @@ func _draw() -> void:
 			var sweep: float = minf(t * 2.5, 1.0)
 			_draw_arc_band(reach, half_arc, side, sweep, 1.0 - t, finisher_arc_boost if is_finisher else 1.0)
 			direction = _swing_dir.rotated(lerpf(-half_arc, half_arc, sweep) * side)
+	_drawn_angle = direction.angle()
 	_draw_blade(direction, edge_color)
 
 
