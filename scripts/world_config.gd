@@ -36,16 +36,52 @@ extends Resource
 @export var level_depth_step_m: float = 400.0
 
 @export_group("Palette")
-## CanvasModulate colour at the start of a stage...
-@export var ambient_color: Color = Color(0.06, 0.08, 0.14)
-## ...and at the bottom of the stage's last level.
-@export var deep_ambient_color: Color = Color(0.02, 0.025, 0.05)
-@export var floor_color_shallow: Color = Color(0.16, 0.22, 0.27)
-@export var floor_color_deep: Color = Color(0.08, 0.11, 0.14)
-@export var rock_color: Color = Color(0.45, 0.42, 0.40)
+## The base darkness (ambient colour) is set per stage, in each StageDefinition.
+@export var floor_color_shallow: Color = Color(0.2, 0.3, 0.36)
+@export var floor_color_deep: Color = Color(0.15, 0.23, 0.29)
+## Rock fill: a bit lighter than the floor, so the level shape reads as a faint
+## silhouette in the ambient light. The glowing sonar edges only come with a pulse.
+@export var rock_color: Color = Color(0.3, 0.36, 0.4)
 ## Sonar colours (wave front and revealed edges).
 @export var ring_color: Color = Color(0.4, 0.9, 1.0, 0.9)
 @export var edge_color: Color = Color(0.45, 0.95, 1.0)
+
+@export_group("Marine Snow")
+## Tiny glowing particles drifting across the whole level (around the camera).
+@export var snow_count: int = 140
+@export var snow_color: Color = Color(0.7, 0.9, 1.0)
+## Opacity range of one particle (each one twinkles between the two).
+@export_range(0.0, 1.0) var snow_alpha_min: float = 0.08
+@export_range(0.0, 1.0) var snow_alpha_max: float = 0.35
+@export var snow_size_min: float = 0.8
+@export var snow_size_max: float = 2.2
+## Slow downward drift in pixels per second (random per particle up to this).
+@export var snow_fall_speed: float = 9.0
+## Side-to-side sway in pixels, and its cycles per second.
+@export var snow_sway_amount: float = 12.0
+@export var snow_sway_speed: float = 0.12
+## Twinkle cycles per second.
+@export var snow_twinkle_speed: float = 0.25
+
+@export_group("Light Shafts")
+## Faint light from the surface. How strong they are is set per stage
+## (StageDefinition.light_shaft_strength; only the first stage has them).
+@export var shaft_color: Color = Color(0.55, 0.8, 0.95)
+## Opacity of a shaft at full strength (they are added on top, so keep it low).
+@export_range(0.0, 1.0) var shaft_alpha: float = 0.025
+@export var shaft_count: int = 5
+@export var shaft_width_min: float = 60.0
+@export var shaft_width_max: float = 170.0
+## Tilt of the shafts in degrees (0 = straight down the screen).
+@export var shaft_angle_degrees: float = 18.0
+## Slow sideways sway of each shaft in pixels, and its cycles per second.
+@export var shaft_sway_amount: float = 40.0
+@export var shaft_sway_speed: float = 0.05
+## How much the shafts slide when the camera moves sideways (0 = fixed on
+## screen, 1 = fixed in the world). Small values feel far away.
+@export var shaft_parallax: float = 0.15
+## 0-1: how much the shafts fade from the top of the stage to its bottom.
+@export_range(0.0, 1.0) var shaft_depth_fade: float = 0.7
 
 @export_group("Pressure")
 ## What the world's survival pressure is called in the HUD (Oxygen, Cold, Heat...).

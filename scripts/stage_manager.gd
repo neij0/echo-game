@@ -85,6 +85,8 @@ func _process(delta: float) -> void:
 func _start_stage() -> void:
 	if world:
 		get_tree().call_group("world_listeners", "apply_world", world)
+		# Per-stage values (lighting).
+		get_tree().call_group("stage_listeners", "apply_stage", world.get_stage(stage_index))
 	var scene_players: Array[Player] = Players.all(get_tree())
 	scene_players.sort_custom(func(a: Player, b: Player) -> bool: return a.player_number < b.player_number)
 	for player: Player in scene_players:

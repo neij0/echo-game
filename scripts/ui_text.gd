@@ -24,6 +24,13 @@ const STRINGS: Dictionary = {
 	},
 	"language": {"en": "Language: English", "ar": "اللغة: العربية"},
 	"quit": {"en": "Quit", "ar": "خروج"},
+	"options": {"en": "Options", "ar": "الإعدادات"},
+	"brightness": {"en": "Brightness: %d%%", "ar": "السطوع: %d%%"},
+	"brightness_desc": {
+		"en": "Changes how dark the water looks. The Echo's light and the pulse are not affected.",
+		"ar": "يغيّر عتمة الماء فقط. ضوء إيكو والنبضة لا يتأثران.",
+	},
+	"back": {"en": "Back", "ar": "رجوع"},
 	"confirm_new_game": {
 		"en": "Start a new game? Your saved progress will be lost.",
 		"ar": "بدء لعبة جديدة؟ سيُحذف تقدّمك المحفوظ.",

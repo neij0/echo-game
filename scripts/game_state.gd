@@ -1,7 +1,7 @@
 class_name GameState
 extends Node
 ## Autoload "Game" (scenes/game_state.tscn): the progress (SaveData), the
-## settings (language, preferred mode) and the moves between screens:
+## settings (language, preferred mode, brightness) and the moves between screens:
 ## main menu -> stage (game.tscn) -> ... -> story screen -> World Map.
 ## Structure: World (5) -> Stage (3 per world) -> Level (3 per stage).
 
@@ -30,9 +30,18 @@ signal language_changed
 @export var default_language: String = "en"
 @export var default_mode: SaveData.Mode = SaveData.Mode.CALM
 
+@export_group("Brightness")
+## Brightness setting: multiplies the ambient darkness only (never the Echo's
+## light, the pulse or any other gameplay reveal). 1 = as designed.
+@export var default_brightness: float = 1.0
+@export var min_brightness: float = 0.5
+@export var max_brightness: float = 2.0
+
 ## Current progress. Always set; has_save() tells if it is on disk.
 var save: SaveData
 var language: String = "en"
+## See default_brightness.
+var brightness: float = 1.0
 ## Mode picked in the main menu (used by New Game, copied into the save).
 var preferred_mode: SaveData.Mode = SaveData.Mode.CALM
 ## True when the stage was started from the menus. False when game.tscn is run
@@ -47,6 +56,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	language = default_language
 	preferred_mode = default_mode
+	brightness = default_brightness
 	_load_settings()
 	save = SaveData.read(save_path)
 	if save == null:
@@ -73,6 +83,12 @@ func toggle_language() -> void:
 	language = UiText.LANGUAGES[(index + 1) % UiText.LANGUAGES.size()]
 	_save_settings()
 	language_changed.emit()
+
+
+## Called by the Options slider; saved with the other settings.
+func set_brightness(value: float) -> void:
+	brightness = clampf(value, min_brightness, max_brightness)
+	_save_settings()
 
 
 func world_display_name(world_id: String) -> String:
@@ -244,6 +260,7 @@ func _load_settings() -> void:
 	if saved_language in UiText.LANGUAGES:
 		language = saved_language
 	preferred_mode = SaveData.Mode.CHALLENGE if str(data.get("mode", "calm")) == "challenge" else SaveData.Mode.CALM
+	brightness = clampf(float(data.get("brightness", brightness)), min_brightness, max_brightness)
 
 
 func _save_settings() -> void:
@@ -253,5 +270,6 @@ func _save_settings() -> void:
 	var data: Dictionary = {
 		"language": language,
 		"mode": "challenge" if preferred_mode == SaveData.Mode.CHALLENGE else "calm",
+		"brightness": brightness,
 	}
 	file.store_string(JSON.stringify(data, "\t"))

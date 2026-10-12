@@ -1,4 +1,4 @@
-[gd_scene load_steps=21 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_builder.gd" id="1_level"]
 [ext_resource type="Resource" path="res://worlds/ocean.tres" id="2_world"]
@@ -16,6 +16,8 @@
 [ext_resource type="Script" path="res://scripts/hurt_vignette.gd" id="14_vignette"]
 [ext_resource type="Script" path="res://scripts/stage_manager.gd" id="15_stage"]
 [ext_resource type="Script" path="res://scripts/end_screen.gd" id="16_end"]
+[ext_resource type="Script" path="res://scripts/marine_snow.gd" id="18_snow"]
+[ext_resource type="Script" path="res://scripts/light_shafts.gd" id="19_shafts"]
 
 [node name="Game" type="Node2D"]
 
@@ -27,6 +29,18 @@ level_builder = NodePath("../LevelBuilder")
 [node name="LevelBuilder" type="Node2D" parent="."]
 script = ExtResource("1_level")
 world = ExtResource("2_world")
+
+[node name="EnvironmentLayer" type="CanvasLayer" parent="."]
+follow_viewport_enabled = true
+
+[node name="MarineSnow" type="Node2D" parent="EnvironmentLayer"]
+script = ExtResource("18_snow")
+
+[node name="LightShaftLayer" type="CanvasLayer" parent="."]
+
+[node name="LightShafts" type="Node2D" parent="LightShaftLayer" node_paths=PackedStringArray("level_builder")]
+script = ExtResource("19_shafts")
+level_builder = NodePath("../../LevelBuilder")
 
 [node name="Echo" parent="." instance=ExtResource("3_echo")]
 position = Vector2(1200, 200)

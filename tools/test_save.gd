@@ -81,6 +81,13 @@ func _test_world_progress() -> void:
 	game.toggle_mode()
 	var after_toggle: SaveData = SaveData.read(TEST_SAVE)
 	_expect(after_toggle != null and after_toggle.mode == SaveData.Mode.CHALLENGE, "changing the mode updates the save")
+
+	game.set_brightness(1.4)
+	game.brightness = game.default_brightness
+	game._load_settings()
+	_expect(is_equal_approx(game.brightness, 1.4), "the brightness setting is saved and loaded")
+	game.set_brightness(99.0)
+	_expect(is_equal_approx(game.brightness, game.max_brightness), "the brightness is clamped to its range")
 	game.free()
 
 

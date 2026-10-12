@@ -3,8 +3,9 @@ extends SceneTree
 ## is completable (LevelBuilder + LayoutValidator, the same check the game runs
 ## before building a level) with many different spawn seeds, since spawns are
 ## reshuffled on every attempt. Also checks the structure (3 stages x 3 levels,
-## a boss only and always on each stage's last level) and that the level
-## generator (tools/propose_level.gd) still proposes valid levels.
+## a boss only and always on each stage's last level), the lighting (each stage
+## darker than the one before, light shafts only in the first stage) and that
+## the level generator (tools/propose_level.gd) still proposes valid levels.
 ##
 ## Run from the project folder:
 ##   godot --headless --path . -s res://tools/check_levels.gd
@@ -50,6 +51,8 @@ func _initialize() -> void:
 			if not _check_level(builder, definition, label, seeds_per_level, rng):
 				all_ok = false
 
+	if not _check_lighting(world):
+		all_ok = false
 	if not _check_generator(builder, world, rng):
 		all_ok = false
 	builder.free()
@@ -94,6 +97,24 @@ func _check_level(builder: LevelBuilder, definition: LevelDefinition, label: Str
 	if completable < seeds_per_level:
 		return _fail("%s: %d spawn seeds have no valid layout" % [label, seeds_per_level - completable])
 	return true
+
+
+func _check_lighting(world: WorldConfig) -> bool:
+	var ok: bool = true
+	var previous: float = INF
+	for stage_index: int in world.get_stage_count():
+		var stage: StageDefinition = world.stages[stage_index]
+		var brightness: float = stage.ambient_color.get_luminance()
+		print("Stage %d lighting: ambient luminance %.3f (deep %.3f), light shafts %.2f" % [
+			stage_index + 1, brightness, stage.deep_ambient_color.get_luminance(), stage.light_shaft_strength])
+		if brightness >= previous:
+			ok = _fail("stage %d is not darker than the stage before" % (stage_index + 1))
+		if stage.deep_ambient_color.get_luminance() > brightness:
+			ok = _fail("stage %d: the deep ambient colour is brighter than the ambient colour" % (stage_index + 1))
+		if stage_index > 0 and stage.light_shaft_strength > 0.0:
+			ok = _fail("stage %d has light shafts (only the first stage should)" % (stage_index + 1))
+		previous = brightness
+	return ok
 
 
 func _check_generator(builder: LevelBuilder, world: WorldConfig, rng: RandomNumberGenerator) -> bool:
