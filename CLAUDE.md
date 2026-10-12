@@ -79,6 +79,22 @@ walls and corridors readable. Everything near is seen through **real lights**, n
    - from there to the edge of her light (~280 px): only a dark moving silhouette with faint
      eyes, fading in as it gets closer; no outline, not hittable, not Exposed; hidden when a
      rock blocks her light (`Creature` "Silhouette" group, `CreatureEyes.silhouette_eye_share`).
+## Characters (procedural, silhouette + glow)
+- **Echo** (`EchoVisual` on her `Body`): small dark body, long ears, Line2D antennae with
+  glowing tips (springs), verlet tail with a faint gold particle trail, glowing gold core.
+  Floats (bob, lean). Pulse: core flare, antennae lift, squash-stretch. Downed: core dims and
+  flickers, body sinks.
+- **Guardian** (`GuardianVisual`): tall dark cloak (spring hem), large branching antlers,
+  faint cold blue rim, two faint eyes. Downed: kneels, antlers lower, eyes dim.
+  `SwordAbility` draws the dark blade (gold edge only inside the Echo's light), the trailing
+  slash arc, and gives a visual lunge per hit (`get_lunge_offset`); the finisher pulls back
+  first and has a wider, brighter arc.
+- **Creatures** (`Creature.draw_shape`): fully revealed = dark body with a glowing outline in
+  the type colour (= its sonar echo colour) plus tendrils / fins / spikes with procedural
+  motion; the same shape is used for the silhouette zone and the pulse echo.
+- Shared helpers: `SpringPoint`, `VerletChain`. Springs run relative to the player so
+  movement only bends them by their drag term.
+
 - **Hit flash** (`HurtVignette`): thin red band on the screen edges only, low opacity, 0.4 s.
 Note: 2D renders in HDR (linear). Screenshots taken with `get_viewport().get_texture()` are
 linear float data and look much darker than the screen; convert each pixel with
@@ -91,7 +107,13 @@ linear float data and look much darker than the screen; convert each pixel with
 - **Small, focused scripts**: one responsibility per script. Prefer signals over tight coupling.
 - **File names in snake_case** (`player.gd`, `pulse_ring.tscn`). Class names in PascalCase via `class_name`.
 - **All tunable values are `@export` variables** (speeds, durations, radii, colors, amounts). No magic numbers in logic.
-- **No final art yet**: grey-box only (Polygon2D, `_draw()` shapes, generated light textures).
+- **Art style: "silhouette + glow".** In the dark world players only see dark silhouettes and
+  glowing parts. There is no artist and no budget: every character / creature visual is built
+  from vector shapes in Godot (Polygon2D, Line2D, `_draw()`, particles, lights) with procedural
+  animation (springs, verlet chains, sine motion). **No AI-generated art in the game.**
+  `assets/concepts/` is for mood reference only (never traced). Dark silhouettes are drawn in
+  the world (lit by lights); glowing parts on a CanvasLayer with `follow_viewport_enabled`
+  using HDR colours (energy > 1 blooms).
 - **Terminology**: World > Stage > Level, everywhere (classes, files, signals, UI text).
   "Run" is not used any more.
 - **All menu / screen text is bilingual** (English + Arabic): add new strings to

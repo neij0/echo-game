@@ -93,6 +93,27 @@ signal killed
 @export var spike_count: int = 7
 ## Spike length compared to body_radius for the SPIKY look.
 @export var spike_length: float = 0.55
+## SPIKY shell rotation (radians per second).
+@export var spike_spin_speed: float = 0.4
+## When fully revealed: dark body (body_color darkened by this) with a glowing
+## outline in the type colour (the same as its sonar echo).
+@export_range(0.0, 1.0) var fill_darken: float = 0.75
+@export var outline_energy: float = 1.8
+@export var outline_width: float = 1.5
+@export var eye_energy: float = 2.0
+## Tendrils trailing behind (ROUND look; fewer on the others).
+@export var tendril_count: int = 5
+@export var tendril_segments: int = 6
+## Tendril length compared to body_radius.
+@export var tendril_length: float = 1.6
+## Tendril thickness compared to body_radius.
+@export var tendril_width: float = 0.09
+@export var tendril_wave_amount: float = 5.0
+@export var tendril_wave_speed: float = 0.9
+## Opacity of the tendrils / fins outline compared to the body outline.
+@export_range(0.0, 1.0) var tendril_alpha: float = 0.7
+## Fin flaps per second (ARROW look).
+@export var fin_flap_speed: float = 1.6
 
 @export_group("Sonar Visibility")
 ## true = invisible except for a red echo when the pulse front passes over it,
@@ -135,6 +156,9 @@ var _exposed_left: float = 0.0
 var silhouette_ratio: float = 0.0
 var _silhouette_check_left: float = 0.0
 var _silhouette_blocked: bool = false
+var _anim_time: float = 0.0
+## Where the creature points (last movement direction).
+var _facing: Vector2 = Vector2.RIGHT
 
 @onready var _hitbox: Area2D = $Hitbox
 @onready var _alert: AudioStreamPlayer2D = $AlertSound
@@ -455,16 +479,17 @@ func _update_reveal(delta: float) -> void:
 	_revealed_left = maxf(_revealed_left - delta, 0.0)
 	_exposed_left = maxf(_exposed_left - delta, 0.0)
 	var in_light: bool = is_in_echo_light()
-	# The ARROW look points where it moves, so it needs a redraw every frame.
-	if look == Look.ARROW and in_light:
-		queue_redraw()
 	if in_light != _was_in_light or _flash_left > 0.0:
 		_was_in_light = in_light
 		_flash_left = maxf(_flash_left - delta, 0.0)
 		queue_redraw()
+	_anim_time += delta
+	if velocity.length() > 1.0:
+		_facing = _facing.lerp(velocity.normalized(), 1.0 - exp(-8.0 * delta)).normalized()
 	var previous_silhouette: float = silhouette_ratio
 	silhouette_ratio = 0.0 if in_light else _compute_silhouette(delta)
-	if silhouette_ratio > 0.0 or previous_silhouette > 0.0:
+	# Visible shapes move (tendrils, fins), so they redraw every frame.
+	if in_light or silhouette_ratio > 0.0 or previous_silhouette > 0.0 or not hidden_until_pinged:
 		queue_redraw()
 
 
@@ -511,29 +536,81 @@ func _draw() -> void:
 	if hidden_until_pinged and not _was_in_light:
 		if silhouette_ratio > 0.0:
 			# Dark shape only: no outline and no eye dot (CreatureEyes adds faint eyes).
-			_draw_body(Color(silhouette_color, silhouette_ratio * silhouette_max_alpha), false)
+			draw_shape(self, Color(silhouette_color, silhouette_ratio * silhouette_max_alpha), Color(0.0, 0.0, 0.0, 0.0), false)
 		return
-	_draw_body(hit_flash_color if _flash_left > 0.0 else body_color, true)
+	var fill: Color = hit_flash_color if _flash_left > 0.0 else body_color.darkened(fill_darken)
+	draw_shape(self, fill, _hdr(get_type_color(), outline_energy, 1.0), true)
 
 
-func _draw_body(color: Color, with_eye: bool) -> void:
-	if look == Look.SPIKY:
-		var points := PackedVector2Array()
-		for i: int in spike_count * 2:
-			var radius: float = body_radius * (1.0 + spike_length if i % 2 == 0 else 0.8)
-			points.append(Vector2.from_angle(TAU * i / (spike_count * 2)) * radius)
-		draw_colored_polygon(points, color)
-	elif look == Look.ARROW:
-		# A thin arrowhead pointing where it is moving.
-		var forward: Vector2 = velocity.normalized() if velocity.length() > 1.0 else Vector2.RIGHT
-		var side: Vector2 = forward.orthogonal()
-		var tip: Vector2 = forward * body_radius * 1.6
-		var back: Vector2 = -forward * body_radius * 0.9
-		draw_colored_polygon(PackedVector2Array([tip, back + side * body_radius, back * 0.4, back - side * body_radius]), color)
-		if with_eye:
-			draw_circle(forward * body_radius * 0.6, body_radius * 0.22, eye_color)
-		return
-	else:
-		draw_circle(Vector2.ZERO, body_radius, color)
+## The colour that tells the creature type apart (the same as its sonar echo).
+func get_type_color() -> Color:
+	return _echo.color if _echo else body_color
+
+
+static func _hdr(color: Color, energy: float, alpha: float) -> Color:
+	return Color(color.r * energy, color.g * energy, color.b * energy, alpha)
+
+
+## Draws the creature's shape (body, fins / tendrils, eye) on canvas, centred on
+## canvas's origin, with the current procedural motion. Used for the full body,
+## the silhouette and the sonar echo (CreatureEcho), so all three match.
+## outline alpha 0 = no outline (tendrils then use the fill colour).
+func draw_shape(canvas: CanvasItem, fill: Color, outline: Color, with_eye: bool) -> void:
+	var forward: Vector2 = _facing
+	var side: Vector2 = forward.orthogonal()
+	var has_outline: bool = outline.a > 0.0
+	var limb_color: Color = Color(outline, outline.a * tendril_alpha) if has_outline else fill
+	var body := PackedVector2Array()
+	var tendrils: int = tendril_count
+	match look:
+		Look.SPIKY:
+			# Slowly turning spiky shell.
+			var spin: float = _anim_time * spike_spin_speed
+			for i: int in spike_count * 2:
+				var radius: float = body_radius * (1.0 + spike_length if i % 2 == 0 else 0.8)
+				body.append(Vector2.from_angle(TAU * i / (spike_count * 2) + spin) * radius)
+			tendrils = mini(tendril_count, 3)
+		Look.ARROW:
+			# A thin arrowhead with two flapping side fins.
+			var tip: Vector2 = forward * body_radius * 1.6
+			var back: Vector2 = -forward * body_radius * 0.9
+			body = PackedVector2Array([tip, back + side * body_radius * 0.8, back * 0.4, back - side * body_radius * 0.8])
+			var flap: float = sin(_anim_time * TAU * fin_flap_speed)
+			for s: float in [-1.0, 1.0]:
+				var root: Vector2 = side * s * body_radius * 0.35
+				var fin_tip: Vector2 = side * s * body_radius * (1.3 + 0.25 * flap) - forward * body_radius * 0.5
+				var fin := PackedVector2Array([root + forward * body_radius * 0.4, fin_tip, root - forward * body_radius * 0.5])
+				canvas.draw_colored_polygon(fin, fill)
+				if has_outline:
+					canvas.draw_polyline(_closed(fin), limb_color, outline_width, true)
+			tendrils = mini(tendril_count, 2)
+		_:
+			# A soft oval body, a little longer than wide, pointing where it moves.
+			for i: int in 20:
+				var angle: float = TAU * i / 20.0
+				body.append(forward * cos(angle) * body_radius * 1.15 + side * sin(angle) * body_radius * 0.85)
+	_draw_tendrils(canvas, forward, side, tendrils, limb_color)
+	canvas.draw_colored_polygon(body, fill)
+	if has_outline:
+		canvas.draw_polyline(_closed(body), outline, outline_width, true)
 	if with_eye:
-		draw_circle(Vector2(body_radius * 0.45, 0.0), body_radius * 0.25, eye_color)
+		canvas.draw_circle(forward * body_radius * 0.55, body_radius * 0.18, _hdr(eye_color, eye_energy, 1.0))
+
+
+## Wavy tendrils trailing behind the body.
+func _draw_tendrils(canvas: CanvasItem, forward: Vector2, side: Vector2, count: int, color: Color) -> void:
+	for i: int in count:
+		var spread: float = (float(i) / maxf(count - 1, 1) - 0.5) * 2.0 if count > 1 else 0.0
+		var root: Vector2 = -forward * body_radius * 0.75 + side * spread * body_radius * 0.55
+		var line := PackedVector2Array([root])
+		for k: int in range(1, tendril_segments + 1):
+			var along: float = float(k) / tendril_segments
+			var wave: float = sin(_anim_time * TAU * tendril_wave_speed + i * 1.3 - k * 0.8) * tendril_wave_amount * along
+			line.append(root - forward * body_radius * tendril_length * along + side * (wave + spread * along * body_radius * 0.4))
+		canvas.draw_polyline(line, color, maxf(body_radius * tendril_width, 1.0), true)
+
+
+static func _closed(points: PackedVector2Array) -> PackedVector2Array:
+	var result: PackedVector2Array = points.duplicate()
+	result.append(points[0])
+	return result

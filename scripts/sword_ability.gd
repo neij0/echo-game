@@ -9,6 +9,9 @@ extends Node2D
 ## Every swing makes noise: raises Depth Awareness and alerts nearby creatures.
 ## Lives on a CanvasLayer with follow_viewport_enabled (drawn unlit, so the
 ## player can always see where the sword points); follows the player each frame.
+## Look: a dark blade whose edge glows gold inside the Echo's light, a bright
+## slash arc that trails the swing, and a small body lunge per hit (visual
+## only, read by GuardianVisual; the finisher pulls back first, then lunges further).
 
 signal swung(hit_index: int)
 signal hit_landed(creature: Creature, damage: int)
@@ -71,18 +74,35 @@ signal exposed_kill(creature_position: Vector2)
 
 @export_group("Look")
 @export var sword_length: float = 34.0
-@export var sword_width: float = 3.5
+## Blade width at the hilt (it narrows to a point).
+@export var sword_width: float = 4.5
 ## Sword sits this far from the body centre.
 @export var sword_offset: float = 12.0
-## Sword colour inside the Echo's light...
+@export var blade_color: Color = Color(0.05, 0.05, 0.07)
+@export var edge_width: float = 1.2
+@export var guard_width: float = 9.0
+## Edge colour inside the Echo's light...
 @export var lit_color: Color = Color(1.0, 0.78, 0.25)
 @export var lit_energy: float = 1.8
 ## ...and outside of it.
 @export var dark_color: Color = Color(0.32, 0.32, 0.36)
+
+@export_group("Slash Arc")
 @export var arc_color: Color = Color(0.85, 0.9, 1.0)
-@export var arc_energy: float = 1.6
-## Opacity of the slash arc at its start (fades out over the hit).
+@export var arc_energy: float = 2.2
+## Opacity of the newest part of the arc (older parts and the end of the hit fade).
 @export_range(0.0, 1.0) var arc_alpha: float = 0.55
+## Inner edge of the arc band, as a share of the reach.
+@export_range(0.0, 1.0) var arc_inner_ratio: float = 0.72
+## The finisher's arc is this much brighter.
+@export var finisher_arc_boost: float = 1.6
+
+@export_group("Lunge")
+## Body lunge towards the swing (pixels, visual only).
+@export var quick_lunge: float = 4.0
+@export var finisher_lunge: float = 9.0
+## The finisher pulls the body back this far during its wind-up.
+@export var windup_pull: float = 6.0
 
 ## -1 = not attacking, otherwise 0, 1 or 2.
 var hit_index: int = -1
@@ -112,7 +132,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if player == null:
 		return
-	global_position = player.global_position
+	global_position = player.global_position + get_lunge_offset()
 	_recovery_left = maxf(_recovery_left - delta, 0.0)
 	_window_left = maxf(_window_left - delta, 0.0)
 	if _window_left <= 0.0 and hit_index < 0:
@@ -128,6 +148,21 @@ func _process(delta: float) -> void:
 
 func is_attacking() -> bool:
 	return hit_index >= 0
+
+
+## Visual body offset for the current hit: pulled back during the finisher's
+## wind-up, then a short lunge towards the swing that settles back.
+func get_lunge_offset() -> Vector2:
+	if hit_index < 0:
+		return Vector2.ZERO
+	var windup: float = _windup(hit_index)
+	if _elapsed < windup:
+		return -_swing_dir * windup_pull * (_elapsed / windup)
+	var duration: float = finisher_duration if hit_index == 2 else quick_duration
+	var t: float = clampf((_elapsed - windup) / duration, 0.0, 1.0)
+	var start: float = -windup_pull if hit_index == 2 else 0.0
+	var peak: float = finisher_lunge if hit_index == 2 else quick_lunge
+	return _swing_dir * lerpf(start, peak, minf(t * 3.0, 1.0)) * (1.0 - smoothstep(0.5, 1.0, t))
 
 
 func is_in_echo_light() -> bool:
@@ -270,7 +305,7 @@ func _draw() -> void:
 	if player == null or player.health.is_downed:
 		return
 	var lit: bool = is_in_echo_light()
-	var sword_color: Color = _hdr(lit_color, lit_energy, 1.0) if lit else dark_color
+	var edge_color: Color = _hdr(lit_color, lit_energy, 1.0) if lit else dark_color
 	var direction: Vector2 = player.facing
 
 	if hit_index >= 0:
@@ -287,11 +322,22 @@ func _draw() -> void:
 			direction = _swing_dir.rotated(-half_arc * side * 1.1)
 		else:
 			var t: float = clampf(swing_time / duration, 0.0, 1.0)
-			_draw_arc_shape(reach, half_arc, 1.0 - t)
-			direction = _swing_dir.rotated(lerpf(-half_arc, half_arc, minf(t * 2.5, 1.0)) * side)
+			var sweep: float = minf(t * 2.5, 1.0)
+			_draw_arc_band(reach, half_arc, side, sweep, 1.0 - t, finisher_arc_boost if is_finisher else 1.0)
+			direction = _swing_dir.rotated(lerpf(-half_arc, half_arc, sweep) * side)
+	_draw_blade(direction, edge_color)
 
+
+## A dark blade narrowing to a point, a small cross-guard, and a glowing edge.
+func _draw_blade(direction: Vector2, edge_color: Color) -> void:
+	var side: Vector2 = direction.orthogonal()
 	var base: Vector2 = direction * sword_offset
-	draw_line(base, base + direction * sword_length, sword_color, sword_width, true)
+	var tip: Vector2 = base + direction * sword_length
+	var half: float = sword_width * 0.5
+	var blade := PackedVector2Array([base + side * half, tip, base - side * half])
+	draw_colored_polygon(blade, blade_color)
+	draw_polyline(PackedVector2Array([base + side * half, tip, base - side * half]), edge_color, edge_width, true)
+	draw_line(base + side * guard_width * 0.5, base - side * guard_width * 0.5, edge_color, edge_width * 1.5, true)
 
 
 func _draw_bursts() -> void:
@@ -306,11 +352,23 @@ func _draw_bursts() -> void:
 			draw_line(center + direction * radius * 0.3, center + direction * radius * 1.15, color, 2.0, true)
 
 
-func _draw_arc_shape(reach: float, half_arc: float, fade: float) -> void:
-	var color: Color = _hdr(arc_color, arc_energy, arc_alpha * fade)
-	var steps: int = 16
-	var points := PackedVector2Array([Vector2.ZERO])
-	var start: float = _swing_dir.angle() - half_arc
-	for i: int in steps + 1:
-		points.append(Vector2.from_angle(start + 2.0 * half_arc * i / steps) * reach)
-	draw_colored_polygon(points, color)
+## The slash: a crescent band from where the swing started to where the blade
+## is now, brightest at the blade and fading behind it.
+func _draw_arc_band(reach: float, half_arc: float, side: float, sweep: float, fade: float, boost: float) -> void:
+	if sweep <= 0.0:
+		return
+	var steps: int = 20
+	var start: float = _swing_dir.angle() - half_arc * side
+	var span: float = 2.0 * half_arc * side * sweep
+	var inner: float = reach * arc_inner_ratio
+	for i: int in steps:
+		var a0: float = start + span * float(i) / steps
+		var a1: float = start + span * float(i + 1) / steps
+		# Older parts of the arc (near its start) are fainter.
+		var c0: Color = _hdr(arc_color, arc_energy * boost, arc_alpha * fade * float(i) / steps)
+		var c1: Color = _hdr(arc_color, arc_energy * boost, arc_alpha * fade * float(i + 1) / steps)
+		var quad := PackedVector2Array([
+			Vector2.from_angle(a0) * inner, Vector2.from_angle(a0) * reach,
+			Vector2.from_angle(a1) * reach, Vector2.from_angle(a1) * inner,
+		])
+		draw_polygon(quad, PackedColorArray([c0, c0, c1, c1]))

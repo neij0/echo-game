@@ -1,7 +1,8 @@
 class_name CreatureEcho
 extends Node2D
-## The sonar "echo" of a creature: a red glowing silhouette that appears when the
-## pulse front passes over the creature, then fades out.
+## The sonar "echo" of a creature: a glowing silhouette in its type colour that
+## appears when the pulse front passes over the creature, then fades out. Uses
+## the creature's own shape (Creature.draw_shape) while it exists.
 ## Must live on a CanvasLayer with follow_viewport_enabled, so the world's
 ## CanvasModulate darkness does not dim it.
 
@@ -47,5 +48,8 @@ func _draw() -> void:
 	var energy: float = lerpf(end_energy, start_energy, t * t)
 	var glow := Color(color.r * energy, color.g * energy, color.b * energy, t)
 	var fill := Color(glow, t * fill_alpha)
+	if is_instance_valid(_target) and _target is Creature:
+		(_target as Creature).draw_shape(self, fill, glow, false)
+		return
 	draw_circle(Vector2.ZERO, _radius, fill)
 	draw_arc(Vector2.ZERO, _radius, 0.0, TAU, 32, glow, outline_width, true)
