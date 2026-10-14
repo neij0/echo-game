@@ -1,8 +1,11 @@
 class_name GoalEcho
 extends Node2D
-## Only the Echo knows the way: shortly after each of her pulses, a faint golden
-## echo comes back from the direction of the ancient light, shown as a short
-## arc with a chevron next to her, pointing towards it. It fades after show_time.
+## Only the Echo knows the way: shortly after each of her pulses, a faint echo
+## comes back, shown as a short arc with a chevron next to her. While Echo
+## Shards are left it points (in the shard colour) to the nearest one, in a
+## straight line; once all are collected it points (gold) to the nearest open
+## way out ("level_exit" group: the ancient light, the closed arena door, or
+## the boss once the door is open). It fades after show_time.
 ## Must live on the Echo's CanvasLayer with follow_viewport_enabled (unlit).
 
 @export var player: Player
@@ -15,6 +18,8 @@ extends Node2D
 @export var width: float = 3.0
 @export var chevron_size: float = 9.0
 @export var color: Color = Color(1.0, 0.82, 0.35)
+## Colour while it points to a shard.
+@export var shard_color: Color = Color(0.55, 0.95, 1.0)
 ## HDR brightness multiplier (above 1.0 = blooms).
 @export var energy: float = 1.8
 ## Kept low so it stays a faint hint.
@@ -51,19 +56,36 @@ func is_showing() -> bool:
 	return _show_left > 0.0
 
 
-func _find_goal() -> Node2D:
-	return get_tree().get_first_node_in_group("ancient_light") as Node2D
+## The nearest uncollected shard, else the nearest node of the level exit.
+func _find_target() -> Node2D:
+	var shard: Node2D = _nearest_in_group("echo_shards")
+	return shard if shard else _nearest_in_group("level_exit")
+
+
+func _nearest_in_group(group_name: String) -> Node2D:
+	var best: Node2D = null
+	var best_distance: float = INF
+	for node: Node in get_tree().get_nodes_in_group(group_name):
+		var target := node as Node2D
+		if target == null:
+			continue
+		var distance: float = player.global_position.distance_squared_to(target.global_position)
+		if distance < best_distance:
+			best_distance = distance
+			best = target
+	return best
 
 
 func _draw() -> void:
 	if _show_left <= 0.0:
 		return
-	var goal: Node2D = _find_goal()
+	var goal: Node2D = _find_target()
 	if goal == null:
 		return
 	var elapsed: float = show_time - _show_left
 	var alpha: float = max_alpha * minf(elapsed / fade_in_time, 1.0) * (_show_left / show_time)
-	var glow := Color(color.r * energy, color.g * energy, color.b * energy, alpha)
+	var tint: Color = shard_color if goal is EchoShard else color
+	var glow := Color(tint.r * energy, tint.g * energy, tint.b * energy, alpha)
 	var direction: Vector2 = player.global_position.direction_to(goal.global_position)
 	var angle: float = direction.angle()
 	var half: float = deg_to_rad(arc_degrees) * 0.5

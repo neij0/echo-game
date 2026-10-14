@@ -58,6 +58,9 @@ const STRINGS: Dictionary = {
 	"stat_pressure": {"en": "%s left: %s", "ar": "%s المتبقي: %s"},
 	"progress_saved": {"en": "Progress saved", "ar": "تم حفظ التقدّم"},
 	"pressure_Oxygen": {"en": "oxygen", "ar": "الأكسجين"},
+	"shards": {"en": "Echo Shards: %d / %d", "ar": "شظايا الصدى: %d من %d"},
+	"exit_open": {"en": "The ancient light is awake: find it", "ar": "استيقظ الضوء القديم: اعثرا عليه"},
+	"arena_open": {"en": "The arena door is open", "ar": "انفتح باب الساحة"},
 
 	# World map
 	"world_map": {"en": "World Map", "ar": "خريطة العوالم"},

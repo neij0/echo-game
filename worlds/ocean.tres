@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="WorldConfig" load_steps=30 format=3]
+[gd_resource type="Resource" script_class="WorldConfig" load_steps=32 format=3]
 
 [ext_resource type="Script" path="res://scripts/world_config.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/stage_definition.gd" id="2_stage"]
@@ -6,6 +6,8 @@
 [ext_resource type="PackedScene" path="res://scenes/coral.tscn" id="7_coral"]
 [ext_resource type="PackedScene" path="res://scenes/pressure_station.tscn" id="8_station"]
 [ext_resource type="PackedScene" path="res://scenes/ancient_light.tscn" id="9_goal"]
+[ext_resource type="PackedScene" path="res://scenes/echo_shard.tscn" id="10_shard"]
+[ext_resource type="PackedScene" path="res://scenes/shard_door.tscn" id="11_door"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_1_1.tres" id="level_1_1"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_1_2.tres" id="level_1_2"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_1_3.tres" id="level_1_3"]
@@ -57,6 +59,8 @@ stages = Array[ExtResource("2_stage")]([SubResource("Stage1"), SubResource("Stag
 coral_scene = ExtResource("7_coral")
 station_scene = ExtResource("8_station")
 goal_scene = ExtResource("9_goal")
+shard_scene = ExtResource("10_shard")
+shard_door_scene = ExtResource("11_door")
 room_chunks = Array[PackedScene]([ExtResource("room_arena"), ExtResource("room_cavern"), ExtResource("room_crossroads"), ExtResource("room_dead_end_grotto"), ExtResource("room_kelp_maze"), ExtResource("room_ledge_cave"), ExtResource("room_pillars"), ExtResource("room_shard_alcove"), ExtResource("room_tunnel_bend"), ExtResource("room_tunnel_straight")])
 boss_arena_rooms = Array[PackedScene]([ExtResource("room_boss_arena")])
 surface_depth_m = 200.0

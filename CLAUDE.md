@@ -29,11 +29,14 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   not all filled) with branches, at least one loop and dead ends, in any direction: start and
   exit can be anywhere (the exit may be close to the start). Explore while each player's
   survival pressure drains (Oxygen in the Ocean; stations in rooms refill it), collect the
-  Echo Shards (spread over different rooms; their spots are planned and validated, the shards
-  themselves come in the next step) and activate the ancient light in the exit room.
+  Echo Shards (`EchoShard`, in different rooms, hidden until a player is close or a pulse
+  passes over them) and activate the ancient light in the exit room. The exit stays locked
+  (empty sockets) until every shard is collected. Shortly after each pulse, the Echo alone
+  gets a faint arrow (`GoalEcho`) to the nearest shard (cyan), then to the exit (gold).
   The pressure meter carries over between the levels of a stage with a partial refill.
-- **Boss level** (last level of a stage): its exit room is a boss arena; beating the boss
-  completes the stage. The boss is a placeholder for now (`scenes/boss_placeholder.tscn`: a
+- **Boss level** (last level of a stage): its exit room is a boss arena, sealed by a
+  `ShardDoor` (rock with one socket per shard) until every shard is collected; beating the
+  boss completes the stage. The boss is a placeholder for now (`scenes/boss_placeholder.tscn`: a
   bigger creature with much more health; real bosses come later).
 - **Every attempt** (retries included) reshuffles creature, coral, station and shard spawn
   points with a new seed, so a retry never plays exactly the same.
@@ -42,6 +45,14 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   can be turned in quarter turns. Two neighbouring rooms connect when both have a doorway on
   the shared side; every other doorway is sealed with rock. One room per level is the
   **lockdown room** (`lockdown_cell`, on or near the way to the exit).
+- **Creatures** (`Creature`): WANDER / INVESTIGATE (pulses, sword noise, alerts) / CHASE /
+  SEARCH. They path with a navigation mesh the `LevelBuilder` bakes from every rock (doorways,
+  corners; the closed arena door is an obstacle until it opens). Chase speed = the chased
+  player's `max_speed` x a ratio per mode (Calm 0.82-0.88, Challenge 0.95-1.0, the higher end
+  at full Depth Awareness), so they are never clearly faster. Danger comes from the lunge
+  (within ~120 px: 0.3 s telegraphed wind-up with flaring eyes + sound, burst, recovery).
+  Losing sight: go where the player was heading and SEARCH there a few seconds. Entering
+  CHASE alerts creatures within `alert_radius` (they INVESTIGATE towards it).
 - **Downed**: a caught player can be revived by the partner. If both are downed at the same
   time, it depends on the mode (main menu, changeable later):
   **Calm** = restart the current level (and the meter drains slower);
@@ -155,6 +166,10 @@ linear float data and look much darker than the screen; convert each pixel with
     `godot --headless --path . -s res://tools/check_levels.gd`
   - `test_save.gd`: save/load test (uses its own test files in `user://`):
     `godot --headless --path . -s res://tools/test_save.gd`
+  - `test_creatures.tscn`: creature + shard test, run as a scene (needs the `Game` autoload):
+    chase speeds per mode/awareness, lunge, alerting, search, pathing on every level (with and
+    without navigation), shards, locked exit and arena door:
+    `godot --headless --path . --fixed-fps 60 res://tools/test_creatures.tscn`
   - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it
     and saves it as `worlds/<world>/proposed_<seed>.tres` to edit by hand.

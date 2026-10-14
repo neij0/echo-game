@@ -1,16 +1,24 @@
 class_name Creature
 extends CharacterBody2D
-## A hostile deep-sea creature: wanders slowly, investigates pulses and sword
-## noise it hears, and chases the nearest player it spots (close and in line of
-## sight, or pulsing nearby) for a few seconds before losing track. Its speed
-## scales with Depth Awareness. Touching a player hurts them (see PlayerHealth).
+## A hostile deep-sea creature: wanders slowly, investigates pulses, sword
+## noise and other creatures' alerts, and chases the nearest player it spots
+## (close and in line of sight, or pulsing nearby). It follows the level's
+## navigation mesh (baked by the LevelBuilder), so it goes through doorways and
+## around rocks. A chase never makes it clearly faster than the player: its
+## speed is a share of the chased player's top speed (per mode, a little higher
+## with Depth Awareness). Close in, it lunges after a short telegraphed wind-up
+## (eyes flare + sound), then needs a moment to recover. After losing sight it
+## goes to where the player was heading and SEARCHes there for a few seconds
+## before wandering again. Touching a player hurts them (see PlayerHealth).
 ## The Guardian's sword can damage it only while it is revealed (in the Echo's
 ## light, or shortly after a pulse front passed over it). A pulse front also
 ## makes it Exposed for a short time: a Guardian finisher on an Exposed creature
 ## kills it instantly. The unkillable type ignores damage and only staggers.
 ## Subclasses (LightHunter) override the targeting hooks below.
 
-enum State { WANDER, INVESTIGATE, CHASE }
+enum State { WANDER, INVESTIGATE, CHASE, SEARCH }
+## Phases of the close-range lunge (only during CHASE).
+enum Lunge { NONE, WIND_UP, BURST, RECOVER }
 enum Look { ROUND, SPIKY, ARROW }
 
 ## Emitted when the creature spots a player and starts chasing.
@@ -42,15 +50,75 @@ signal killed
 @export_flags_2d_physics var wall_mask: int = 1
 
 @export_group("Chase")
-## Seconds the creature follows the player's real position after spotting.
-@export var chase_time: float = 3.0
-## Speed while chasing: faster than normal, slower than the Echo's max speed
-## (260) and close to the Guardian's (230), so reacting quickly lets players escape.
-@export var chase_speed: float = 215.0
-## After losing track, seconds before it can spot a player by sight again
+## Chase speed = the chased player's max_speed times a ratio. The ratio goes
+## from the _min value (Depth Awareness 0) to the _max value (full awareness).
+## Calm mode: clearly slower than the players.
+@export_range(0.0, 1.5) var calm_chase_ratio_min: float = 0.82
+@export_range(0.0, 1.5) var calm_chase_ratio_max: float = 0.88
+## Challenge mode: about as fast as the players, never clearly faster.
+@export_range(0.0, 1.5) var challenge_chase_ratio_min: float = 0.95
+@export_range(0.0, 1.5) var challenge_chase_ratio_max: float = 1.0
+## Used for the chase speed when there is no chased player (rushing to the
+## last seen position).
+@export var reference_player_speed: float = 245.0
+## The chase keeps going while the player is this close and in line of sight.
+@export var lose_sight_distance: float = 600.0
+## Seconds it keeps following the player's real position after losing sight
+## (it "feels" where they went around the corner), then it SEARCHes.
+@export var chase_memory: float = 0.5
+## After a search ends, seconds before it can spot a player by sight again
 ## (a nearby pulse still gives the player away).
-@export var respot_cooldown: float = 2.0
+@export var respot_cooldown: float = 1.0
 @export var alert_volume_db: float = 0.0
+
+@export_group("Search")
+## After losing sight: goes to the last seen position plus the player's
+## velocity times this (where they were heading)...
+@export var search_lead_time: float = 0.5
+## ...then looks around there for this many seconds before wandering again.
+@export var search_time: float = 4.0
+## Search points are picked this far around that position.
+@export var search_radius: float = 220.0
+## Short stop at each search point.
+@export var search_pause: float = 0.35
+
+@export_group("Lunge")
+@export var lunge_enabled: bool = true
+## Starts a lunge when the chased player is this close (from the body's edge)
+## and in line of sight.
+@export var lunge_range: float = 120.0
+## Telegraph: seconds it coils (slows down, eyes flare, sound) before the burst.
+@export var lunge_wind_up: float = 0.3
+## Movement speed while coiling, as a share of its chase speed.
+@export_range(0.0, 1.0) var lunge_wind_up_speed_ratio: float = 0.15
+## The burst: speed and duration (distance = speed x time).
+@export var lunge_speed: float = 560.0
+@export var lunge_time: float = 0.2
+## Seconds after the burst when it drifts slowly (players can get away).
+@export var lunge_recovery: float = 0.6
+@export_range(0.0, 1.0) var lunge_recovery_speed_ratio: float = 0.2
+## Seconds after a recovery before the next lunge can start.
+@export var lunge_cooldown: float = 1.2
+## Eye brightness multiplier at the peak of the flare (1 = no flare).
+@export var lunge_eye_flare: float = 3.0
+@export var lunge_volume_db: float = 0.0
+
+@export_group("Pathing")
+## Follow the level's navigation mesh (doorways, corners). Off = straight line.
+@export var use_navigation: bool = true
+## A path point counts as reached this close.
+@export var path_point_reach: float = 24.0
+## Minimum seconds between two path requests.
+@export var path_refresh_time: float = 0.25
+## A new path is requested when the target moved this far from the last one.
+@export var path_retarget_distance: float = 40.0
+
+@export_group("Alerting")
+## Entering CHASE alerts the other creatures this close: they INVESTIGATE
+## towards this creature (the noise).
+@export var alert_radius: float = 700.0
+## Reacts to other creatures' alerts.
+@export var responds_to_alerts: bool = true
 
 @export_group("Obstacle Avoidance")
 ## Seconds to slide along a wall after bumping into it while investigating.
@@ -143,6 +211,24 @@ var _blocked_time: float = 0.0
 var _retargets: int = 0
 var _chased: Player
 var _chase_left: float = 0.0
+## Line of sight to the chased player at the last check.
+var _chase_in_sight: bool = false
+var _sight_check_left: float = 0.0
+var _last_seen: Vector2
+var _last_seen_velocity: Vector2 = Vector2.ZERO
+## Set by the StageManager: Challenge mode uses the challenge chase ratios.
+var challenge_mode: bool = false
+var _search_center: Vector2
+var _search_arrived: bool = false
+var _search_left: float = 0.0
+var lunge_phase: Lunge = Lunge.NONE
+var _lunge_left: float = 0.0
+var _lunge_cooldown_left: float = 0.0
+var _lunge_dir: Vector2 = Vector2.RIGHT
+var _path: PackedVector2Array = PackedVector2Array()
+var _path_index: int = 0
+var _path_target: Vector2
+var _path_refresh_left: float = 0.0
 var _respot_left: float = 0.0
 var _spot_timer: float = 0.0
 var health: int = 0
@@ -162,6 +248,7 @@ var _facing: Vector2 = Vector2.RIGHT
 
 @onready var _hitbox: Area2D = $Hitbox
 @onready var _alert: AudioStreamPlayer2D = $AlertSound
+@onready var _lunge_sound: AudioStreamPlayer2D = get_node_or_null("LungeSound") as AudioStreamPlayer2D
 @onready var _echo: CreatureEcho = $EchoLayer/Echo
 
 
@@ -172,6 +259,8 @@ func _ready() -> void:
 	add_to_group("sonar_targets")
 	add_to_group("creatures")
 	_alert.volume_db = alert_volume_db
+	if _lunge_sound:
+		_lunge_sound.volume_db = lunge_volume_db
 	health = max_health
 
 
@@ -191,6 +280,21 @@ func hear_noise(origin: Vector2, radius: float) -> void:
 	if _dying or state == State.CHASE or global_position.distance_to(origin) > radius:
 		return
 	_investigate(origin)
+
+
+## Called (via the "creatures" group) when another creature starts a chase:
+## creatures within its alert_radius investigate towards it.
+func hear_alert(source: Creature) -> void:
+	if source == self or _dying or not responds_to_alerts or state == State.CHASE:
+		return
+	if global_position.distance_to(source.global_position) > source.alert_radius:
+		return
+	_investigate(source.global_position)
+
+
+## Set by the StageManager when the level is built.
+func set_challenge_mode(enabled: bool) -> void:
+	challenge_mode = enabled
 
 
 ## True while the Guardian can hurt it: inside a revealing light (the Echo's)
@@ -235,6 +339,7 @@ func take_damage(amount: int, attacker: Player, stagger_time: float, knockback: 
 	if _dying:
 		return false
 	_stagger_left = stagger_time * stagger_scale
+	_end_lunge()
 	velocity = attacker.global_position.direction_to(global_position) * knockback
 	_flash_left = hit_flash_time
 	_echo.flash(self, body_radius)
@@ -280,26 +385,53 @@ func _investigate(origin: Vector2) -> void:
 	_pause_left = 0.0
 	_retargets = 0
 	_reset_detour()
+	_reset_path()
 
 
 func _spot(player: Player) -> void:
 	var was_chasing: bool = state == State.CHASE
 	state = State.CHASE
 	_chased = player
-	_chase_left = chase_time
+	_chase_left = chase_memory
+	_chase_in_sight = true
+	_sight_check_left = spot_check_interval
+	_last_seen = player.global_position
+	_last_seen_velocity = player.velocity
 	_pause_left = 0.0
 	_reset_detour()
+	_reset_path()
 	if not was_chasing:
 		_alert.play()
 		spotted.emit(player)
+		get_tree().call_group("creatures", "hear_alert", self)
 
 
-## Chase over: go to the last known position and investigate there.
+## Lost sight: go to where the player was heading and SEARCH there.
 func _lose_track() -> void:
-	var last_known: Vector2 = _chased.global_position if is_instance_valid(_chased) else target
+	var last_known: Vector2 = _last_seen + _last_seen_velocity * search_lead_time
 	_chased = null
+	_chase_in_sight = false
+	if lunge_phase == Lunge.WIND_UP:
+		_end_lunge()
+	state = State.SEARCH
+	target = last_known
+	_pulse_origin = last_known
+	_search_center = last_known
+	_search_arrived = false
+	_search_left = search_time
+	_retargets = 0
+	_pause_left = 0.0
+	_reset_detour()
+	_reset_path()
+
+
+## Search over: wander around where it gave up.
+func _end_search() -> void:
+	state = State.WANDER
+	_home = global_position
 	_respot_left = respot_cooldown
-	_investigate(last_known)
+	_reset_path()
+	_pick_wander_target()
 
 
 func _can_chase(player: Player) -> bool:
@@ -331,12 +463,117 @@ func _look_for_players(delta: float) -> void:
 func _update_chase(delta: float) -> void:
 	if state != State.CHASE:
 		return
+	if not is_instance_valid(_chased) or not _can_chase(_chased):
+		_lose_track()
+		return
+	# Line of sight check: while it sees the player, the chase is refreshed.
+	_sight_check_left -= delta
+	if _sight_check_left <= 0.0:
+		_sight_check_left = spot_check_interval
+		_chase_in_sight = _can_see(_chased, lose_sight_distance)
+		if _chase_in_sight:
+			_chase_left = chase_memory
+			_last_seen = _chased.global_position
+			_last_seen_velocity = _chased.velocity
 	_chase_left -= delta
-	if _chase_left <= 0.0 or not is_instance_valid(_chased) or not _can_chase(_chased):
+	if _chase_left <= 0.0:
 		_lose_track()
 		return
 	target = _chased.global_position
 	_pulse_origin = target
+
+
+func _update_search(delta: float) -> void:
+	if state != State.SEARCH or not _search_arrived:
+		return
+	_search_left -= delta
+	if _search_left <= 0.0:
+		_end_search()
+
+
+## True if the player is within max_distance and no rock is in between.
+func _can_see(player: Player, max_distance: float) -> bool:
+	if global_position.distance_to(player.global_position) > max_distance:
+		return false
+	var query := PhysicsRayQueryParameters2D.create(global_position, player.global_position, wall_mask)
+	return get_world_2d().direct_space_state.intersect_ray(query).is_empty()
+
+
+# --- Lunge --------------------------------------------------------------------
+
+## Runs the lunge phases. Returns true while the lunge controls the movement.
+func _update_lunge(delta: float) -> bool:
+	_lunge_cooldown_left = maxf(_lunge_cooldown_left - delta, 0.0)
+	if lunge_phase == Lunge.NONE:
+		if not _can_start_lunge():
+			return false
+		lunge_phase = Lunge.WIND_UP
+		_lunge_left = lunge_wind_up
+		if _lunge_sound:
+			_lunge_sound.play()
+	_lunge_left -= delta
+	match lunge_phase:
+		Lunge.WIND_UP:
+			if state != State.CHASE or not is_instance_valid(_chased):
+				_end_lunge()
+				return false
+			# Coil: nearly stop and keep turning towards the prey.
+			_lunge_dir = global_position.direction_to(_chased.global_position)
+			var coil: Vector2 = _lunge_dir * get_chase_speed() * lunge_wind_up_speed_ratio
+			velocity = velocity.lerp(coil, 1.0 - exp(-steering * 2.0 * delta))
+			if _lunge_left <= 0.0:
+				lunge_phase = Lunge.BURST
+				_lunge_left = lunge_time
+				velocity = _lunge_dir * lunge_speed
+				_hurt_overlapping_players()
+		Lunge.BURST:
+			velocity = _lunge_dir * lunge_speed
+			if _lunge_left <= 0.0:
+				lunge_phase = Lunge.RECOVER
+				_lunge_left = lunge_recovery
+		Lunge.RECOVER:
+			var drift: Vector2 = _lunge_dir * get_chase_speed() * lunge_recovery_speed_ratio
+			velocity = velocity.lerp(drift, 1.0 - exp(-steering * delta))
+			if _lunge_left <= 0.0:
+				_end_lunge()
+	return true
+
+
+func _can_start_lunge() -> bool:
+	if not lunge_enabled or state != State.CHASE or _lunge_cooldown_left > 0.0:
+		return false
+	if not is_instance_valid(_chased) or not _chase_in_sight:
+		return false
+	return global_position.distance_to(_chased.global_position) <= lunge_range + body_radius
+
+
+func _end_lunge() -> void:
+	if lunge_phase != Lunge.NONE:
+		_lunge_cooldown_left = lunge_cooldown
+	lunge_phase = Lunge.NONE
+	_lunge_left = 0.0
+
+
+## 0-1 brightness boost of the eyes: rises during the wind-up (the telegraph),
+## full during the burst, fades during the recovery.
+func get_lunge_flare() -> float:
+	match lunge_phase:
+		Lunge.WIND_UP:
+			return clampf(1.0 - _lunge_left / maxf(lunge_wind_up, 0.001), 0.25, 1.0)
+		Lunge.BURST:
+			return 1.0
+		Lunge.RECOVER:
+			return clampf(_lunge_left / maxf(lunge_recovery, 0.001), 0.0, 1.0) * 0.6
+	return 0.0
+
+
+## The burst also hits a player who was already touching it (body_entered
+## only fires on a new contact).
+func _hurt_overlapping_players() -> void:
+	if not _hitbox.monitoring:
+		return
+	for body: Node2D in _hitbox.get_overlapping_bodies():
+		_on_hitbox_body_entered(body)
 
 
 ## Called by SonarOverlay when a pulse front reaches this creature in line of sight.
@@ -350,17 +587,36 @@ func on_sonar_hit(_origin: Vector2) -> void:
 
 func get_state_name() -> String:
 	var state_name: String = State.keys()[state]
+	if lunge_phase != Lunge.NONE:
+		state_name += " +" + String(Lunge.keys()[lunge_phase])
 	if _detour_left > 0.0:
 		state_name += " +DETOUR"
 	return state_name
 
 
-func get_current_speed() -> float:
-	if state == State.CHASE:
-		return chase_speed
+func _get_awareness_ratio() -> float:
 	var meter: DepthAwareness = _get_awareness()
-	var ratio: float = meter.get_ratio() if meter else 0.0
-	return lerpf(min_speed, max_speed, ratio)
+	return meter.get_ratio() if meter else 0.0
+
+
+## Chase speed share of the player's speed for the current mode and awareness.
+func get_chase_ratio() -> float:
+	var awareness_ratio: float = _get_awareness_ratio()
+	if challenge_mode:
+		return lerpf(challenge_chase_ratio_min, challenge_chase_ratio_max, awareness_ratio)
+	return lerpf(calm_chase_ratio_min, calm_chase_ratio_max, awareness_ratio)
+
+
+## Speed while chasing (and while rushing to the last seen position).
+func get_chase_speed() -> float:
+	var player_speed: float = _chased.max_speed if is_instance_valid(_chased) else reference_player_speed
+	return player_speed * get_chase_ratio()
+
+
+func get_current_speed() -> float:
+	if state == State.CHASE or (state == State.SEARCH and not _search_arrived):
+		return get_chase_speed()
+	return lerpf(min_speed, max_speed, _get_awareness_ratio())
 
 
 func _physics_process(delta: float) -> void:
@@ -373,11 +629,15 @@ func _physics_process(delta: float) -> void:
 		return
 	_look_for_players(delta)
 	_update_chase(delta)
+	_update_search(delta)
+	if _update_lunge(delta):
+		move_and_slide()
+		return
 
 	var desired: Vector2 = Vector2.ZERO
 	if _pause_left > 0.0:
 		_pause_left -= delta
-	elif state != State.CHASE and global_position.distance_to(target) <= arrive_distance:
+	elif state != State.CHASE and (global_position.distance_to(target) <= arrive_distance or _is_path_finished()):
 		_on_target_reached()
 	else:
 		desired = _steer_direction(delta) * get_current_speed()
@@ -387,8 +647,11 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	if get_slide_collision_count() > 0:
-		if state == State.WANDER:
-			# Wandering: just pick another spot.
+		if not _path.is_empty():
+			# Following the navigation mesh: only give up after a long contact.
+			_on_blocked_on_path(delta)
+		elif state == State.WANDER:
+			# Wandering without a path: just pick another spot.
 			_pick_wander_target()
 		else:
 			_on_blocked_while_investigating(delta)
@@ -398,7 +661,56 @@ func _steer_direction(delta: float) -> Vector2:
 	if _detour_left > 0.0:
 		_detour_left -= delta
 		return _detour_dir
-	return global_position.direction_to(target)
+	return global_position.direction_to(_next_path_point(delta))
+
+
+# --- Pathing (navigation mesh baked by the LevelBuilder) -----------------------
+
+## The next point to steer to: along the navigation path to target, or target
+## itself when there is no path (navigation off or not ready yet).
+func _next_path_point(delta: float) -> Vector2:
+	if not use_navigation:
+		return target
+	_path_refresh_left -= delta
+	if _path_refresh_left <= 0.0 and (_path.is_empty() or _path_target.distance_to(target) > path_retarget_distance):
+		_request_path()
+	if _path.is_empty():
+		return target
+	while _path_index < _path.size() - 1 and global_position.distance_to(_path[_path_index]) <= path_point_reach:
+		_path_index += 1
+	return _path[_path_index]
+
+
+func _request_path() -> void:
+	_path_target = target
+	_path_refresh_left = path_refresh_time
+	_path = NavigationServer2D.map_get_path(get_world_2d().navigation_map, global_position, target, true)
+	_path_index = 0
+
+
+## The path ends short of the target (target inside rock): treat as reached.
+func _is_path_finished() -> bool:
+	if _path.is_empty() or _path_index < _path.size() - 1:
+		return false
+	return global_position.distance_to(_path[_path.size() - 1]) <= path_point_reach
+
+
+func _reset_path() -> void:
+	_path = PackedVector2Array()
+	_path_index = 0
+	_path_refresh_left = 0.0
+
+
+func _on_blocked_on_path(delta: float) -> void:
+	_blocked_time += delta
+	if _blocked_time < give_up_time or state == State.CHASE:
+		return
+	if state == State.WANDER:
+		_reset_detour()
+		_reset_path()
+		_pick_wander_target()
+	else:
+		_retarget_near_pulse()
 
 
 func _on_blocked_while_investigating(delta: float) -> void:
@@ -430,6 +742,7 @@ func _retarget_near_pulse() -> void:
 		_pick_wander_target()
 		return
 	target = _pulse_origin + Vector2.from_angle(randf() * TAU) * retarget_distance
+	_reset_path()
 
 
 func _reset_detour() -> void:
@@ -439,11 +752,18 @@ func _reset_detour() -> void:
 
 
 func _on_target_reached() -> void:
+	_reset_detour()
+	_reset_path()
+	if state == State.SEARCH:
+		# Look around the last known position until the search time runs out.
+		_search_arrived = true
+		_pause_left = search_pause
+		target = _search_center + Vector2.from_angle(randf() * TAU) * randf_range(0.3, 1.0) * search_radius
+		return
 	if state == State.INVESTIGATE:
 		# Keep wandering around where the pulse was heard.
 		_home = target
 		state = State.WANDER
-	_reset_detour()
 	_pause_left = wander_pause
 	_pick_wander_target()
 
@@ -594,7 +914,8 @@ func draw_shape(canvas: CanvasItem, fill: Color, outline: Color, with_eye: bool)
 	if has_outline:
 		canvas.draw_polyline(_closed(body), outline, outline_width, true)
 	if with_eye:
-		canvas.draw_circle(forward * body_radius * 0.55, body_radius * 0.18, _hdr(eye_color, eye_energy, 1.0))
+		var flare: float = lerpf(1.0, lunge_eye_flare, get_lunge_flare())
+		canvas.draw_circle(forward * body_radius * 0.55, body_radius * 0.18 * sqrt(flare), _hdr(eye_color, eye_energy * flare, 1.0))
 
 
 ## Wavy tendrils trailing behind the body.

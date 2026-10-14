@@ -4,6 +4,8 @@ extends Node
 ## players, gives every "world_listeners" node the WorldConfig, asks the
 ## LevelBuilder for each level, counts the stage stats, alerts creatures and
 ## awareness on every pulse.
+## - Every level has Echo Shards: the exit stays locked until all of them are
+##   collected (the ancient light, or the boss arena's door).
 ## - Activating the ancient light clears a level (short "Level cleared" screen,
 ##   the between-levels hook, then the next level).
 ## - The last level ends in a boss arena: beating the boss completes the stage,
@@ -19,6 +21,8 @@ signal level_started(level_index: int)
 ## screen will hook in here (see _between_levels).
 signal between_levels(next_level_index: int)
 signal stage_completed(stage_index: int)
+## Emitted when a level starts and whenever an Echo Shard is collected.
+signal shards_changed(collected: int, total: int)
 
 ## Used when game.tscn runs on its own (F6). Started from the menus, the Game
 ## autoload's current world and stage are used instead.
@@ -51,6 +55,8 @@ var stage_time: float = 0.0
 var pulses_used: int = 0
 var hits_taken: int = 0
 var creatures_killed: int = 0
+var shards_collected: int = 0
+var shards_total: int = 0
 ## Paused on a defeat / stage summary screen.
 var is_over: bool = false
 var _is_changing_level: bool = false
@@ -137,12 +143,39 @@ func _start_level(index: int) -> void:
 func _on_level_built(_index: int) -> void:
 	for creature: Creature in level_builder.get_creatures():
 		creature.killed.connect(_on_creature_killed)
+	get_tree().call_group("creatures", "set_challenge_mode", mode == SaveData.Mode.CHALLENGE)
 	var goal: AncientLight = level_builder.get_goal()
 	if goal:
 		goal.activated.connect(_on_ancient_light_activated)
 	var boss: Creature = level_builder.get_boss()
 	if boss:
 		boss.killed.connect(_on_boss_killed)
+	var shards: Array[EchoShard] = level_builder.get_shards()
+	for shard: EchoShard in shards:
+		shard.collected.connect(_on_shard_collected)
+	shards_collected = 0
+	shards_total = shards.size()
+	_update_exit_lock()
+
+
+func _on_shard_collected(_shard: EchoShard) -> void:
+	shards_collected += 1
+	_update_exit_lock()
+	if shards_collected >= shards_total:
+		level_builder.open_exit()
+
+
+## Shows the progress on the exit (sockets) and tells the HUD.
+func _update_exit_lock() -> void:
+	var goal: AncientLight = level_builder.get_goal()
+	if goal:
+		goal.set_shard_progress(shards_collected, shards_total)
+	var door: ShardDoor = level_builder.get_exit_door()
+	if door:
+		door.set_shard_progress(shards_collected, shards_total)
+		if shards_total == 0:
+			level_builder.open_exit()
+	shards_changed.emit(shards_collected, shards_total)
 
 
 func _on_pulse_emitted(origin: Vector2, player: Player) -> void:

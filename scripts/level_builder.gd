@@ -9,6 +9,9 @@ extends Node2D
 ## rooms, spread as far apart as possible. Every planned level is checked with
 ## the LayoutValidator (BFS) before it is built; if the spawns fail the check,
 ## the next spawn seed is tried.
+## Built levels get: the Echo Shards on the planned spots, a ShardDoor on the
+## boss arena's doorway (boss levels), and a navigation mesh baked from every
+## rock, so creatures can path through doorways and around corners.
 
 signal level_built(level_index: int)
 
@@ -25,6 +28,11 @@ signal level_built(level_index: int)
 ## so outside the playable area looks like rock fading into darkness instead
 ## of a hard black edge. Not a wall: no collision, no shadow, no sonar edge.
 @export var outer_rock_margin: float = 3000.0
+
+@export_group("Navigation")
+## Creature clearance used when baking the navigation mesh (about the radius
+## of a normal creature plus a small margin).
+@export var navigation_agent_radius: float = 26.0
 
 @export_group("Validation")
 @export var validator_cell_size: float = 20.0
@@ -56,6 +64,9 @@ class Layout:
 	## Echo Shard spots (one per room) and the rooms they are in.
 	var shards: Array[Vector2] = []
 	var shard_cells: Array[Vector2i] = []
+	## Boss levels: the rock that seals the arena's doorway until all shards
+	## are collected (this node's space).
+	var door_polygon: PackedVector2Array = PackedVector2Array()
 	## Reference point of the lockdown room (its Goal marker), if any.
 	var lockdown_point: Vector2
 	var has_lockdown: bool = false
@@ -88,6 +99,14 @@ var _player_spawns: Array[Vector2] = []
 ## Planned Echo Shard spots of the current level (spawned in a later step).
 var shard_spots: Array[Vector2] = []
 var _creatures: Array[Creature] = []
+## Where this level's creatures were spawned (global positions).
+var creature_spots: Array[Vector2] = []
+var _shards: Array[EchoShard] = []
+var _door: ShardDoor
+var _navigation: NavigationRegion2D
+## Rock outlines of the current level (navigation obstructions, door excluded).
+var _nav_obstacles: Array[PackedVector2Array] = []
+var _nav_bounds := Rect2()
 
 
 func _ready() -> void:
@@ -185,6 +204,12 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 		layout.problem = "start room needs Player markers, exit room a %s marker" % ("Boss" if layout.has_boss else "Goal")
 		return layout
 	layout.goal = exit_room.position + goal_markers[0].position
+	if layout.has_boss:
+		# The arena's doorway gets a door (the same shape as a seal).
+		for side: int in RoomGrid.SIDES:
+			if layout.links[definition.exit_cell].has(definition.exit_cell + RoomGrid.direction(side)):
+				layout.door_polygon = seal_polygon(definition.exit_cell, side)
+				break
 	var lockdown := layout.rooms.get(definition.lockdown_cell) as LevelChunk
 	if lockdown:
 		var markers: Array[Marker2D] = lockdown.get_spawn_markers("Goal")
@@ -331,21 +356,31 @@ func _instantiate(layout: Layout) -> void:
 	_player_spawns = layout.player_spawns
 	shard_spots = layout.shards
 
+	_shards.clear()
+	for position_value: Vector2 in layout.shards:
+		var shard := _spawn(world.shard_scene, position_value) as EchoShard
+		if shard:
+			_shards.append(shard)
 	for position_value: Vector2 in layout.corals:
 		_spawn(world.coral_scene, position_value)
 	for position_value: Vector2 in layout.stations:
 		_spawn(world.station_scene, position_value)
 	_creatures.clear()
+	creature_spots.clear()
 	for i: int in layout.creature_scenes.size():
+		creature_spots.append(to_global(layout.creature_positions[i]))
 		var creature := _spawn(layout.creature_scenes[i], layout.creature_positions[i]) as Creature
 		if creature:
 			_creatures.append(creature)
 	_goal = null
 	_boss = null
+	_door = null
 	if layout.has_boss:
 		_boss = _spawn_boss(layout.goal)
+		_add_door(layout.door_polygon, floor_color.lightened(world.rock_fill_lift))
 	else:
 		_goal = _spawn(world.goal_scene, layout.goal) as AncientLight
+	_add_navigation(layout)
 	# The sonar overlay samples the new rock outlines.
 	get_tree().call_group("sonar_overlay", "rebuild_samples")
 
@@ -367,6 +402,64 @@ func _add_outer_rock(layout: Layout, rock_color: Color) -> void:
 	_level.add_child(rock)
 
 
+func _add_door(door_polygon: PackedVector2Array, rock_color: Color) -> void:
+	if door_polygon.is_empty() or world.shard_door_scene == null:
+		return
+	_door = world.shard_door_scene.instantiate() as ShardDoor
+	# Before _ready: RockWall builds its shapes from these.
+	_door.polygon = door_polygon
+	_door.color = rock_color
+	_level.add_child(_door)
+
+
+## Bakes the creatures' navigation mesh: the whole grid is walkable except the
+## rock (room walls, seals and the closed arena door), shrunk by the agent radius.
+func _add_navigation(layout: Layout) -> void:
+	_nav_obstacles.clear()
+	for chunk: LevelChunk in layout.chunks:
+		_nav_obstacles.append_array(chunk.get_wall_polygons())
+	_nav_obstacles.append_array(layout.seals)
+	_nav_bounds = Rect2()
+	for chunk: LevelChunk in layout.chunks:
+		var room := Rect2(chunk.position, Vector2.ONE * world.room_size)
+		_nav_bounds = room if not _nav_bounds.has_area() else _nav_bounds.merge(room)
+	_navigation = NavigationRegion2D.new()
+	_navigation.name = "Navigation"
+	_navigation.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _door_obstacle())
+	_level.add_child(_navigation)
+
+
+func _door_obstacle() -> PackedVector2Array:
+	return _door.polygon if _door and not _door.is_open else PackedVector2Array()
+
+
+## A navigation mesh over bounds with every obstacle cut out (extra = one more
+## obstacle, e.g. the closed door; may be empty).
+func bake_navigation(obstacles: Array[PackedVector2Array], bounds: Rect2, extra: PackedVector2Array) -> NavigationPolygon:
+	var source := NavigationMeshSourceGeometryData2D.new()
+	source.add_traversable_outline(PackedVector2Array([bounds.position, Vector2(bounds.end.x, bounds.position.y),
+		bounds.end, Vector2(bounds.position.x, bounds.end.y)]))
+	for polygon: PackedVector2Array in obstacles:
+		source.add_obstruction_outline(polygon)
+	if not extra.is_empty():
+		source.add_obstruction_outline(extra)
+	var navigation := NavigationPolygon.new()
+	navigation.agent_radius = navigation_agent_radius
+	NavigationServer2D.bake_from_source_geometry_data(navigation, source)
+	return navigation
+
+
+## All shards collected: unlock the ancient light, or open the arena door (and
+## let the creatures path through it).
+func open_exit() -> void:
+	if _goal:
+		_goal.set_shard_progress(_goal.shards_needed, _goal.shards_needed)
+	if _door and not _door.is_open:
+		_door.open()
+		if is_instance_valid(_navigation):
+			_navigation.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, PackedVector2Array())
+
+
 func _spawn_boss(at: Vector2) -> Creature:
 	var boss := _definition.boss.instantiate() as Creature
 	if boss == null:
@@ -376,6 +469,8 @@ func _spawn_boss(at: Vector2) -> Creature:
 	if _definition.boss_max_health > 0:
 		boss.max_health = _definition.boss_max_health
 	boss.position = at
+	# The Echo's echo points to it once the arena door is open.
+	boss.add_to_group("level_exit")
 	_level.add_child(boss)
 	return boss
 
@@ -464,6 +559,16 @@ func get_goal() -> AncientLight:
 ## The boss (null in a normal level).
 func get_boss() -> Creature:
 	return _boss
+
+
+## The boss arena's door (null in a normal level).
+func get_exit_door() -> ShardDoor:
+	return _door
+
+
+## The Echo Shards of the current level (collected ones are freed).
+func get_shards() -> Array[EchoShard]:
+	return _shards
 
 
 func get_creatures() -> Array[Creature]:

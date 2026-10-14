@@ -1,17 +1,18 @@
 class_name LightHunter
 extends Creature
 ## A creature drawn to light. It hunts the Echo (the player whose light reveals)
-## and ignores the Guardian unless he hits it. It is fast while the Echo stands
-## in a lit area (a lit coral, the ancient light) or right after she pulses, and
-## slow while she stays in the dark. Low health, so the Guardian can save her.
+## and ignores the Guardian unless he hits it. It moves at the full chase speed
+## (Creature, per mode) while the Echo stands in a lit area (a lit coral, the
+## ancient light) or right after she pulses, and slowly while she stays in the
+## dark. Low health, so the Guardian can save her. Sound and other creatures'
+## alerts do not interest it.
 
 @export_group("Light Hunter")
 ## The hunter senses the Echo from this far (through rocks: it follows light).
 @export var sense_range: float = 1100.0
-## Speed towards the Echo while she is lit or just pulsed (Echo max is 260).
-@export var lit_speed: float = 240.0
-## Speed towards the Echo while she stays in the dark.
-@export var dark_speed: float = 95.0
+## Speed towards the Echo while she stays in the dark, as a share of the
+## chase speed (while she is lit or just pulsed it uses the full chase speed).
+@export_range(0.0, 1.0) var dark_speed_ratio: float = 0.4
 ## Seconds of high speed after the Echo pulses (if it is within sense_range).
 @export var pulse_frenzy_time: float = 2.5
 ## Seconds it turns on the Guardian after he hits it.
@@ -62,6 +63,10 @@ func hear_noise(_origin: Vector2, _radius: float) -> void:
 	pass
 
 
+func hear_alert(_source: Creature) -> void:
+	pass
+
+
 func _look_for_players(_delta: float) -> void:
 	var prey: Player = _provoked_by if _provoked_by and _can_chase(_provoked_by) else null
 	if prey == null:
@@ -72,15 +77,13 @@ func _look_for_players(_delta: float) -> void:
 		return
 	if state != State.CHASE or _chased != prey:
 		_spot(prey)
-	# Keep the chase alive while the prey is sensed; it ends chase_time after.
-	_chase_left = chase_time
+	# Keep the chase alive while the prey is sensed (through rock too).
+	_chase_left = chase_memory
 
 
 func get_current_speed() -> float:
-	if state == State.CHASE and _chased:
-		if _chased == _provoked_by:
-			return chase_speed
-		return lit_speed if is_echo_lit() else dark_speed
+	if state == State.CHASE and _chased and _chased != _provoked_by and not is_echo_lit():
+		return get_chase_speed() * dark_speed_ratio
 	return super()
 
 

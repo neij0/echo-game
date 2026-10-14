@@ -123,6 +123,24 @@ KILL_RING_DECAY = 0.45
 KILL_RING_GAIN = 0.45
 KILL_PEAK = 0.9
 
+# --- Lunge: low rising hiss + growl during the creature's 0.3 s wind-up -----
+LUNGE_LENGTH = 0.38
+LUNGE_FREQ_START = 90.0     # Hz, the growl rises from here...
+LUNGE_FREQ_END = 260.0      # ...to here while the creature coils
+LUNGE_HARMONICS = [(1.0, 1.0), (2.0, 0.6), (3.0, 0.3)]
+LUNGE_HISS = 0.45           # amount of breathy noise, swelling with the growl
+LUNGE_HISS_SMOOTH = 0.6     # 0-1 low-pass of the hiss, higher = darker
+LUNGE_SWELL = 0.3           # seconds of the swell, then a quick cut
+LUNGE_PEAK = 0.85
+
+# --- Shard: a bright glassy chime when an Echo Shard is collected -----------
+SHARD_LENGTH = 1.2
+SHARD_ROOT = 1046.5         # Hz (C6)
+SHARD_PARTIALS = [(1.0, 1.0), (1.5, 0.55), (2.0, 0.35), (3.01, 0.15)]  # a bright fifth + octave
+SHARD_ARPEGGIO = 0.05       # seconds between the partials starting (a tiny sparkle)
+SHARD_DECAY = 0.35          # seconds, time constant of each partial
+SHARD_PEAK = 0.6
+
 RANDOM_SEED = 7
 
 
@@ -380,6 +398,42 @@ def make_exposed_kill() -> list[float]:
     return normalize(samples, KILL_PEAK)
 
 
+def make_lunge() -> list[float]:
+    rng = random.Random(RANDOM_SEED + 7)
+    count = int(LUNGE_LENGTH * SAMPLE_RATE)
+    samples = []
+    phase = 0.0
+    hiss = 0.0
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        k = min(t / LUNGE_SWELL, 1.0)
+        freq = LUNGE_FREQ_START + (LUNGE_FREQ_END - LUNGE_FREQ_START) * k * k
+        phase += 2.0 * math.pi * freq / SAMPLE_RATE
+        tone = sum(gain * math.sin(phase * ratio) for ratio, gain in LUNGE_HARMONICS)
+        hiss = hiss + (1.0 - LUNGE_HISS_SMOOTH) * (rng.uniform(-1.0, 1.0) - hiss)
+        # Swells while coiling, then cuts off fast (the burst itself is silent).
+        env = k * k if t < LUNGE_SWELL else max(0.0, 1.0 - (t - LUNGE_SWELL) / (LUNGE_LENGTH - LUNGE_SWELL))
+        samples.append((tone + hiss * LUNGE_HISS * 3.0 * k) * env)
+    return normalize(samples, LUNGE_PEAK)
+
+
+def make_shard() -> list[float]:
+    count = int(SHARD_LENGTH * SAMPLE_RATE)
+    samples = []
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        value = 0.0
+        for i, (ratio, gain) in enumerate(SHARD_PARTIALS):
+            start = i * SHARD_ARPEGGIO
+            if t >= start:
+                value += gain * math.sin(2.0 * math.pi * SHARD_ROOT * ratio * (t - start)) * envelope(t - start, 0.003, SHARD_DECAY)
+        samples.append(value)
+    fade_count = int(0.1 * SAMPLE_RATE)
+    for k in range(fade_count):
+        samples[count - fade_count + k] *= 1.0 - k / fade_count
+    return normalize(samples, SHARD_PEAK)
+
+
 def write_wav(path: Path, samples: list[float]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as file:
@@ -402,3 +456,5 @@ if __name__ == "__main__":
     write_wav(OUTPUT_DIR / "sword_swing.wav", make_swing())
     write_wav(OUTPUT_DIR / "sword_hit.wav", make_hit())
     write_wav(OUTPUT_DIR / "exposed_kill.wav", make_exposed_kill())
+    write_wav(OUTPUT_DIR / "creature_lunge.wav", make_lunge())
+    write_wav(OUTPUT_DIR / "shard_collect.wav", make_shard())

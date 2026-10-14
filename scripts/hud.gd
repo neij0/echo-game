@@ -1,8 +1,8 @@
 class_name Hud
 extends CanvasLayer
-## Awareness bar, a debug label (stage, level, mode, seed, abilities, creatures), and one
-## PlayerStatus (depth + pressure meter) per registered player. Never holds a
-## single fixed player.
+## Awareness bar, the Echo Shard counter, a debug label (stage, level, mode,
+## seed, abilities, creatures, chase speeds), and one PlayerStatus (depth +
+## pressure meter) per registered player. Never holds a single fixed player.
 
 @export var stage_manager: StageManager
 @export var awareness: DepthAwareness
@@ -13,11 +13,18 @@ extends CanvasLayer
 @export var warning_color: Color = Color(1.0, 0.15, 0.15)
 @export var background_color: Color = Color(0.1, 0.12, 0.18, 0.85)
 
+@export_group("Shard Counter")
+@export var shard_counter_position: Vector2 = Vector2(340.0, 18.0)
+@export var shard_counter_color: Color = Color(0.55, 0.95, 1.0)
+## Colour once every shard is collected.
+@export var shard_done_color: Color = Color(1.0, 0.82, 0.35)
+
 @onready var _bar: ProgressBar = $AwarenessBar
 @onready var _debug_label: Label = $DebugLabel
 @onready var _statuses: VBoxContainer = $PlayerStatuses
 
 var _fill_style: StyleBoxFlat
+var _shard_label: Label
 
 
 func _ready() -> void:
@@ -31,8 +38,23 @@ func _ready() -> void:
 	background_style.bg_color = background_color
 	_bar.add_theme_stylebox_override("background", background_style)
 
+	_shard_label = Label.new()
+	_shard_label.name = "ShardCounter"
+	_shard_label.position = shard_counter_position
+	add_child(_shard_label)
+
 	if stage_manager:
 		stage_manager.player_registered.connect(_on_player_registered)
+		stage_manager.shards_changed.connect(_on_shards_changed)
+
+
+func _on_shards_changed(collected: int, total: int) -> void:
+	if total > 0 and collected >= total:
+		_shard_label.text = Game.text("arena_open" if stage_manager.is_boss_level() else "exit_open")
+		_shard_label.add_theme_color_override("font_color", shard_done_color)
+	else:
+		_shard_label.text = Game.text("shards") % [collected, total]
+		_shard_label.add_theme_color_override("font_color", shard_counter_color)
 
 
 func _on_player_registered(player: Player) -> void:
@@ -68,14 +90,18 @@ func _process(_delta: float) -> void:
 		])
 	lines.append("Awareness: %.1f / %.0f" % [awareness.value, awareness.max_value])
 	if stage_manager:
+		lines.append("Shards: %d / %d" % [stage_manager.shards_collected, stage_manager.shards_total])
+	if stage_manager:
 		for player: Player in stage_manager.players:
 			lines.append("P%d %s: %s" % [player.player_number, player.display_name, _ability_text(player)])
 			var nearest: Creature = _nearest_creature(creatures, player.global_position)
 			if nearest:
-				lines.append("P%d nearest creature: %s (%d px)" % [
+				lines.append("P%d nearest creature: %s (%d px), chase %d px/s vs player %d px/s" % [
 					player.player_number,
 					nearest.get_state_name(),
 					roundi(nearest.global_position.distance_to(player.global_position)),
+					roundi(player.max_speed * nearest.get_chase_ratio()),
+					roundi(player.max_speed),
 				])
 	lines.append("Creatures: " + " / ".join(state_counts))
 	_debug_label.text = "\n".join(lines)

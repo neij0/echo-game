@@ -17,6 +17,10 @@ extends Resource
 @export var coral_scene: PackedScene
 @export var station_scene: PackedScene
 @export var goal_scene: PackedScene
+## One Echo Shard (EchoShard), placed on the level's planned shard spots.
+@export var shard_scene: PackedScene
+## The sealed doorway of a boss arena (ShardDoor), opened by the shards.
+@export var shard_door_scene: PackedScene
 
 @export_group("Rooms")
 ## Size of every room chunk (a square, in pixels). All rooms of a world share it.

@@ -3,6 +3,8 @@ extends Node2D
 ## Two faint glowing eyes that fade in when the hidden creature is very close to
 ## the nearest player (no pulse needed), or faintly when it is a silhouette in
 ## the Echo's light (Creature.silhouette_ratio), looking where it is moving.
+## They flare up (brighter, bigger, fully visible) during the creature's lunge
+## wind-up: the warning that a lunge is coming.
 ## Must live on a CanvasLayer with follow_viewport_enabled, so the world's
 ## CanvasModulate darkness does not dim it.
 
@@ -34,10 +36,16 @@ extends Node2D
 ## full reveal and the edge of her light): this share of max_alpha at full
 ## silhouette, so they stay faint.
 @export_range(0.0, 1.0) var silhouette_eye_share: float = 0.45
+## Lunge flare (Creature.get_lunge_flare): brightness and size multipliers at
+## its peak, and its colour.
+@export var flare_energy: float = 3.0
+@export var flare_size: float = 1.6
+@export var flare_color: Color = Color(1.0, 0.45, 0.25)
 
 var _alpha: float = 0.0
 var _visible_target: float = 0.0
 var _facing: Vector2 = Vector2.RIGHT
+var _flare: float = 0.0
 
 
 func _physics_process(_delta: float) -> void:
@@ -64,14 +72,20 @@ func _process(delta: float) -> void:
 	if creature.velocity.length() > 1.0:
 		_facing = creature.velocity.normalized()
 	_alpha = move_toward(_alpha, _visible_target, fade_speed * delta)
+	# The flare shows at once (no fade-in): it is a warning.
+	_flare = creature.get_lunge_flare()
+	_alpha = maxf(_alpha, _flare)
 	queue_redraw()
 
 
 func _draw() -> void:
 	if _alpha <= 0.0:
 		return
-	var glow := Color(color.r * energy, color.g * energy, color.b * energy, _alpha * max_alpha)
+	var tint: Color = color.lerp(flare_color, _flare)
+	var boost: float = energy * lerpf(1.0, flare_energy, _flare)
+	var glow := Color(tint.r * boost, tint.g * boost, tint.b * boost, minf(_alpha * lerpf(max_alpha, 1.0, _flare), 1.0))
+	var radius: float = eye_radius * lerpf(1.0, flare_size, _flare)
 	var side: Vector2 = _facing.orthogonal() * eye_spacing * 0.5
 	var forward: Vector2 = _facing * eye_forward
-	draw_circle(forward + side, eye_radius, glow)
-	draw_circle(forward - side, eye_radius, glow)
+	draw_circle(forward + side, radius, glow)
+	draw_circle(forward - side, radius, glow)
