@@ -1,0 +1,48 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/level_chunk.gd" id="1_chunk"]
+[ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
+
+[node name="RoomShardAlcove" type="Node2D"]
+script = ExtResource("1_chunk")
+openings = 5
+
+[node name="Floor" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, 0, 1600, 0, 1600, 1600, 0, 1600)
+
+[node name="Rock1" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1600, 1600, 1600, 0, 980, 0, 980, 180, 950, 180, 950, 268, 1043, 478, 1094, 516, 1120, 547, 1142, 582, 1157, 620, 1167, 659, 1170, 700, 1167, 741, 1157, 780, 1142, 818, 1120, 853, 1094, 884, 1063, 910, 1032, 929, 969, 1126, 957, 1420, 980, 1420, 980, 1600)
+
+[node name="Rock2" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(0, 0, 0, 1600, 620, 1600, 620, 1420, 657, 1420, 670, 1094, 677, 1055, 730, 887, 700, 853, 678, 818, 663, 780, 653, 740, 484, 740, 461, 788, 428, 821, 386, 843, 363, 848, 317, 848, 272, 834, 234, 806, 219, 788, 197, 746, 190, 700, 197, 654, 219, 612, 252, 579, 294, 557, 317, 552, 363, 552, 408, 566, 428, 579, 461, 612, 484, 660, 653, 660, 663, 620, 678, 582, 700, 547, 730, 513, 653, 331, 650, 180, 620, 180, 620, 0)
+
+[node name="Spawns" type="Node2D" parent="."]
+
+[node name="Player1" type="Marker2D" parent="Spawns"]
+position = Vector2(900, 640)
+
+[node name="Player2" type="Marker2D" parent="Spawns"]
+position = Vector2(980, 700)
+
+[node name="Goal" type="Marker2D" parent="Spawns"]
+position = Vector2(910, 760)
+
+[node name="Creature1" type="Marker2D" parent="Spawns"]
+position = Vector2(810, 330)
+
+[node name="Creature2" type="Marker2D" parent="Spawns"]
+position = Vector2(820, 1180)
+
+[node name="Creature3" type="Marker2D" parent="Spawns"]
+position = Vector2(1080, 820)
+
+[node name="Shard1" type="Marker2D" parent="Spawns"]
+position = Vector2(300, 700)
+
+[node name="Station1" type="Marker2D" parent="Spawns"]
+position = Vector2(360, 790)
+
+[node name="Coral1" type="Marker2D" parent="Spawns"]
+position = Vector2(1000, 560)

@@ -1,0 +1,44 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/level_chunk.gd" id="1_chunk"]
+[ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
+
+[node name="RoomBossArena" type="Node2D"]
+script = ExtResource("1_chunk")
+openings = 1
+is_boss_arena = true
+
+[node name="Floor" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, 0, 1600, 0, 1600, 1600, 0, 1600)
+
+[node name="Rock1" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(0, 0, 0, 1600, 1600, 1600, 1600, 0, 980, 0, 980, 288, 1081, 328, 1164, 378, 1238, 442, 1302, 516, 1352, 599, 1390, 688, 1412, 783, 1420, 880, 1412, 977, 1390, 1072, 1352, 1161, 1302, 1244, 1238, 1318, 1164, 1382, 1081, 1432, 992, 1470, 897, 1492, 800, 1500, 703, 1492, 608, 1470, 519, 1432, 436, 1382, 362, 1318, 298, 1244, 248, 1161, 210, 1072, 188, 977, 180, 880, 188, 783, 210, 688, 248, 599, 298, 516, 362, 442, 436, 378, 519, 328, 620, 288, 620, 0)
+
+[node name="Rock2" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(559, 991, 556, 972, 542, 958, 531, 957, 527, 947, 519, 943, 511, 932, 500, 940, 473, 947, 447, 973, 432, 978, 441, 991, 440, 1000, 432, 1011, 443, 1019, 447, 1027, 443, 1042, 458, 1042, 471, 1058, 491, 1059, 500, 1051, 509, 1059, 535, 1049, 542, 1042, 542, 1031, 553, 1027, 557, 1019, 568, 1011, 554, 1000)
+
+[node name="Rock3" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1165, 1010, 1155, 972, 1142, 958, 1141, 944, 1109, 946, 1100, 940, 1091, 941, 1083, 948, 1073, 947, 1053, 953, 1041, 991, 1043, 1019, 1058, 1042, 1065, 1049, 1075, 1049, 1081, 1057, 1091, 1059, 1100, 1050, 1109, 1059, 1129, 1057, 1142, 1042, 1158, 1042, 1153, 1027)
+
+[node name="Spawns" type="Node2D" parent="."]
+
+[node name="Player1" type="Marker2D" parent="Spawns"]
+position = Vector2(740, 420)
+
+[node name="Player2" type="Marker2D" parent="Spawns"]
+position = Vector2(860, 420)
+
+[node name="Goal" type="Marker2D" parent="Spawns"]
+position = Vector2(800, 880)
+
+[node name="Boss" type="Marker2D" parent="Spawns"]
+position = Vector2(800, 1000)
+
+[node name="Coral1" type="Marker2D" parent="Spawns"]
+position = Vector2(430, 820)
+
+[node name="Coral2" type="Marker2D" parent="Spawns"]
+position = Vector2(1170, 820)

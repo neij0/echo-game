@@ -3,6 +3,8 @@ extends RefCounted
 ## Grid flood fill (BFS) over a level's wall polygons, before anything is added
 ## to the world: is every important point reachable from the start for a body
 ## of the players' size, and is the level sealed (no way out into the void)?
+## After a flood it can also measure walking distances between points
+## (distances_from + distance_to), e.g. start -> all shards -> exit.
 
 ## Size of one grid cell in pixels.
 var cell_size: float = 20.0
@@ -12,6 +14,9 @@ var clearance: float = 16.0
 var border: float = 200.0
 ## A target counts as reached if a reached cell is within this many cells.
 var target_cells: int = 2
+## Path costs: a straight step and a diagonal step (about 10 * sqrt(2)).
+const STRAIGHT_COST: int = 10
+const DIAGONAL_COST: int = 14
 
 var _origin: Vector2
 var _columns: int = 0
@@ -119,3 +124,82 @@ func _rasterize(polygon: PackedVector2Array) -> void:
 					var center := Vector2(_origin.x + (x + 0.5) * cell_size, _origin.y + (y + 0.5) * cell_size)
 					if Geometry2D.get_closest_point_to_segment(center, a, b).distance_to(center) < clearance:
 						_blocked[index] = 1
+
+
+## Walking distance (in path cost units, see distance_to) from point to every
+## reached cell: 8 directions, no cutting corners past rock. Needs flood() first.
+## Uses buckets per cost (Dial's algorithm), so it stays fast on big levels.
+func distances_from(point: Vector2) -> PackedInt32Array:
+	var dist := PackedInt32Array()
+	dist.resize(_columns * _rows)
+	dist.fill(-1)
+	var start: int = _nearest_reached(point)
+	if start < 0:
+		return dist
+	var bucket_count: int = DIAGONAL_COST + 1
+	var buckets: Array[PackedInt32Array] = []
+	for i: int in bucket_count:
+		buckets.append(PackedInt32Array())
+	dist[start] = 0
+	buckets[0].append(start)
+	var current: int = 0
+	var pending: int = 1
+	var offsets: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+		Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]
+	while pending > 0:
+		var slot: int = current % bucket_count
+		while not buckets[slot].is_empty():
+			var index: int = buckets[slot][buckets[slot].size() - 1]
+			buckets[slot].resize(buckets[slot].size() - 1)
+			pending -= 1
+			if dist[index] != current:
+				continue
+			var x: int = index % _columns
+			var y: int = index / _columns
+			for offset: Vector2i in offsets:
+				var nx: int = x + offset.x
+				var ny: int = y + offset.y
+				if nx < 0 or ny < 0 or nx >= _columns or ny >= _rows:
+					continue
+				var next: int = ny * _columns + nx
+				if _reached[next] == 0:
+					continue
+				var cost: int = STRAIGHT_COST
+				if offset.x != 0 and offset.y != 0:
+					# No cutting corners: both straight neighbours must be free.
+					if _reached[y * _columns + nx] == 0 or _reached[ny * _columns + x] == 0:
+						continue
+					cost = DIAGONAL_COST
+				var total: int = current + cost
+				if dist[next] < 0 or total < dist[next]:
+					dist[next] = total
+					buckets[total % bucket_count].append(next)
+					pending += 1
+		current += 1
+	return dist
+
+
+## Distance in pixels to point, from a distances_from() result (-1 = unreachable).
+func distance_to(dist: PackedInt32Array, point: Vector2) -> float:
+	var index: int = _nearest_reached(point)
+	if index < 0 or dist[index] < 0:
+		return -1.0
+	return dist[index] * cell_size / STRAIGHT_COST
+
+
+## The reached cell closest to point (within target_cells), or -1.
+func _nearest_reached(point: Vector2) -> int:
+	var cx: int = int((point.x - _origin.x) / cell_size)
+	var cy: int = int((point.y - _origin.y) / cell_size)
+	var best: int = -1
+	var best_distance: int = 1000000
+	for oy: int in range(-target_cells, target_cells + 1):
+		for ox: int in range(-target_cells, target_cells + 1):
+			var x: int = cx + ox
+			var y: int = cy + oy
+			if x >= 0 and y >= 0 and x < _columns and y < _rows and _reached[y * _columns + x] == 1:
+				var d: int = ox * ox + oy * oy
+				if d < best_distance:
+					best_distance = d
+					best = y * _columns + x
+	return best

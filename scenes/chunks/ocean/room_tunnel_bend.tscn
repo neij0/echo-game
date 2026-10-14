@@ -1,0 +1,48 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/level_chunk.gd" id="1_chunk"]
+[ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
+
+[node name="RoomTunnelBend" type="Node2D"]
+script = ExtResource("1_chunk")
+openings = 3
+
+[node name="Floor" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, 0, 1600, 0, 1600, 1600, 0, 1600)
+
+[node name="Rock1" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1600, 0, 980, 0, 980, 180, 905, 180, 905, 260, 900, 290, 887, 318, 725, 562, 774, 596, 792, 617, 816, 666, 823, 693, 823, 747, 816, 774, 800, 809, 1077, 850, 1293, 712, 1321, 699, 1420, 695, 1420, 620, 1600, 620)
+
+[node name="Rock2" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(0, 0, 0, 1600, 1600, 1600, 1600, 980, 1420, 980, 1420, 905, 1381, 905, 1157, 1048, 1109, 1065, 684, 1004, 656, 995, 625, 973, 480, 1171, 498, 1220, 498, 1260, 486, 1299, 462, 1332, 429, 1356, 390, 1368, 370, 1370, 350, 1368, 311, 1356, 278, 1332, 254, 1299, 242, 1260, 240, 1240, 246, 1200, 265, 1164, 278, 1148, 311, 1124, 350, 1112, 387, 1111, 563, 871, 526, 844, 508, 823, 494, 799, 477, 747, 477, 693, 484, 666, 508, 618, 495, 559, 500, 529, 513, 502, 695, 228, 695, 180, 620, 180, 620, 0)
+
+[node name="Spawns" type="Node2D" parent="."]
+
+[node name="Player1" type="Marker2D" parent="Spawns"]
+position = Vector2(620, 700)
+
+[node name="Player2" type="Marker2D" parent="Spawns"]
+position = Vector2(700, 740)
+
+[node name="Goal" type="Marker2D" parent="Spawns"]
+position = Vector2(660, 720)
+
+[node name="Creature1" type="Marker2D" parent="Spawns"]
+position = Vector2(800, 280)
+
+[node name="Creature2" type="Marker2D" parent="Spawns"]
+position = Vector2(1130, 950)
+
+[node name="Creature3" type="Marker2D" parent="Spawns"]
+position = Vector2(1380, 800)
+
+[node name="Shard1" type="Marker2D" parent="Spawns"]
+position = Vector2(360, 1260)
+
+[node name="Station1" type="Marker2D" parent="Spawns"]
+position = Vector2(430, 1180)
+
+[node name="Coral1" type="Marker2D" parent="Spawns"]
+position = Vector2(720, 640)

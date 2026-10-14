@@ -1,44 +1,132 @@
-[gd_resource type="Resource" script_class="LevelDefinition" load_steps=20 format=3]
+[gd_resource type="Resource" script_class="LevelDefinition" load_steps=36 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_definition.gd" id="1_level"]
 [ext_resource type="Script" path="res://scripts/creature_spawn.gd" id="2_spawn"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/start_a.tscn" id="chunk_start_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/corridor_b.tscn" id="chunk_corridor_b"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/narrow_b.tscn" id="chunk_narrow_b"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/cave_b.tscn" id="chunk_cave_b"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/narrow_a.tscn" id="chunk_narrow_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/cave_a.tscn" id="chunk_cave_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/corridor_a.tscn" id="chunk_corridor_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/boss_arena_a.tscn" id="chunk_boss_arena_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/pocket_a.tscn" id="chunk_pocket_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/pocket_b.tscn" id="chunk_pocket_b"]
-[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_creature"]
-[ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_hunter"]
-[ext_resource type="PackedScene" path="res://scenes/creature_unkillable.tscn" id="creature_unkillable"]
+[ext_resource type="Script" path="res://scripts/room_placement.gd" id="3_room"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_arena.tscn" id="room_arena"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_boss_arena.tscn" id="room_boss_arena"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_cavern.tscn" id="room_cavern"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_crossroads.tscn" id="room_crossroads"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_dead_end_grotto.tscn" id="room_dead_end_grotto"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_kelp_maze.tscn" id="room_kelp_maze"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_ledge_cave.tscn" id="room_ledge_cave"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_pillars.tscn" id="room_pillars"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_shard_alcove.tscn" id="room_shard_alcove"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_tunnel_bend.tscn" id="room_tunnel_bend"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_tunnel_straight.tscn" id="room_tunnel_straight"]
+[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_0"]
+[ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_1"]
+[ext_resource type="PackedScene" path="res://scenes/creature_unkillable.tscn" id="creature_2"]
 [ext_resource type="PackedScene" path="res://scenes/boss_placeholder.tscn" id="boss"]
 
-[sub_resource type="Resource" id="Spawn_creature"]
+[sub_resource type="Resource" id="Spawn_0"]
 script = ExtResource("2_spawn")
-scene = ExtResource("creature_creature")
-count = 6
+scene = ExtResource("creature_0")
+count = 8
 
-[sub_resource type="Resource" id="Spawn_hunter"]
+[sub_resource type="Resource" id="Spawn_1"]
 script = ExtResource("2_spawn")
-scene = ExtResource("creature_hunter")
-count = 2
+scene = ExtResource("creature_1")
+count = 3
 
-[sub_resource type="Resource" id="Spawn_unkillable"]
+[sub_resource type="Resource" id="Spawn_2"]
 script = ExtResource("2_spawn")
-scene = ExtResource("creature_unkillable")
+scene = ExtResource("creature_2")
 count = 1
+
+[sub_resource type="Resource" id="Room_0"]
+script = ExtResource("3_room")
+cell = Vector2i(0, 0)
+room = ExtResource("room_cavern")
+quarter_turns = 0
+
+[sub_resource type="Resource" id="Room_1"]
+script = ExtResource("3_room")
+cell = Vector2i(1, 0)
+room = ExtResource("room_tunnel_bend")
+quarter_turns = 2
+
+[sub_resource type="Resource" id="Room_2"]
+script = ExtResource("3_room")
+cell = Vector2i(2, 0)
+room = ExtResource("room_shard_alcove")
+quarter_turns = 0
+
+[sub_resource type="Resource" id="Room_3"]
+script = ExtResource("3_room")
+cell = Vector2i(3, 0)
+room = ExtResource("room_pillars")
+quarter_turns = 0
+
+[sub_resource type="Resource" id="Room_4"]
+script = ExtResource("3_room")
+cell = Vector2i(0, 1)
+room = ExtResource("room_tunnel_bend")
+quarter_turns = 1
+
+[sub_resource type="Resource" id="Room_5"]
+script = ExtResource("3_room")
+cell = Vector2i(1, 1)
+room = ExtResource("room_crossroads")
+quarter_turns = 0
+
+[sub_resource type="Resource" id="Room_6"]
+script = ExtResource("3_room")
+cell = Vector2i(2, 1)
+room = ExtResource("room_ledge_cave")
+quarter_turns = 3
+
+[sub_resource type="Resource" id="Room_7"]
+script = ExtResource("3_room")
+cell = Vector2i(3, 1)
+room = ExtResource("room_tunnel_straight")
+quarter_turns = 0
+
+[sub_resource type="Resource" id="Room_8"]
+script = ExtResource("3_room")
+cell = Vector2i(0, 2)
+room = ExtResource("room_dead_end_grotto")
+quarter_turns = 0
+
+[sub_resource type="Resource" id="Room_9"]
+script = ExtResource("3_room")
+cell = Vector2i(1, 2)
+room = ExtResource("room_ledge_cave")
+quarter_turns = 1
+
+[sub_resource type="Resource" id="Room_10"]
+script = ExtResource("3_room")
+cell = Vector2i(2, 2)
+room = ExtResource("room_kelp_maze")
+quarter_turns = 0
+
+[sub_resource type="Resource" id="Room_11"]
+script = ExtResource("3_room")
+cell = Vector2i(3, 2)
+room = ExtResource("room_arena")
+quarter_turns = 0
+
+[sub_resource type="Resource" id="Room_12"]
+script = ExtResource("3_room")
+cell = Vector2i(1, 3)
+room = ExtResource("room_dead_end_grotto")
+quarter_turns = 0
+
+[sub_resource type="Resource" id="Room_13"]
+script = ExtResource("3_room")
+cell = Vector2i(3, 3)
+room = ExtResource("room_boss_arena")
+quarter_turns = 0
 
 [resource]
 script = ExtResource("1_level")
-chunks = Array[PackedScene]([ExtResource("chunk_start_a"), ExtResource("chunk_corridor_b"), ExtResource("chunk_narrow_b"), ExtResource("chunk_cave_b"), ExtResource("chunk_narrow_a"), ExtResource("chunk_cave_a"), ExtResource("chunk_corridor_a"), ExtResource("chunk_narrow_b"), ExtResource("chunk_boss_arena_a")])
-pockets = Array[PackedScene]([ExtResource("chunk_pocket_a"), ExtResource("chunk_pocket_b")])
-creatures = Array[ExtResource("2_spawn")]([SubResource("Spawn_creature"), SubResource("Spawn_hunter"), SubResource("Spawn_unkillable")])
-corals = 3
-stations = 2
-station_distance_bias = 1.0
+rooms = Array[ExtResource("3_room")]([SubResource("Room_0"), SubResource("Room_1"), SubResource("Room_2"), SubResource("Room_3"), SubResource("Room_4"), SubResource("Room_5"), SubResource("Room_6"), SubResource("Room_7"), SubResource("Room_8"), SubResource("Room_9"), SubResource("Room_10"), SubResource("Room_11"), SubResource("Room_12"), SubResource("Room_13")])
+start_cell = Vector2i(0, 0)
+exit_cell = Vector2i(3, 3)
+lockdown_cell = Vector2i(3, 2)
+shard_count = 2
+creatures = Array[ExtResource("2_spawn")]([SubResource("Spawn_0"), SubResource("Spawn_1"), SubResource("Spawn_2")])
+corals = 4
+stations = 3
 boss = ExtResource("boss")
 boss_max_health = 64

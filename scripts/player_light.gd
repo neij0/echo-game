@@ -31,4 +31,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	energy = base_energy * Game.brightness
+	# Looked up by path (not the Game global), so tools that run without
+	# autoloads (godot -s ...) can still load the player scripts.
+	var game := get_node_or_null("/root/Game") as GameState
+	energy = base_energy * (game.brightness if game else 1.0)

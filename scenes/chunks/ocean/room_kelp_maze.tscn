@@ -1,0 +1,97 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/level_chunk.gd" id="1_chunk"]
+[ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
+
+[node name="RoomKelpMaze" type="Node2D"]
+script = ExtResource("1_chunk")
+openings = 11
+
+[node name="Floor" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, 0, 1600, 0, 1600, 1600, 0, 1600)
+
+[node name="Rock1" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1600, 0, 980, 0, 980, 160, 1440, 160, 1440, 620, 1600, 620)
+
+[node name="Rock2" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(0, 1600, 1600, 1600, 1600, 980, 1440, 980, 1440, 1440, 160, 1440, 160, 980, 0, 980)
+
+[node name="Rock3" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(0, 0, 0, 620, 160, 620, 160, 160, 620, 160, 620, 0)
+
+[node name="Rock4" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1135, 442, 1146, 437, 1153, 421, 1150, 409, 1142, 401, 1002, 357, 857, 377, 842, 386, 837, 397, 842, 414, 857, 423, 998, 403)
+
+[node name="Rock5" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(568, 688, 575, 698, 586, 703, 598, 702, 611, 690, 653, 454, 623, 256, 618, 246, 602, 237, 586, 242, 577, 258, 607, 450)
+
+[node name="Rock6" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1318, 655, 1323, 638, 1319, 627, 1309, 619, 1298, 617, 1098, 637, 1082, 645, 1077, 662, 1085, 678, 1102, 683, 1302, 663)
+
+[node name="Rock7" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(327, 1003, 336, 1018, 353, 1023, 368, 1014, 373, 1003, 343, 800, 383, 557, 353, 327, 344, 312, 333, 307, 316, 312, 307, 327, 337, 560, 297, 796)
+
+[node name="Rock8" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(859, 1110, 872, 1122, 884, 1123, 895, 1118, 903, 1102, 863, 870, 893, 643, 888, 626, 873, 617, 856, 622, 847, 637, 817, 867)
+
+[node name="Rock9" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1325, 1157, 1336, 1163, 1348, 1162, 1357, 1155, 1363, 1138, 1343, 878, 1335, 863, 1318, 857, 1303, 865, 1297, 882, 1317, 1142)
+
+[node name="Rock10" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(1068, 1337, 1074, 1347, 1091, 1353, 1102, 1350, 1110, 1341, 1163, 1121, 1123, 896, 1118, 885, 1102, 877, 1090, 879, 1081, 887, 1077, 904, 1117, 1119)
+
+[node name="Rock11" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(610, 1341, 624, 1352, 636, 1352, 650, 1342, 653, 1330, 604, 1129, 643, 935, 642, 923, 635, 913, 619, 907, 603, 915, 597, 925, 557, 1131)
+
+[node name="Rock12" type="StaticBody2D" parent="."]
+script = ExtResource("2_wall")
+polygon = PackedVector2Array(459, 1351, 468, 1344, 473, 1333, 471, 1321, 464, 1312, 339, 1219, 321, 1219, 312, 1226, 307, 1243, 316, 1258, 436, 1348, 447, 1353)
+
+[node name="Spawns" type="Node2D" parent="."]
+
+[node name="Player1" type="Marker2D" parent="Spawns"]
+position = Vector2(730, 780)
+
+[node name="Player2" type="Marker2D" parent="Spawns"]
+position = Vector2(740, 860)
+
+[node name="Goal" type="Marker2D" parent="Spawns"]
+position = Vector2(730, 1000)
+
+[node name="Creature1" type="Marker2D" parent="Spawns"]
+position = Vector2(470, 450)
+
+[node name="Creature2" type="Marker2D" parent="Spawns"]
+position = Vector2(990, 520)
+
+[node name="Creature3" type="Marker2D" parent="Spawns"]
+position = Vector2(980, 1250)
+
+[node name="Creature4" type="Marker2D" parent="Spawns"]
+position = Vector2(470, 1150)
+
+[node name="Creature5" type="Marker2D" parent="Spawns"]
+position = Vector2(1230, 1000)
+
+[node name="Shard1" type="Marker2D" parent="Spawns"]
+position = Vector2(1230, 1290)
+
+[node name="Shard2" type="Marker2D" parent="Spawns"]
+position = Vector2(470, 260)
+
+[node name="Coral1" type="Marker2D" parent="Spawns"]
+position = Vector2(990, 760)
+
+[node name="Coral2" type="Marker2D" parent="Spawns"]
+position = Vector2(230, 1360)

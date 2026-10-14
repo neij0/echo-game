@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="WorldConfig" load_steps=32 format=3]
+[gd_resource type="Resource" script_class="WorldConfig" load_steps=30 format=3]
 
 [ext_resource type="Script" path="res://scripts/world_config.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/stage_definition.gd" id="2_stage"]
@@ -15,19 +15,18 @@
 [ext_resource type="Resource" path="res://worlds/ocean/level_3_1.tres" id="level_3_1"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_3_2.tres" id="level_3_2"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_3_3.tres" id="level_3_3"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/start_a.tscn" id="chunk_start_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/start_b.tscn" id="chunk_start_b"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/corridor_a.tscn" id="chunk_corridor_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/corridor_b.tscn" id="chunk_corridor_b"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/cave_a.tscn" id="chunk_cave_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/cave_b.tscn" id="chunk_cave_b"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/narrow_a.tscn" id="chunk_narrow_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/narrow_b.tscn" id="chunk_narrow_b"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/pocket_a.tscn" id="chunk_pocket_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/pocket_b.tscn" id="chunk_pocket_b"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/goal_a.tscn" id="chunk_goal_a"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/goal_b.tscn" id="chunk_goal_b"]
-[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/boss_arena_a.tscn" id="chunk_boss_arena_a"]
+
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_arena.tscn" id="room_arena"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_boss_arena.tscn" id="room_boss_arena"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_cavern.tscn" id="room_cavern"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_crossroads.tscn" id="room_crossroads"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_dead_end_grotto.tscn" id="room_dead_end_grotto"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_kelp_maze.tscn" id="room_kelp_maze"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_ledge_cave.tscn" id="room_ledge_cave"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_pillars.tscn" id="room_pillars"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_shard_alcove.tscn" id="room_shard_alcove"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_tunnel_bend.tscn" id="room_tunnel_bend"]
+[ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_tunnel_straight.tscn" id="room_tunnel_straight"]
 
 [sub_resource type="Resource" id="Stage1"]
 script = ExtResource("2_stage")
@@ -58,11 +57,8 @@ stages = Array[ExtResource("2_stage")]([SubResource("Stage1"), SubResource("Stag
 coral_scene = ExtResource("7_coral")
 station_scene = ExtResource("8_station")
 goal_scene = ExtResource("9_goal")
-start_chunks = Array[PackedScene]([ExtResource("chunk_start_a"), ExtResource("chunk_start_b")])
-middle_chunks = Array[PackedScene]([ExtResource("chunk_corridor_a"), ExtResource("chunk_corridor_b"), ExtResource("chunk_cave_a"), ExtResource("chunk_cave_b"), ExtResource("chunk_narrow_a"), ExtResource("chunk_narrow_b")])
-pocket_chunks = Array[PackedScene]([ExtResource("chunk_pocket_a"), ExtResource("chunk_pocket_b")])
-goal_chunks = Array[PackedScene]([ExtResource("chunk_goal_a"), ExtResource("chunk_goal_b")])
-boss_arena_chunks = Array[PackedScene]([ExtResource("chunk_boss_arena_a")])
+room_chunks = Array[PackedScene]([ExtResource("room_arena"), ExtResource("room_cavern"), ExtResource("room_crossroads"), ExtResource("room_dead_end_grotto"), ExtResource("room_kelp_maze"), ExtResource("room_ledge_cave"), ExtResource("room_pillars"), ExtResource("room_shard_alcove"), ExtResource("room_tunnel_bend"), ExtResource("room_tunnel_straight")])
+boss_arena_rooms = Array[PackedScene]([ExtResource("room_boss_arena")])
 surface_depth_m = 200.0
 meters_per_pixel = 0.1
 level_depth_step_m = 400.0

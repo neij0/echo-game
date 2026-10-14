@@ -25,15 +25,23 @@ World (5, in this order: Ocean, Caves, Forest, Desert, Snow)
      └─ 3 Levels per stage      (the last level of each stage ends in a boss arena)
 After the 3rd stage of a world: a story text screen, then the World Map.
 ```
-- **Level** = one descent: a fixed, hand-designed list of chunks (`LevelDefinition`). Go down
-  while each player's survival pressure drains (Oxygen in the Ocean; stations in side pockets
-  refill it) and activate the ancient light at the bottom to clear the level. The pressure
-  meter carries over between the levels of a stage with a partial refill.
-- **Boss level** (last level of a stage): ends in a boss arena chunk; beating the boss
+- **Level** = a small, hand-designed **grid of rooms** (`LevelDefinition`, 3x3 to 4x4 cells,
+  not all filled) with branches, at least one loop and dead ends, in any direction: start and
+  exit can be anywhere (the exit may be close to the start). Explore while each player's
+  survival pressure drains (Oxygen in the Ocean; stations in rooms refill it), collect the
+  Echo Shards (spread over different rooms; their spots are planned and validated, the shards
+  themselves come in the next step) and activate the ancient light in the exit room.
+  The pressure meter carries over between the levels of a stage with a partial refill.
+- **Boss level** (last level of a stage): its exit room is a boss arena; beating the boss
   completes the stage. The boss is a placeholder for now (`scenes/boss_placeholder.tscn`: a
   bigger creature with much more health; real bosses come later).
-- **Every attempt** (retries included) reshuffles creature, coral and station spawn points
-  with a new seed, so a retry never plays exactly the same.
+- **Every attempt** (retries included) reshuffles creature, coral, station and shard spawn
+  points with a new seed, so a retry never plays exactly the same.
+- **Room grid rules** (`LevelBuilder`, `RoomGrid`): every room is a square of
+  `WorldConfig.room_size`; a room declares its doorways (N/E/S/W, `LevelChunk.openings`) and
+  can be turned in quarter turns. Two neighbouring rooms connect when both have a doorway on
+  the shared side; every other doorway is sealed with rock. One room per level is the
+  **lockdown room** (`lockdown_cell`, on or near the way to the exit).
 - **Downed**: a caught player can be revived by the partner. If both are downed at the same
   time, it depends on the mode (main menu, changeable later):
   **Calm** = restart the current level (and the meter drains slower);
@@ -128,7 +136,7 @@ linear float data and look much darker than the screen; convert each pixel with
 ## Folders
 - `scenes/` — `.tscn` scenes (`main_menu`, `game`, `story_screen`, `world_map`, and
   `game_state.tscn` = the `Game` autoload)
-- `scenes/chunks/<world>/` — the hand-made level chunks of each world
+- `scenes/chunks/<world>/` — the hand-made room chunks of each world (`room_*.tscn`)
 - `scripts/` — `.gd` scripts
 - `worlds/` — one `WorldConfig` resource (`.tres`) per world
 - `worlds/<world>/` — the world's `LevelDefinition`s (`level_<stage>_<level>.tres`)
@@ -140,33 +148,41 @@ linear float data and look much darker than the screen; convert each pixel with
 - `assets/concepts/` — concept art references (not imported by Godot: has a `.gdignore`)
 - `tools/` — helper scripts outside the game:
   - `generate_sounds.py` (Python)
-  - `check_levels.gd`: loads every level of a world and validates it (BFS) with many spawn
-    seeds, plus the structure and the generator:
+  - `check_levels.gd`: checks every room alone (markers reachable, doorways open), every
+    level's room graph (branches, loop, dead ends, lockdown position), validates every level
+    (BFS) with many spawn seeds, reports the walking path start -> all shards -> exit, and
+    checks the structure, lighting and the generator:
     `godot --headless --path . -s res://tools/check_levels.gd`
   - `test_save.gd`: save/load test (uses its own test files in `user://`):
     `godot --headless --path . -s res://tools/test_save.gd`
   - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
-    proposes a new random `LevelDefinition` from the world's chunk pools, validates it and
-    saves it as `worlds/<world>/proposed_<seed>.tres` to edit by hand.
+    proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it
+    and saves it as `worlds/<world>/proposed_<seed>.tres` to edit by hand.
   - Note: `-s` tools run without autoloads, so they must not load scripts that use `Game`.
 - `docs/` — design notes (e.g. `skills.md`: skill ideas for later, not implemented)
 
 ## Adding a new world
 All world-specific values live in its `WorldConfig` (`scripts/world_config.gd`); scripts get
 them through the `world_listeners` group (`apply_world(world)`), never hard-coded.
-1. Build its chunks in `scenes/chunks/<world>/` (root script `LevelChunk`, see the contract at
-   the top of `scripts/level_chunk.gd`): start chunks (Player1/Player2 markers, top cap), middle
-   chunks (corridor, cave, narrow; Creature/Coral markers, optional SideLeft/SideRight openings),
-   pocket chunks (Station markers), goal chunks (Goal marker, bottom cap) and boss arena chunks
-   (Boss marker, bottom cap).
-2. Design its 9 levels as `LevelDefinition`s in `worlds/<world>/` (or start from
-   `tools/propose_level.gd`): the ordered chunks (start, middles, goal or boss arena), one
-   pocket per side opening, creature types and counts, corals, stations, station distance,
-   and on each stage's last level the boss scene and its health.
+1. Build its rooms in `scenes/chunks/<world>/` (root script `LevelChunk`, see the contract at
+   the top of `scripts/level_chunk.gd`): square rooms of `room_size` with a rock band
+   (`room_wall_band`) and a centred doorway (`room_door_width`) on every side listed in
+   `openings`. Give rooms clearly different shapes (open caverns, pillar fields, twisting
+   tunnels, mazes, arenas, alcoves behind narrow gaps, dead ends with hidden spots) and a mix
+   of doorway patterns (1 / 2 opposite / 2 corner / 3 / 4) so every grid shape can be built
+   with quarter turns. Markers ("Spawns"): Player1/Player2 and Goal in every room, Shard* in
+   interesting spots (dead ends, alcoves, niches), Creature*, Coral*, Station*. Boss arena
+   rooms: `is_boss_arena`, one doorway, a Boss marker.
+2. Design its 9 levels as room grids (`LevelDefinition` in `worlds/<world>/`, or start from
+   `tools/propose_level.gd`): `RoomPlacement`s (cell, room, quarter turns), start / exit /
+   lockdown cells, shard count (default 3, boss levels 2), creature types and counts, corals,
+   stations, and on each stage's last level the boss (exit = a boss arena) and its health.
+   Every level needs branches, at least one loop and dead ends; shards go to different rooms
+   (never the start or exit room), spread over the branches.
 3. Duplicate `worlds/ocean.tres` as `worlds/<world>.tres` and set: `world_id` (must match
-   `Game.world_ids`), 3 `StageDefinition`s with their 3 levels each, the chunk pools (for
-   the generator), the palette, the pressure (name, drain, low warning, level refill, colour)
-   and the pulse modifiers (radius, speed, cost).
+   `Game.world_ids`), 3 `StageDefinition`s with their 3 levels each and their lighting, the
+   room pool and sizes (for the builder and the generator), the palette, the pressure (name,
+   drain, low warning, level refill, colour) and the pulse modifiers (radius, speed, cost).
 4. New creature types: a scene inheriting `scenes/creature.tscn` (or a script extending
    `Creature`), then add it to the levels' `creatures` lists.
 5. Add the `.tres` to the `worlds` list of `scenes/game_state.tscn` (the `Game` autoload),

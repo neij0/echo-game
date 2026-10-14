@@ -18,15 +18,21 @@ extends Resource
 @export var station_scene: PackedScene
 @export var goal_scene: PackedScene
 
-@export_group("Chunk Pools")
-## Hand-made chunk scenes (LevelChunk) the level generator tool
-## (tools/propose_level.gd) picks from. The game itself only uses the chunks
-## listed in each LevelDefinition.
-@export var start_chunks: Array[PackedScene] = []
-@export var middle_chunks: Array[PackedScene] = []
-@export var pocket_chunks: Array[PackedScene] = []
-@export var goal_chunks: Array[PackedScene] = []
-@export var boss_arena_chunks: Array[PackedScene] = []
+@export_group("Rooms")
+## Size of every room chunk (a square, in pixels). All rooms of a world share it.
+@export var room_size: float = 1600.0
+## Rock band along each room's edges (pixels).
+@export var room_wall_band: float = 100.0
+## Width of a doorway, centred on a room side (pixels).
+@export var room_door_width: float = 360.0
+## How deep into the room a seal reaches (from the room edge, pixels): it must
+## cover the doorway passage through the band.
+@export var room_seal_depth: float = 190.0
+## Room chunks (LevelChunk) the level generator tool (tools/propose_level.gd)
+## picks from. The game itself only uses the rooms listed in each LevelDefinition.
+@export var room_chunks: Array[PackedScene] = []
+## Boss arena rooms for proposed boss levels.
+@export var boss_arena_rooms: Array[PackedScene] = []
 
 @export_group("Depth")
 ## Depth shown in the HUD at the top of the world's first level.

@@ -1,45 +1,57 @@
 @tool
 class_name LevelChunk
 extends Node2D
-## One hand-made piece of a level (a room, corridor, pocket...). Contract so any
-## chunk connects to any other:
-## - Main chunks (start, corridor, cave, narrow, goal, boss arena) span x = -100..1700 and
-##   y = 0..height. The walkable area at y = 0 and y = height always includes
-##   x = 560..1040 (the connector). Their side walls fill everything else in
-##   that band, so stacking chunks keeps the level sealed.
-## - A side opening is a 160 px tall gap through the side wall, marked by a
-##   Marker2D named "SideLeft" (at x = -100) or "SideRight" (at x = 1700).
-##   The LevelBuilder attaches a pocket chunk to every side opening.
-## - Pocket chunks have their opening at their local (0, 0) and extend to -x
-##   (they are mirrored for right openings).
-## - Spawn points are Marker2D children of "Spawns" named Player1/Player2,
-##   Goal (goal chunks), Boss (boss arena chunks), Creature*, Coral* or Station*.
+## One hand-made room of a level's room grid. Contract so any room fits any
+## cell (sizes in the WorldConfig "Rooms" group):
+## - The room is a square from local (0, 0) to (room_size, room_size), with a
+##   Floor Polygon2D covering it and RockWall polygons for the rock.
+## - A rock band (room_wall_band) runs along its edges. On every side listed in
+##   `openings` a doorway (room_door_width, centred on the side) is left open
+##   through the band, and the open area behind it leads into the room.
+## - The LevelBuilder can turn a room in quarter turns, connects two
+##   neighbouring rooms when both have an opening on the shared side, and seals
+##   every other opening with rock.
+## - Spawn points are Marker2D children of "Spawns": Player1/Player2 (used in
+##   the start room), Goal (the exit's ancient light; also the room's reference
+##   point, e.g. for the lockdown), Boss (boss arena), Shard*, Creature*,
+##   Coral*, Station*. Keep them away from the doorways.
 ## @tool only so the editor tool tools/propose_level.gd can call these methods
 ## (it has no callbacks, so nothing runs in the editor).
 
-enum ChunkType { START, CORRIDOR, CAVE, NARROW, POCKET, GOAL, BOSS_ARENA }
+@export_flags("North", "East", "South", "West") var openings: int = 0
+## The exit room of boss levels (has a Boss marker, usually one opening).
+@export var is_boss_arena: bool = false
 
-@export var chunk_type: ChunkType = ChunkType.CORRIDOR
-## Height of the chunk in pixels (the next chunk starts below it).
-@export var height: float = 1200.0
-
-var is_mirrored: bool = false
+## Clockwise quarter turns applied by rotate_quarters.
+var quarter_turns: int = 0
 
 
-## Flips the chunk horizontally (for pockets on the right side). Must be called
-## before the chunk enters the tree, because RockWall builds its shapes in _ready.
-func mirror() -> void:
-	is_mirrored = not is_mirrored
+## Turns the room clockwise around its centre (polygons, markers, openings).
+## Must be called before the room enters the tree, because RockWall builds its
+## shapes in _ready.
+func rotate_quarters(turns: int, room_size: float) -> void:
+	var t: int = posmod(turns, 4)
+	if t == 0:
+		return
+	quarter_turns = t
+	var center := Vector2(room_size, room_size) * 0.5
+	# Positive angles turn clockwise on screen (y points down).
+	var turn := Transform2D(t * PI * 0.5, center) * Transform2D(0.0, -center)
 	for node: Node in find_children("*", "", true, false):
 		if node is RockWall:
 			var wall := node as RockWall
-			wall.polygon = _flip_polygon(wall.polygon)
+			wall.polygon = turn * wall.polygon
 		elif node is Polygon2D:
 			var shape := node as Polygon2D
-			shape.polygon = _flip_polygon(shape.polygon)
+			shape.polygon = turn * shape.polygon
 		elif node is Marker2D:
 			var marker := node as Marker2D
-			marker.position.x = -marker.position.x
+			marker.position = turn * marker.position
+	openings = RoomGrid.rotate_openings(openings, t)
+
+
+func has_opening(side: int) -> bool:
+	return openings & side != 0
 
 
 ## Spawn markers whose name starts with prefix (e.g. "Creature"), in local space.
@@ -51,16 +63,6 @@ func get_spawn_markers(prefix: String) -> Array[Marker2D]:
 	for child: Node in spawns.get_children():
 		if child is Marker2D and child.name.begins_with(prefix):
 			result.append(child as Marker2D)
-	return result
-
-
-## Side opening markers ("SideLeft" / "SideRight").
-func get_side_openings() -> Array[Marker2D]:
-	var result: Array[Marker2D] = []
-	for marker_name: String in ["SideLeft", "SideRight"]:
-		var marker := get_node_or_null(marker_name) as Marker2D
-		if marker:
-			result.append(marker)
 	return result
 
 
@@ -78,11 +80,3 @@ func get_wall_polygons() -> Array[PackedVector2Array]:
 			points.append(to_parent * point)
 		result.append(points)
 	return result
-
-
-static func _flip_polygon(points: PackedVector2Array) -> PackedVector2Array:
-	var flipped := PackedVector2Array()
-	# Reverse the order too, so the winding stays the same after mirroring.
-	for i: int in range(points.size() - 1, -1, -1):
-		flipped.append(Vector2(-points[i].x, points[i].y))
-	return flipped

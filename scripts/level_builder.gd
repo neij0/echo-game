@@ -1,12 +1,14 @@
 class_name LevelBuilder
 extends Node2D
-## Builds one level from its LevelDefinition. The chunks are fixed (always the
-## same layout); a pocket chunk is attached to every side opening in the order
-## the definition lists them. Creatures, corals and stations are put on random
-## chunk markers, with a NEW seed on every build (retries included), so a retry
-## never plays exactly the same. Every planned level is checked with the
-## LayoutValidator (BFS) before it is built; if the spawns fail the check, the
-## next spawn seed is tried.
+## Builds one level from its LevelDefinition: a grid of hand-made rooms, each
+## turned as the definition says. Neighbouring rooms connect where both have an
+## opening on the shared side; every other opening is sealed with rock. The
+## layout is always the same; creatures, corals, stations and shard spots are
+## put on random room markers with a NEW seed on every build (retries
+## included), so a retry never plays exactly the same. Shards go to different
+## rooms, spread as far apart as possible. Every planned level is checked with
+## the LayoutValidator (BFS) before it is built; if the spawns fail the check,
+## the next spawn seed is tried.
 
 signal level_built(level_index: int)
 
@@ -37,6 +39,12 @@ class Layout:
 	var valid: bool = false
 	var height: float = 0.0
 	var chunks: Array[LevelChunk] = []
+	## Room per grid cell (Vector2i -> LevelChunk).
+	var rooms: Dictionary = {}
+	## Connected neighbour cells per cell (Vector2i -> Array[Vector2i]).
+	var links: Dictionary = {}
+	## Rock polygons that close unused openings (this node's space).
+	var seals: Array[PackedVector2Array] = []
 	var player_spawns: Array[Vector2] = []
 	## The ancient light (normal level) or the boss (boss level).
 	var goal: Vector2
@@ -45,6 +53,14 @@ class Layout:
 	var creature_positions: Array[Vector2] = []
 	var corals: Array[Vector2] = []
 	var stations: Array[Vector2] = []
+	## Echo Shard spots (one per room) and the rooms they are in.
+	var shards: Array[Vector2] = []
+	var shard_cells: Array[Vector2i] = []
+	## Reference point of the lockdown room (its Goal marker), if any.
+	var lockdown_point: Vector2
+	var has_lockdown: bool = false
+	## The flood of the last check (can measure walking distances).
+	var validator: LayoutValidator
 	var problem: String = ""
 
 	func free_chunks() -> void:
@@ -52,6 +68,7 @@ class Layout:
 			if is_instance_valid(chunk) and not chunk.is_inside_tree():
 				chunk.free()
 		chunks.clear()
+		rooms.clear()
 
 
 ## Level inside the current stage (0-based) and how many the stage has.
@@ -68,6 +85,8 @@ var _level: Node2D
 var _goal: AncientLight
 var _boss: Creature
 var _player_spawns: Array[Vector2] = []
+## Planned Echo Shard spots of the current level (spawned in a later step).
+var shard_spots: Array[Vector2] = []
 var _creatures: Array[Creature] = []
 
 
@@ -117,55 +136,72 @@ func find_valid_layout(definition: LevelDefinition, base_seed: int) -> Layout:
 func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 	var layout := Layout.new()
 	layout.layout_seed = layout_seed
-	if definition == null or definition.chunks.size() < 2:
-		layout.problem = "a level needs at least a start chunk and an end chunk"
+	if definition == null or definition.rooms.is_empty():
+		layout.problem = "a level needs rooms"
 		return layout
 	var rng := RandomNumberGenerator.new()
 	rng.seed = layout_seed
+	var size: float = world.room_size
 
-	# Main path: the definition's chunks, stacked top to bottom.
-	var main_chunks: Array[LevelChunk] = []
-	var y: float = 0.0
-	for scene: PackedScene in definition.chunks:
-		var chunk: LevelChunk = _place_chunk(scene, y)
-		main_chunks.append(chunk)
-		y += chunk.height
-	layout.height = y
-	layout.chunks.append_array(main_chunks)
-	var start: LevelChunk = main_chunks[0]
-	var end_chunk: LevelChunk = main_chunks[main_chunks.size() - 1]
+	# Rooms on the grid, turned as placed.
+	var rows: int = 0
+	for placement: RoomPlacement in definition.rooms:
+		if placement.room == null or layout.rooms.has(placement.cell):
+			layout.problem = "empty or doubled room at %s" % placement.cell
+			return layout
+		var room := placement.room.instantiate() as LevelChunk
+		room.rotate_quarters(placement.quarter_turns, size)
+		room.position = Vector2(placement.cell) * size
+		layout.rooms[placement.cell] = room
+		layout.chunks.append(room)
+		rows = maxi(rows, placement.cell.y + 1)
+	layout.height = rows * size
 
-	# A pocket on every side opening, in the definition's order (mirrored for
-	# the right side).
-	var pockets: Array[LevelChunk] = []
-	for chunk: LevelChunk in main_chunks:
-		for opening: Marker2D in chunk.get_side_openings():
-			if definition.pockets.is_empty():
-				layout.problem = "side opening without a pocket (the pockets list is empty)"
-				return layout
-			var pocket_scene: PackedScene = definition.pockets[pockets.size() % definition.pockets.size()]
-			var pocket := pocket_scene.instantiate() as LevelChunk
-			if opening.name == "SideRight":
-				pocket.mirror()
-			pocket.position = chunk.position + opening.position
-			pockets.append(pocket)
-			layout.chunks.append(pocket)
+	# Connect matching openings, seal all the others.
+	for cell: Vector2i in layout.rooms:
+		var room: LevelChunk = layout.rooms[cell]
+		var neighbours: Array[Vector2i] = []
+		for side: int in RoomGrid.SIDES:
+			if not room.has_opening(side):
+				continue
+			var other := layout.rooms.get(cell + RoomGrid.direction(side)) as LevelChunk
+			if other and other.has_opening(RoomGrid.opposite(side)):
+				neighbours.append(cell + RoomGrid.direction(side))
+			else:
+				layout.seals.append(seal_polygon(cell, side))
+		layout.links[cell] = neighbours
 
-	# Fixed spawn points: players, and the ancient light or the boss.
+	# Start, exit (ancient light or boss) and lockdown room.
+	var start := layout.rooms.get(definition.start_cell) as LevelChunk
+	var exit_room := layout.rooms.get(definition.exit_cell) as LevelChunk
+	if start == null or exit_room == null or definition.start_cell == definition.exit_cell:
+		layout.problem = "start and exit must be two different rooms of the grid"
+		return layout
 	for marker: Marker2D in _sorted_by_name(start.get_spawn_markers("Player")):
 		layout.player_spawns.append(start.position + marker.position)
 	layout.has_boss = definition.is_boss_level()
-	var goal_markers: Array[Marker2D] = end_chunk.get_spawn_markers("Boss" if layout.has_boss else "Goal")
+	var goal_markers: Array[Marker2D] = exit_room.get_spawn_markers("Boss" if layout.has_boss else "Goal")
 	if layout.player_spawns.is_empty() or goal_markers.is_empty():
-		layout.problem = "start chunk needs Player markers, end chunk a %s marker" % ("Boss" if layout.has_boss else "Goal")
+		layout.problem = "start room needs Player markers, exit room a %s marker" % ("Boss" if layout.has_boss else "Goal")
 		return layout
-	layout.goal = end_chunk.position + goal_markers[0].position
+	layout.goal = exit_room.position + goal_markers[0].position
+	var lockdown := layout.rooms.get(definition.lockdown_cell) as LevelChunk
+	if lockdown:
+		var markers: Array[Marker2D] = lockdown.get_spawn_markers("Goal")
+		if not markers.is_empty():
+			layout.has_lockdown = true
+			layout.lockdown_point = lockdown.position + markers[0].position
 
 	# Shuffled spawn points (different on every attempt).
 	var creature_spots: Array[Vector2] = []
-	for chunk: LevelChunk in main_chunks:
-		if chunk != start:
-			creature_spots.append_array(_marker_positions(chunk, "Creature"))
+	var coral_spots: Array[Vector2] = []
+	var station_spots: Array[Vector2] = []
+	for cell: Vector2i in layout.rooms:
+		var room: LevelChunk = layout.rooms[cell]
+		coral_spots.append_array(_marker_positions(room, "Coral"))
+		if cell != definition.start_cell:
+			creature_spots.append_array(_marker_positions(room, "Creature"))
+			station_spots.append_array(_marker_positions(room, "Station"))
 	_shuffle(creature_spots, rng)
 	for spawn: CreatureSpawn in definition.creatures:
 		for i: int in spawn.count:
@@ -174,40 +210,87 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 				return layout
 			layout.creature_scenes.append(spawn.scene)
 			layout.creature_positions.append(creature_spots.pop_back())
-
-	var coral_spots: Array[Vector2] = []
-	for chunk: LevelChunk in layout.chunks:
-		coral_spots.append_array(_marker_positions(chunk, "Coral"))
 	_shuffle(coral_spots, rng)
 	for i: int in mini(definition.corals, coral_spots.size()):
 		layout.corals.append(coral_spots[i])
-
-	if pockets.size() < definition.stations:
-		layout.problem = "not enough side pockets for %d stations" % definition.stations
+	if station_spots.size() < definition.stations:
+		layout.problem = "not enough station markers for %d stations" % definition.stations
 		return layout
-	var station_pockets: Array[LevelChunk] = pockets.duplicate()
-	_shuffle_chunks(station_pockets, rng)
+	_shuffle(station_spots, rng)
 	for i: int in definition.stations:
-		var pocket: LevelChunk = station_pockets[i]
-		var markers: Array[Marker2D] = pocket.get_spawn_markers("Station")
-		if markers.is_empty():
-			continue
-		# Closest to the pocket opening first; the bias picks how deep inside.
-		markers.sort_custom(func(a: Marker2D, b: Marker2D) -> bool: return a.position.length() < b.position.length())
-		var pick: int = roundi(definition.station_distance_bias * (markers.size() - 1))
-		layout.stations.append(pocket.position + markers[pick].position)
+		layout.stations.append(station_spots[i])
+	if not _pick_shards(layout, definition, rng):
+		return layout
 
 	_validate(layout)
 	return layout
+
+
+## Rock that closes an unused opening of a room (this node's space).
+func seal_polygon(cell: Vector2i, side: int) -> PackedVector2Array:
+	var size: float = world.room_size
+	var half_door: float = world.room_door_width * 0.5 + world.room_wall_band * 0.2
+	var depth: float = world.room_seal_depth
+	var local := Rect2()
+	match side:
+		RoomGrid.Side.NORTH:
+			local = Rect2(size * 0.5 - half_door, 0.0, half_door * 2.0, depth)
+		RoomGrid.Side.SOUTH:
+			local = Rect2(size * 0.5 - half_door, size - depth, half_door * 2.0, depth)
+		RoomGrid.Side.WEST:
+			local = Rect2(0.0, size * 0.5 - half_door, depth, half_door * 2.0)
+		_:
+			local = Rect2(size - depth, size * 0.5 - half_door, depth, half_door * 2.0)
+	local.position += Vector2(cell) * size
+	return PackedVector2Array([local.position, Vector2(local.end.x, local.position.y), local.end, Vector2(local.position.x, local.end.y)])
+
+
+## Shard spots: one per room (never the start or exit room). Each next shard
+## goes to the room farthest (in rooms) from the start and the shards already
+## placed; ties are broken by the seed.
+func _pick_shards(layout: Layout, definition: LevelDefinition, rng: RandomNumberGenerator) -> bool:
+	var candidates: Dictionary = {}
+	for cell: Vector2i in layout.rooms:
+		if cell == definition.start_cell or cell == definition.exit_cell:
+			continue
+		var spots: Array[Vector2] = _marker_positions(layout.rooms[cell] as LevelChunk, "Shard")
+		if not spots.is_empty():
+			candidates[cell] = spots
+	if candidates.size() < definition.shard_count:
+		layout.problem = "not enough rooms with Shard markers for %d shards" % definition.shard_count
+		return false
+	var cells: Array = candidates.keys()
+	_shuffle_any(cells, rng)
+	var placed: Array[Vector2i] = [definition.start_cell]
+	for i: int in definition.shard_count:
+		var best: Vector2i = cells[0]
+		var best_score: int = -1
+		for cell: Vector2i in cells:
+			if cell in placed:
+				continue
+			var score: int = 1000000
+			for other: Vector2i in placed:
+				var steps: int = RoomGrid.steps_between(layout.links, cell, other)
+				score = mini(score, steps if steps >= 0 else 1000)
+			if score > best_score:
+				best_score = score
+				best = cell
+		placed.append(best)
+		var spots: Array[Vector2] = candidates[best]
+		layout.shard_cells.append(best)
+		layout.shards.append(spots[rng.randi_range(0, spots.size() - 1)])
+	return true
 
 
 func _validate(layout: Layout) -> void:
 	var polygons: Array[PackedVector2Array] = []
 	for chunk: LevelChunk in layout.chunks:
 		polygons.append_array(chunk.get_wall_polygons())
+	polygons.append_array(layout.seals)
 	var validator := LayoutValidator.new()
 	validator.cell_size = validator_cell_size
 	validator.clearance = validator_clearance
+	layout.validator = validator
 	if not validator.flood(polygons, layout.player_spawns[0]):
 		layout.problem = "leak into the void" if validator.leaked else "start is blocked"
 		return
@@ -216,6 +299,9 @@ func _validate(layout: Layout) -> void:
 	targets.append_array(layout.stations)
 	targets.append_array(layout.creature_positions)
 	targets.append_array(layout.corals)
+	targets.append_array(layout.shards)
+	if layout.has_lockdown:
+		targets.append(layout.lockdown_point)
 	for target: Vector2 in targets:
 		if not validator.is_reachable(target):
 			layout.problem = "unreachable point %s" % target
@@ -236,7 +322,14 @@ func _instantiate(layout: Layout) -> void:
 	# Floors first (all chunks), so pocket floors never cover a neighbour's walls.
 	for chunk: LevelChunk in layout.chunks:
 		_level.add_child(chunk)
+	for polygon: PackedVector2Array in layout.seals:
+		var seal := RockWall.new()
+		seal.name = "Seal"
+		seal.polygon = polygon
+		seal.color = floor_color.lightened(world.rock_fill_lift)
+		_level.add_child(seal)
 	_player_spawns = layout.player_spawns
+	shard_spots = layout.shards
 
 	for position_value: Vector2 in layout.corals:
 		_spawn(world.coral_scene, position_value)
@@ -313,12 +406,6 @@ func _apply_palette(chunk: LevelChunk, floor_color: Color) -> void:
 			(node as Polygon2D).color = floor_color
 
 
-func _place_chunk(scene: PackedScene, y: float) -> LevelChunk:
-	var chunk := scene.instantiate() as LevelChunk
-	chunk.position = Vector2(0.0, y)
-	return chunk
-
-
 func _marker_positions(chunk: LevelChunk, prefix: String) -> Array[Vector2]:
 	var result: Array[Vector2] = []
 	for marker: Marker2D in chunk.get_spawn_markers(prefix):
@@ -339,10 +426,10 @@ static func _shuffle(values: Array[Vector2], rng: RandomNumberGenerator) -> void
 		values[j] = swap
 
 
-static func _shuffle_chunks(values: Array[LevelChunk], rng: RandomNumberGenerator) -> void:
+static func _shuffle_any(values: Array, rng: RandomNumberGenerator) -> void:
 	for i: int in range(values.size() - 1, 0, -1):
 		var j: int = rng.randi_range(0, i)
-		var swap: LevelChunk = values[i]
+		var swap: Variant = values[i]
 		values[i] = values[j]
 		values[j] = swap
 
