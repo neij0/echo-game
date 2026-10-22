@@ -1,7 +1,7 @@
 class_name PlayerStatus
 extends VBoxContainer
-## One player's HUD block: depth, the world's pressure meter (Oxygen in the
-## Ocean) and its low warning. Created by Hud for every registered player
+## One player's HUD block: depth, the health segments (HealthSegments), the
+## world's pressure meter (Oxygen in the Ocean) and its low warning. Created by Hud for every registered player
 ## (builds its UI in code). The meter's name and colour come from the WorldConfig.
 
 @export var bar_size: Vector2 = Vector2(300.0, 18.0)
@@ -15,6 +15,7 @@ var level_builder: LevelBuilder
 var pressure_color: Color = Color(0.35, 0.8, 1.0)
 
 var _depth_label: Label
+var _health_segments: HealthSegments
 var _pressure_bar: ProgressBar
 var _fill_style: StyleBoxFlat
 var _warning_label: Label
@@ -31,6 +32,10 @@ func setup(target_player: Player, target_level_builder: LevelBuilder, world: Wor
 func _ready() -> void:
 	_depth_label = Label.new()
 	add_child(_depth_label)
+
+	_health_segments = HealthSegments.new()
+	_health_segments.setup(player.health)
+	add_child(_health_segments)
 
 	_pressure_bar = ProgressBar.new()
 	_pressure_bar.custom_minimum_size = bar_size

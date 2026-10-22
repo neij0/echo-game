@@ -53,6 +53,15 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   (within ~120 px: 0.3 s telegraphed wind-up with flaring eyes + sound, burst, recovery).
   Losing sight: go where the player was heading and SEARCH there a few seconds. Entering
   CHASE alerts creatures within `alert_radius` (they INVESTIGATE towards it).
+- **Health** (`PlayerHealth`, in segments; `segment_count` per character, default 4): a
+  creature touch costs `calm_hit_damage` (1.0) / `challenge_hit_damage` (1.5) segments, with
+  knockback and a short invulnerability. A partly damaged segment refills on its own after
+  ~4 s without damage; fully lost segments only come back through **partner mending**
+  (`PartnerMending`: both within 150 px, nobody downed, no creature chasing either; one
+  segment per 6 s Calm / 10 s Challenge, with a glowing link between them), an **Echo Shard**
+  (+1 segment to every player not downed) or a revive (1 segment). Health carries over
+  between the levels of a stage. HUD: `HealthSegments` per player; at 1 segment or less a
+  heartbeat + red edge pulse (`HurtVignette`). At zero the player is downed.
 - **Downed**: a caught player can be revived by the partner. If both are downed at the same
   time, it depends on the mode (main menu, changeable later):
   **Calm** = restart the current level (and the meter drains slower);

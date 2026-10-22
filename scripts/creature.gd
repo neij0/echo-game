@@ -585,6 +585,13 @@ func on_sonar_hit(_origin: Vector2) -> void:
 		_echo.flash(self, body_radius)
 
 
+## The player this creature is chasing right now (null when not in CHASE).
+func get_chased_player() -> Player:
+	if state == State.CHASE and is_instance_valid(_chased):
+		return _chased
+	return null
+
+
 func get_state_name() -> String:
 	var state_name: String = State.keys()[state]
 	if lunge_phase != Lunge.NONE:

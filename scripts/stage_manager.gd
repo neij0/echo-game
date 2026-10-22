@@ -11,6 +11,8 @@ extends Node
 ## - The last level ends in a boss arena: beating the boss completes the stage,
 ##   saves the progress (Game autoload) and shows the summary. Its Continue
 ##   button starts the next stage, or the story screen after a world's last stage.
+## - Picking up an Echo Shard restores shard_heal_segments of health to every
+##   player who is not downed. Health carries over between levels of a stage.
 ## - Every player downed at the same time: Calm restarts the current level,
 ##   Challenge restarts the stage from level 1. Every retry reshuffles the
 ##   creatures, corals and stations (new spawn seed).
@@ -46,6 +48,13 @@ signal shards_changed(collected: int, total: int)
 ## Calm retry: each player gets back the meter they had when the level
 ## started, but at least this share (0-1) of a full meter.
 @export_range(0.0, 1.0) var retry_min_pressure: float = 0.5
+## Calm retry: each player gets back the health they had when the level
+## started, but at least this many segments.
+@export var retry_min_health_segments: float = 2.0
+
+@export_group("Health")
+## Health segments every non-downed player gets back per Echo Shard.
+@export var shard_heal_segments: float = 1.0
 
 var players: Array[Player] = []
 var stage_index: int = 0
@@ -62,6 +71,8 @@ var is_over: bool = false
 var _is_changing_level: bool = false
 ## Each player's meter (0-1) when the current level started (Calm retries).
 var _level_start_pressure: Dictionary = {}
+## Each player's health (segments) when the current level started (Calm retries).
+var _level_start_health: Dictionary = {}
 
 
 func _ready() -> void:
@@ -98,6 +109,7 @@ func _start_stage() -> void:
 	for player: Player in scene_players:
 		register_player(player)
 		player.pressure.drain_multiplier = calm_drain_multiplier if mode == SaveData.Mode.CALM else 1.0
+		player.health.set_challenge_mode(mode == SaveData.Mode.CHALLENGE)
 	_start_level(0)
 
 
@@ -132,6 +144,7 @@ func _start_level(index: int) -> void:
 		if player.health.is_downed:
 			player.health.revive()
 		_level_start_pressure[player] = player.pressure.get_ratio()
+		_level_start_health[player] = player.health.value
 	if awareness:
 		awareness.reset()
 	var camera := get_viewport().get_camera_2d() as SharedCamera
@@ -160,6 +173,8 @@ func _on_level_built(_index: int) -> void:
 
 func _on_shard_collected(_shard: EchoShard) -> void:
 	shards_collected += 1
+	for player: Player in players:
+		player.health.heal(shard_heal_segments)
 	_update_exit_lock()
 	if shards_collected >= shards_total:
 		level_builder.open_exit()
@@ -218,10 +233,13 @@ func _retry() -> void:
 			var start_ratio: float = float(_level_start_pressure.get(player, 1.0))
 			player.pressure.value = player.pressure.max_value * start_ratio
 			player.pressure.ensure_ratio(retry_min_pressure)
+			var start_health: float = float(_level_start_health.get(player, player.health.get_max_value()))
+			player.health.set_segments(maxf(start_health, retry_min_health_segments))
 		_start_level(level_index)
 	else:
 		for player: Player in players:
 			player.pressure.refill()
+			player.health.refill()
 		_start_level(0)
 	get_tree().paused = false
 
