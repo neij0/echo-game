@@ -10,7 +10,8 @@ extends Node
 ## is downed, the StageManager restarts the level (Calm) or the stage (Challenge).
 
 ## PRESSURE = the world's survival meter ran out (Oxygen in the Ocean).
-enum Cause { CREATURE, PRESSURE }
+## COLLAPSE = the collapse escape's timer ran out (EscapeEvent).
+enum Cause { CREATURE, PRESSURE, COLLAPSE }
 
 ## Emitted on every creature touch that is not ignored (downing or not).
 signal hit_taken

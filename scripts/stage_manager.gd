@@ -11,6 +11,10 @@ extends Node
 ## - The last level ends in a boss arena: beating the boss completes the stage,
 ##   saves the progress (Game autoload) and shows the summary. Its Continue
 ##   button starts the next stage, or the story screen after a world's last stage.
+## - Each stage's level 2 (LevelDefinition.escape_event): the last shard starts
+##   the collapse escape (EscapeEvent): reach the ancient light before the
+##   timer (per mode) runs out, or every player is downed.
+## - Lockdown waves (LockdownRoom) and Sentinels count as creatures for the stats.
 ## - Picking up an Echo Shard restores shard_heal_segments of health to every
 ##   player who is not downed. Health carries over between levels of a stage.
 ## - Every player downed at the same time: Calm restarts the current level,
@@ -36,6 +40,7 @@ signal shards_changed(collected: int, total: int)
 @export var level_builder: LevelBuilder
 @export var awareness: DepthAwareness
 @export var end_screen: EndScreen
+@export var escape_event: EscapeEvent
 ## Seconds between activating the ancient light (or the boss falling) and the
 ## next screen.
 @export var victory_delay: float = 3.0
@@ -149,6 +154,8 @@ func _start_level(index: int) -> void:
 		_level_start_health[player] = player.health.value
 	if awareness:
 		awareness.reset()
+	if escape_event:
+		escape_event.stop()
 	var camera := get_viewport().get_camera_2d() as SharedCamera
 	if camera:
 		camera.snap_to_players()
@@ -159,6 +166,11 @@ func _on_level_built(_index: int) -> void:
 	for creature: Creature in level_builder.get_creatures():
 		creature.killed.connect(_on_creature_killed)
 	get_tree().call_group("creatures", "set_challenge_mode", mode == SaveData.Mode.CHALLENGE)
+	# The level's own mode listeners (LockdownRoom) exist only from now on.
+	get_tree().call_group("mode_listeners", "set_challenge_mode", mode == SaveData.Mode.CHALLENGE)
+	var lockdown: LockdownRoom = level_builder.get_lockdown()
+	if lockdown:
+		lockdown.wave_spawned.connect(func(creature: Creature) -> void: creature.killed.connect(_on_creature_killed))
 	var goal: AncientLight = level_builder.get_goal()
 	if goal:
 		goal.activated.connect(_on_ancient_light_activated)
@@ -180,6 +192,14 @@ func _on_shard_collected(_shard: EchoShard) -> void:
 	_update_exit_lock()
 	if shards_collected >= shards_total:
 		level_builder.open_exit()
+		_start_escape_if_planned()
+
+
+## The stage's level-2 twist: the collapse escape after the last shard.
+func _start_escape_if_planned() -> void:
+	var definition: LevelDefinition = world.get_level(stage_index, level_index) if world else null
+	if escape_event and definition and definition.escape_event:
+		escape_event.start(definition.get_escape_time(mode == SaveData.Mode.CHALLENGE))
 
 
 ## Shows the progress on the exit (sockets) and tells the HUD.
@@ -252,6 +272,8 @@ func _on_ancient_light_activated() -> void:
 	if is_over or _is_changing_level:
 		return
 	_is_changing_level = true
+	if escape_event:
+		escape_event.stop()
 	await get_tree().create_timer(victory_delay).timeout
 	if level_index + 1 >= get_level_count():
 		# A stage without a boss level ends on its last ancient light.

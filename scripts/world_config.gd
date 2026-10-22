@@ -21,6 +21,12 @@ extends Resource
 @export var shard_scene: PackedScene
 ## The sealed doorway of a boss arena (ShardDoor), opened by the shards.
 @export var shard_door_scene: PackedScene
+## The Sentinel that guards some of the shards (LevelDefinition.sentinels).
+@export var sentinel_scene: PackedScene
+## The creature type of the lockdown wave.
+@export var lockdown_creature_scene: PackedScene
+## The lockdown event (LockdownRoom), placed in each level's lockdown room.
+@export var lockdown_room_scene: PackedScene
 
 @export_group("Rooms")
 ## Size of every room chunk (a square, in pixels). All rooms of a world share it.

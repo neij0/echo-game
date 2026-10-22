@@ -43,6 +43,7 @@ const STRINGS: Dictionary = {
 	"defeat_title": {"en": "Both of you are down", "ar": "سقطتما كلاكما"},
 	"cause_creature": {"en": "caught by a creature", "ar": "هجوم مخلوق"},
 	"cause_pressure": {"en": "out of %s", "ar": "نفاد %s"},
+	"cause_collapse": {"en": "buried by the collapse", "ar": "دُفن تحت الانهيار"},
 	"reached": {"en": "Stage %d, level %d / %d", "ar": "المرحلة %d، المستوى %d من %d"},
 	"restart_level": {"en": "Restarting level %d...", "ar": "إعادة المستوى %d..."},
 	"restart_stage": {"en": "Restarting the stage from level 1...", "ar": "إعادة المرحلة من المستوى 1..."},
@@ -60,6 +61,8 @@ const STRINGS: Dictionary = {
 	"pressure_Oxygen": {"en": "oxygen", "ar": "الأكسجين"},
 	"shards": {"en": "Echo Shards: %d / %d", "ar": "شظايا الصدى: %d من %d"},
 	"exit_open": {"en": "The ancient light is awake: find it", "ar": "استيقظ الضوء القديم: اعثرا عليه"},
+	# Collapse escape (HUD timer)
+	"escape_timer": {"en": "COLLAPSE! Reach the ancient light: %d s", "ar": "انهيار! اوصلا إلى الضوء القديم: %d ث"},
 	# Downed Echo (HUD hint)
 	"distress_ready": {"en": "Downed: press the pulse button for a distress pulse", "ar": "سقطتِ: اضغطي زر النبضة لإطلاق نبضة استغاثة"},
 	"distress_cooldown": {"en": "Distress pulse in %.1f s", "ar": "نبضة الاستغاثة بعد %.1f ث"},

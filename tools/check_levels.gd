@@ -11,6 +11,10 @@ extends SceneTree
 ##   reshuffled on every attempt;
 ## - the walking path start -> all shards (best order) -> exit, in pixels and
 ##   in seconds at full swimming speed (a careful pair takes several times longer);
+## - balance per level: Sentinels, the lockdown wave per mode (and that the
+##   lockdown room has Creature markers for it), and for collapse-escape levels
+##   the timer per mode against the longest walk from any shard to the exit at
+##   the slower player's full speed (must be at least ESCAPE_MIN_RATIO times it);
 ## - the level generator (tools/propose_level.gd) still proposes valid levels.
 ##
 ## Run from the project folder:
@@ -24,6 +28,10 @@ const EXPECTED_STAGES: int = 3
 const EXPECTED_LEVELS_PER_STAGE: int = 3
 ## Swimming speed used for the time estimate (px/s, about the players' top speed).
 const SWIM_SPEED: float = 240.0
+## The slower player's top speed (the Guardian), for the escape timer check.
+const ESCAPE_SPEED: float = 230.0
+## Escape timer >= this times the longest shard -> exit walk at ESCAPE_SPEED.
+const ESCAPE_MIN_RATIO: float = 1.6
 ## Generator proposals checked (normal and boss levels each).
 const GENERATOR_PROPOSALS: int = 3
 const GENERATOR_TRIES: int = 60
@@ -159,6 +167,9 @@ func _check_level(builder: LevelBuilder, definition: LevelDefinition, label: Str
 	var problems: Dictionary = {}
 	var shortest_tour: float = INF
 	var longest_tour: float = 0.0
+	## Longest walk from any shard to the exit over every layout (escape check).
+	var escape_walk: float = 0.0
+	var lockdown_spawns: int = -1
 	var started: int = Time.get_ticks_msec()
 	for i: int in seeds_per_level:
 		var base_seed: int = rng.randi() % 1000000
@@ -170,6 +181,10 @@ func _check_level(builder: LevelBuilder, definition: LevelDefinition, label: Str
 		if layout == null:
 			continue
 		completable += 1
+		if layout.has_lockdown:
+			lockdown_spawns = layout.lockdown_spawns.size()
+		if definition.escape_event:
+			escape_walk = maxf(escape_walk, _longest_shard_to_exit(layout))
 		# The path is measured on a few layouts (it is the slow part).
 		if i < 3:
 			var tour: float = _tour_length(layout)
@@ -186,9 +201,47 @@ func _check_level(builder: LevelBuilder, definition: LevelDefinition, label: Str
 		(Time.get_ticks_msec() - started) / 1000.0])
 	for problem: String in problems:
 		print("  first-seed problem x%d: %s" % [problems[problem], problem])
+	var ok: bool = _check_balance(definition, label, lockdown_spawns, escape_walk)
 	if completable < seeds_per_level:
 		return _fail("%s: %d spawn seeds have no valid layout" % [label, seeds_per_level - completable])
-	return true
+	return ok
+
+
+## Sentinels, lockdown wave per mode, and the collapse escape timer per mode.
+func _check_balance(definition: LevelDefinition, label: String, lockdown_spawns: int, escape_walk: float) -> bool:
+	var ok: bool = true
+	var sentinels: int = mini(definition.sentinels, definition.shard_count)
+	var wave: String = "no lockdown"
+	if definition.has_lockdown():
+		wave = "lockdown wave Calm %d / Challenge %d (%d spawn markers)" % [
+			definition.lockdown_wave_calm, definition.lockdown_wave_challenge, lockdown_spawns]
+		if lockdown_spawns <= 0 and maxi(definition.lockdown_wave_calm, definition.lockdown_wave_challenge) > 0:
+			ok = _fail("%s: the lockdown room has no Creature markers for its wave" % label)
+		if definition.lockdown_wave_calm > definition.lockdown_wave_challenge:
+			ok = _fail("%s: the Calm lockdown wave is bigger than the Challenge one" % label)
+	var escape: String = ""
+	if definition.escape_event:
+		var walk_time: float = escape_walk / ESCAPE_SPEED
+		var calm_ratio: float = definition.escape_time_calm / maxf(walk_time, 0.01)
+		var challenge_ratio: float = definition.escape_time_challenge / maxf(walk_time, 0.01)
+		escape = " | ESCAPE: longest shard -> exit %d px = %.1f s at %d px/s; timer Calm %.0f s (%.2fx), Challenge %.0f s (%.2fx)" % [
+			roundi(escape_walk), walk_time, roundi(ESCAPE_SPEED), definition.escape_time_calm, calm_ratio,
+			definition.escape_time_challenge, challenge_ratio]
+		if challenge_ratio < ESCAPE_MIN_RATIO or calm_ratio < ESCAPE_MIN_RATIO:
+			ok = _fail("%s: the escape timer is below %.1fx the longest shard -> exit walk" % [label, ESCAPE_MIN_RATIO])
+		if definition.escape_time_calm < definition.escape_time_challenge:
+			ok = _fail("%s: the Calm escape timer is shorter than the Challenge one" % label)
+	print("  balance: %d sentinel(s) | %s%s" % [sentinels, wave, escape])
+	return ok
+
+
+## The longest walk from any of the layout's shard spots to its exit (pixels).
+func _longest_shard_to_exit(layout: LevelBuilder.Layout) -> float:
+	var from_exit: PackedInt32Array = layout.validator.distances_from(layout.goal)
+	var longest: float = 0.0
+	for shard: Vector2 in layout.shards:
+		longest = maxf(longest, layout.validator.distance_to(from_exit, shard))
+	return longest
 
 
 ## Shortest walk start -> every shard (best order) -> exit, in pixels.

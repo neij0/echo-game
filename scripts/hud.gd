@@ -1,12 +1,14 @@
 class_name Hud
 extends CanvasLayer
-## Awareness bar, the Echo Shard counter, a debug label (stage, level, mode,
-## seed, abilities, creatures, chase speeds), and one PlayerStatus (depth +
-## pressure meter) per registered player. Never holds a single fixed player.
+## Awareness bar, the Echo Shard counter, the collapse escape timer, a debug
+## label (stage, level, mode, seed, abilities, creatures, chase speeds), and
+## one PlayerStatus (depth + pressure meter) per registered player. Never holds
+## a single fixed player.
 
 @export var stage_manager: StageManager
 @export var awareness: DepthAwareness
 @export var level_builder: LevelBuilder
+@export var escape_event: EscapeEvent
 
 @export_group("Awareness Bar")
 @export var calm_color: Color = Color(0.2, 0.55, 1.0)
@@ -19,12 +21,24 @@ extends CanvasLayer
 ## Colour once every shard is collected.
 @export var shard_done_color: Color = Color(1.0, 0.82, 0.35)
 
+@export_group("Escape Timer")
+@export var escape_font_size: int = 34
+## Distance from the top of the screen (centred horizontally).
+@export var escape_top: float = 70.0
+@export var escape_color: Color = Color(1.0, 0.8, 0.45)
+## Below this many seconds the timer turns red and blinks.
+@export var escape_warning_time: float = 10.0
+@export var escape_warning_color: Color = Color(1.0, 0.25, 0.2)
+@export var escape_blink_speed: float = 2.0
+
 @onready var _bar: ProgressBar = $AwarenessBar
 @onready var _debug_label: Label = $DebugLabel
 @onready var _statuses: VBoxContainer = $PlayerStatuses
 
 var _fill_style: StyleBoxFlat
 var _shard_label: Label
+var _escape_label: Label
+var _time: float = 0.0
 
 
 func _ready() -> void:
@@ -42,6 +56,15 @@ func _ready() -> void:
 	_shard_label.name = "ShardCounter"
 	_shard_label.position = shard_counter_position
 	add_child(_shard_label)
+
+	_escape_label = Label.new()
+	_escape_label.name = "EscapeTimer"
+	_escape_label.add_theme_font_size_override("font_size", escape_font_size)
+	_escape_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_escape_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_escape_label.position.y = escape_top
+	_escape_label.visible = false
+	add_child(_escape_label)
 
 	if stage_manager:
 		stage_manager.player_registered.connect(_on_player_registered)
@@ -63,7 +86,9 @@ func _on_player_registered(player: Player) -> void:
 	_statuses.add_child(status)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_time += delta
+	_update_escape_timer()
 	_bar.value = awareness.value
 	_fill_style.bg_color = calm_color.lerp(warning_color, awareness.get_ratio())
 
@@ -105,6 +130,20 @@ func _process(_delta: float) -> void:
 				])
 	lines.append("Creatures: " + " / ".join(state_counts))
 	_debug_label.text = "\n".join(lines)
+
+
+func _update_escape_timer() -> void:
+	_escape_label.visible = escape_event != null and escape_event.is_active
+	if not _escape_label.visible:
+		return
+	var seconds: int = ceili(escape_event.time_left)
+	_escape_label.text = Game.text("escape_timer") % seconds
+	var warning: bool = escape_event.time_left <= escape_warning_time
+	_escape_label.add_theme_color_override("font_color", escape_warning_color if warning else escape_color)
+	if warning:
+		_escape_label.visible = fmod(_time * escape_blink_speed, 1.0) < 0.7
+	# Keep it centred as the text changes width.
+	_escape_label.position.x = (get_viewport().get_visible_rect().size.x - _escape_label.size.x) * 0.5
 
 
 func _ability_text(player: Player) -> String:

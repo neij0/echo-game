@@ -14,7 +14,9 @@ extends CharacterBody2D
 ## light, or shortly after a pulse front passed over it). A pulse front also
 ## makes it Exposed for a short time: a Guardian finisher on an Exposed creature
 ## kills it instantly. The unkillable type ignores damage and only staggers.
-## Subclasses (LightHunter) override the targeting hooks below.
+## Frenzy (set_frenzy, the collapse escape): it always chases the nearest
+## standing player and never loses track.
+## Subclasses (LightHunter, Sentinel) override the targeting hooks below.
 
 enum State { WANDER, INVESTIGATE, CHASE, SEARCH }
 ## Phases of the close-range lunge (only during CHASE).
@@ -246,6 +248,8 @@ var sense_ratio: float = 0.0
 var _silhouette_check_left: float = 0.0
 var _silhouette_blocked: bool = false
 var _anim_time: float = 0.0
+## Frenzy (collapse escape): chases the nearest standing player, never loses track.
+var is_frenzied: bool = false
 ## Where the creature points (last movement direction).
 var _facing: Vector2 = Vector2.RIGHT
 
@@ -298,6 +302,20 @@ func hear_alert(source: Creature) -> void:
 ## Set by the StageManager when the level is built.
 func set_challenge_mode(enabled: bool) -> void:
 	challenge_mode = enabled
+
+
+## Starts chasing this player right away (a lockdown wave waking), if allowed.
+func hunt(player: Player) -> void:
+	if _can_chase(player):
+		_spot(player)
+
+
+## The collapse escape: from now on it chases the nearest standing player
+## wherever they are, and never loses track (off again on a new level).
+func set_frenzy(enabled: bool) -> void:
+	is_frenzied = enabled
+	if enabled:
+		_update_frenzy()
 
 
 ## True while the Guardian can hurt it: inside a revealing light (the Echo's),
@@ -432,10 +450,26 @@ func _lose_track() -> void:
 ## Search over: wander around where it gave up.
 func _end_search() -> void:
 	state = State.WANDER
-	_home = global_position
+	_set_home(global_position)
 	_respot_left = respot_cooldown
 	_reset_path()
 	_pick_wander_target()
+
+
+## Frenzy: chase the nearest player it may chase (switching when another one
+## gets closer).
+func _update_frenzy() -> void:
+	var best: Player = null
+	var best_distance: float = INF
+	for player: Player in Players.all(get_tree()):
+		if not _can_chase(player):
+			continue
+		var distance: float = global_position.distance_squared_to(player.global_position)
+		if distance < best_distance:
+			best_distance = distance
+			best = player
+	if best and (state != State.CHASE or _chased != best):
+		_spot(best)
 
 
 func _can_chase(player: Player) -> bool:
@@ -479,6 +513,9 @@ func _update_chase(delta: float) -> void:
 			_chase_left = chase_memory
 			_last_seen = _chased.global_position
 			_last_seen_velocity = _chased.velocity
+	if is_frenzied:
+		# It knows where the player is, even around corners.
+		_chase_left = chase_memory
 	_chase_left -= delta
 	if _chase_left <= 0.0:
 		_lose_track()
@@ -638,6 +675,8 @@ func _physics_process(delta: float) -> void:
 		velocity = velocity.lerp(Vector2.ZERO, 1.0 - exp(-steering * delta))
 		move_and_slide()
 		return
+	if is_frenzied:
+		_update_frenzy()
 	_look_for_players(delta)
 	_update_chase(delta)
 	_update_search(delta)
@@ -748,7 +787,7 @@ func _retarget_near_pulse() -> void:
 	_reset_detour()
 	if _retargets > max_retargets:
 		# Give up and wander where it is.
-		_home = global_position
+		_set_home(global_position)
 		state = State.WANDER
 		_pick_wander_target()
 		return
@@ -773,10 +812,16 @@ func _on_target_reached() -> void:
 		return
 	if state == State.INVESTIGATE:
 		# Keep wandering around where the pulse was heard.
-		_home = target
+		_set_home(target)
 		state = State.WANDER
 	_pause_left = wander_pause
 	_pick_wander_target()
+
+
+## Hook for subclasses: where it wanders around from now on (a Sentinel keeps
+## its post).
+func _set_home(at: Vector2) -> void:
+	_home = at
 
 
 func _pick_wander_target() -> void:

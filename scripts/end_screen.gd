@@ -67,6 +67,8 @@ func show_defeat(players: Array[Player], stage_number: int, level_number: int, l
 		var reason: String = Game.text("cause_creature")
 		if player.health.last_cause == PlayerHealth.Cause.PRESSURE:
 			reason = Game.text("cause_pressure") % _pressure_name(player)
+		elif player.health.last_cause == PlayerHealth.Cause.COLLAPSE:
+			reason = Game.text("cause_collapse")
 		lines.append("%s: %s" % [player.display_name, reason])
 	lines.append(Game.text("reached") % [stage_number, level_number, level_count])
 	lines.append("")

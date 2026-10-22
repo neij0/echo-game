@@ -2,7 +2,9 @@ class_name SharedCamera
 extends Camera2D
 ## One camera for both players: follows their midpoint and zooms out smoothly
 ## so both stay on screen, down to min_zoom (the players' leash keeps them
-## within that). Also does the small shake on every Echo pulse.
+## within that). Also does the small shake on every Echo pulse. Other systems
+## shake it through the "shared_camera" group (call_group "shake_with"), so
+## they do not depend on this script.
 
 @export var stage_manager: StageManager
 ## How fast the camera catches up with the midpoint (higher = snappier).
@@ -28,6 +30,7 @@ var _snapped: bool = false
 
 
 func _ready() -> void:
+	add_to_group("shared_camera")
 	if stage_manager:
 		stage_manager.player_registered.connect(_on_player_registered)
 

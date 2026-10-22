@@ -1,0 +1,12 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/lockdown_room.gd" id="1_script"]
+[ext_resource type="AudioStream" path="res://assets/audio/rumble.wav" id="2_rumble"]
+[ext_resource type="AudioStream" path="res://assets/audio/rock_slam.wav" id="3_slam"]
+[ext_resource type="AudioStream" path="res://assets/audio/lockdown_clear.wav" id="4_clear"]
+
+[node name="LockdownRoom" type="Node2D"]
+script = ExtResource("1_script")
+rumble_stream = ExtResource("2_rumble")
+slam_stream = ExtResource("3_slam")
+clear_stream = ExtResource("4_clear")

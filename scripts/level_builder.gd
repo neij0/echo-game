@@ -9,9 +9,12 @@ extends Node2D
 ## rooms, spread as far apart as possible. Every planned level is checked with
 ## the LayoutValidator (BFS) before it is built; if the spawns fail the check,
 ## the next spawn seed is tried.
-## Built levels get: the Echo Shards on the planned spots, a ShardDoor on the
-## boss arena's doorway (boss levels), and a navigation mesh baked from every
-## rock, so creatures can path through doorways and around corners.
+## Built levels get: the Echo Shards on the planned spots, Sentinels next to
+## some of them, the LockdownRoom in the lockdown cell, a ShardDoor on the boss
+## arena's doorway (boss levels), and a navigation mesh baked from every rock,
+## so creatures can path through doorways and around corners. When a door or a
+## lockdown barrier changes, the mesh is rebaked one frame later, while the
+## camera shake started by that event hides the short hitch.
 
 signal level_built(level_index: int)
 
@@ -33,6 +36,16 @@ signal level_built(level_index: int)
 ## Creature clearance used when baking the navigation mesh (about the radius
 ## of a normal creature plus a small margin).
 @export var navigation_agent_radius: float = 26.0
+
+@export_group("Sentinels")
+## A Sentinel's post is this far from its shard, towards the room's centre
+## (falls back to the shard spot if that point cannot be reached).
+@export var sentinel_post_offset: float = 80.0
+
+@export_group("Arena Door")
+## Camera shake when the boss arena door opens (also hides the navigation rebake).
+@export var door_shake_strength: float = 6.0
+@export var door_shake_time: float = 0.5
 
 @export_group("Validation")
 @export var validator_cell_size: float = 20.0
@@ -70,6 +83,13 @@ class Layout:
 	## Reference point of the lockdown room (its Goal marker), if any.
 	var lockdown_point: Vector2
 	var has_lockdown: bool = false
+	## The lockdown room's square, the rock for each of its connected doorways
+	## and its Creature markers (where the wave wakes).
+	var lockdown_rect := Rect2()
+	var lockdown_barriers: Array[PackedVector2Array] = []
+	var lockdown_spawns: Array[Vector2] = []
+	## Sentinel posts (next to some shards).
+	var sentinel_posts: Array[Vector2] = []
 	## The flood of the last check (can measure walking distances).
 	var validator: LayoutValidator
 	var problem: String = ""
@@ -103,7 +123,9 @@ var _creatures: Array[Creature] = []
 var creature_spots: Array[Vector2] = []
 var _shards: Array[EchoShard] = []
 var _door: ShardDoor
+var _lockdown: LockdownRoom
 var _navigation: NavigationRegion2D
+var _rebake_pending: bool = false
 ## Rock outlines of the current level (navigation obstructions, door excluded).
 var _nav_obstacles: Array[PackedVector2Array] = []
 var _nav_bounds := Rect2()
@@ -216,6 +238,11 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 		if not markers.is_empty():
 			layout.has_lockdown = true
 			layout.lockdown_point = lockdown.position + markers[0].position
+			layout.lockdown_rect = Rect2(lockdown.position, Vector2.ONE * size)
+			for side: int in RoomGrid.SIDES:
+				if layout.links[definition.lockdown_cell].has(definition.lockdown_cell + RoomGrid.direction(side)):
+					layout.lockdown_barriers.append(seal_polygon(definition.lockdown_cell, side))
+			layout.lockdown_spawns = _marker_positions(lockdown, "Creature")
 
 	# Shuffled spawn points (different on every attempt).
 	var creature_spots: Array[Vector2] = []
@@ -246,6 +273,7 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 		layout.stations.append(station_spots[i])
 	if not _pick_shards(layout, definition, rng):
 		return layout
+	_pick_sentinels(layout, definition, rng)
 
 	_validate(layout)
 	return layout
@@ -307,6 +335,18 @@ func _pick_shards(layout: Layout, definition: LevelDefinition, rng: RandomNumber
 	return true
 
 
+## Sentinel posts: next to `sentinels` of the shards (picked by the seed),
+## a little towards the centre of the shard's room.
+func _pick_sentinels(layout: Layout, definition: LevelDefinition, rng: RandomNumberGenerator) -> void:
+	var order: Array = range(layout.shards.size())
+	_shuffle_any(order, rng)
+	for i: int in mini(definition.sentinels, order.size()):
+		var index: int = order[i]
+		var spot: Vector2 = layout.shards[index]
+		var room_center: Vector2 = (Vector2(layout.shard_cells[index]) + Vector2(0.5, 0.5)) * world.room_size
+		layout.sentinel_posts.append(spot + spot.direction_to(room_center) * sentinel_post_offset)
+
+
 func _validate(layout: Layout) -> void:
 	var polygons: Array[PackedVector2Array] = []
 	for chunk: LevelChunk in layout.chunks:
@@ -327,11 +367,26 @@ func _validate(layout: Layout) -> void:
 	targets.append_array(layout.shards)
 	if layout.has_lockdown:
 		targets.append(layout.lockdown_point)
+		targets.append_array(layout.lockdown_spawns)
 	for target: Vector2 in targets:
 		if not validator.is_reachable(target):
 			layout.problem = "unreachable point %s" % target
 			return
+	# A post inside rock falls back to its shard's spot (always reachable).
+	for i: int in layout.sentinel_posts.size():
+		if not validator.is_reachable(layout.sentinel_posts[i]):
+			layout.sentinel_posts[i] = _nearest(layout.shards, layout.sentinel_posts[i])
 	layout.valid = true
+
+
+static func _nearest(points: Array[Vector2], to: Vector2) -> Vector2:
+	var best: Vector2 = to
+	var best_distance: float = INF
+	for point: Vector2 in points:
+		if point.distance_squared_to(to) < best_distance:
+			best_distance = point.distance_squared_to(to)
+			best = point
+	return best
 
 
 func _instantiate(layout: Layout) -> void:
@@ -372,6 +427,11 @@ func _instantiate(layout: Layout) -> void:
 		var creature := _spawn(layout.creature_scenes[i], layout.creature_positions[i]) as Creature
 		if creature:
 			_creatures.append(creature)
+	for post: Vector2 in layout.sentinel_posts:
+		creature_spots.append(to_global(post))
+		var sentinel := _spawn(world.sentinel_scene, post) as Creature
+		if sentinel:
+			_creatures.append(sentinel)
 	_goal = null
 	_boss = null
 	_door = null
@@ -380,6 +440,7 @@ func _instantiate(layout: Layout) -> void:
 		_add_door(layout.door_polygon, floor_color.lightened(world.rock_fill_lift))
 	else:
 		_goal = _spawn(world.goal_scene, layout.goal) as AncientLight
+	_add_lockdown(layout, floor_color.lightened(world.rock_fill_lift))
 	_add_navigation(layout)
 	# The sonar overlay samples the new rock outlines.
 	get_tree().call_group("sonar_overlay", "rebuild_samples")
@@ -400,6 +461,22 @@ func _add_outer_rock(layout: Layout, rock_color: Color) -> void:
 	rock.polygon = PackedVector2Array([bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end, Vector2(bounds.position.x, bounds.end.y)])
 	# First child = drawn under every chunk.
 	_level.add_child(rock)
+
+
+func _add_lockdown(layout: Layout, rock_color: Color) -> void:
+	_lockdown = null
+	if not layout.has_lockdown or world.lockdown_room_scene == null:
+		return
+	_lockdown = world.lockdown_room_scene.instantiate() as LockdownRoom
+	_lockdown.room_rect = layout.lockdown_rect
+	_lockdown.barrier_polygons = layout.lockdown_barriers
+	_lockdown.barrier_color = rock_color
+	_lockdown.spawn_points = layout.lockdown_spawns
+	_lockdown.creature_scene = world.lockdown_creature_scene
+	_lockdown.wave_calm = _definition.lockdown_wave_calm if _definition else 0
+	_lockdown.wave_challenge = _definition.lockdown_wave_challenge if _definition else 0
+	_lockdown.navigation_changed.connect(_rebake_navigation_soon)
+	_level.add_child(_lockdown)
 
 
 func _add_door(door_polygon: PackedVector2Array, rock_color: Color) -> void:
@@ -425,24 +502,42 @@ func _add_navigation(layout: Layout) -> void:
 		_nav_bounds = room if not _nav_bounds.has_area() else _nav_bounds.merge(room)
 	_navigation = NavigationRegion2D.new()
 	_navigation.name = "Navigation"
-	_navigation.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _door_obstacle())
+	_navigation.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _changing_obstacles())
 	_level.add_child(_navigation)
 
 
-func _door_obstacle() -> PackedVector2Array:
-	return _door.polygon if _door and not _door.is_open else PackedVector2Array()
+## Rock that can open or close: the closed arena door, closed lockdown barriers.
+func _changing_obstacles() -> Array[PackedVector2Array]:
+	var result: Array[PackedVector2Array] = []
+	if _door and not _door.is_open:
+		result.append(_door.polygon)
+	if is_instance_valid(_lockdown):
+		result.append_array(_lockdown.get_obstacles())
+	return result
 
 
-## A navigation mesh over bounds with every obstacle cut out (extra = one more
-## obstacle, e.g. the closed door; may be empty).
-func bake_navigation(obstacles: Array[PackedVector2Array], bounds: Rect2, extra: PackedVector2Array) -> NavigationPolygon:
+## Rebakes the navigation on the next frame (the event that asked for it has
+## just started a camera shake, which hides the short hitch).
+func _rebake_navigation_soon() -> void:
+	if _rebake_pending:
+		return
+	_rebake_pending = true
+	await get_tree().process_frame
+	_rebake_pending = false
+	if is_instance_valid(_navigation):
+		_navigation.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _changing_obstacles())
+
+
+## A navigation mesh over bounds with every obstacle cut out (extras = rock
+## that can open or close; may be empty).
+func bake_navigation(obstacles: Array[PackedVector2Array], bounds: Rect2, extras: Array[PackedVector2Array]) -> NavigationPolygon:
 	var source := NavigationMeshSourceGeometryData2D.new()
 	source.add_traversable_outline(PackedVector2Array([bounds.position, Vector2(bounds.end.x, bounds.position.y),
 		bounds.end, Vector2(bounds.position.x, bounds.end.y)]))
 	for polygon: PackedVector2Array in obstacles:
 		source.add_obstruction_outline(polygon)
-	if not extra.is_empty():
-		source.add_obstruction_outline(extra)
+	for polygon: PackedVector2Array in extras:
+		source.add_obstruction_outline(polygon)
 	var navigation := NavigationPolygon.new()
 	navigation.agent_radius = navigation_agent_radius
 	NavigationServer2D.bake_from_source_geometry_data(navigation, source)
@@ -456,8 +551,8 @@ func open_exit() -> void:
 		_goal.set_shard_progress(_goal.shards_needed, _goal.shards_needed)
 	if _door and not _door.is_open:
 		_door.open()
-		if is_instance_valid(_navigation):
-			_navigation.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, PackedVector2Array())
+		get_tree().call_group("shared_camera", "shake_with", door_shake_strength, door_shake_time)
+		_rebake_navigation_soon()
 
 
 func _spawn_boss(at: Vector2) -> Creature:
@@ -559,6 +654,11 @@ func get_goal() -> AncientLight:
 ## The boss (null in a normal level).
 func get_boss() -> Creature:
 	return _boss
+
+
+## The lockdown event of the current level (null if it has none).
+func get_lockdown() -> LockdownRoom:
+	return _lockdown if is_instance_valid(_lockdown) else null
 
 
 ## The boss arena's door (null in a normal level).

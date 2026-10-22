@@ -1,4 +1,4 @@
-[gd_scene load_steps=21 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_builder.gd" id="1_level"]
 [ext_resource type="Resource" path="res://worlds/ocean.tres" id="2_world"]
@@ -20,6 +20,8 @@
 [ext_resource type="Script" path="res://scripts/light_shafts.gd" id="19_shafts"]
 [ext_resource type="Script" path="res://scripts/partner_mending.gd" id="20_mending"]
 [ext_resource type="AudioStream" path="res://assets/audio/creature_heartbeat.wav" id="21_heartbeat"]
+[ext_resource type="Script" path="res://scripts/escape_event.gd" id="22_escape"]
+[ext_resource type="AudioStream" path="res://assets/audio/rumble.wav" id="23_rumble"]
 
 [node name="Game" type="Node2D"]
 
@@ -37,6 +39,10 @@ follow_viewport_enabled = true
 
 [node name="MarineSnow" type="Node2D" parent="EnvironmentLayer"]
 script = ExtResource("18_snow")
+
+[node name="EscapeEvent" type="Node2D" parent="EnvironmentLayer"]
+script = ExtResource("22_escape")
+rumble_stream = ExtResource("23_rumble")
 
 [node name="LightShaftLayer" type="CanvasLayer" parent="."]
 
@@ -74,12 +80,13 @@ script = ExtResource("8_sonar")
 [node name="GlowEnvironment" type="WorldEnvironment" parent="."]
 script = ExtResource("9_glow")
 
-[node name="StageManager" type="Node" parent="." node_paths=PackedStringArray("level_builder", "awareness", "end_screen")]
+[node name="StageManager" type="Node" parent="." node_paths=PackedStringArray("level_builder", "awareness", "end_screen", "escape_event")]
 script = ExtResource("15_stage")
 world = ExtResource("2_world")
 level_builder = NodePath("../LevelBuilder")
 awareness = NodePath("../DepthAwareness")
 end_screen = NodePath("../EndScreen")
+escape_event = NodePath("../EnvironmentLayer/EscapeEvent")
 
 [node name="SonarAudio" type="Node" parent="." node_paths=PackedStringArray("stage_manager", "sonar_overlay")]
 script = ExtResource("10_audio")
@@ -88,12 +95,13 @@ sonar_overlay = NodePath("../SonarLayer/SonarOverlay")
 ping_stream = ExtResource("11_ping")
 tick_stream = ExtResource("12_tick")
 
-[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("stage_manager", "awareness", "level_builder")]
+[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("stage_manager", "awareness", "level_builder", "escape_event")]
 layer = 2
 script = ExtResource("7_hud")
 stage_manager = NodePath("../StageManager")
 awareness = NodePath("../DepthAwareness")
 level_builder = NodePath("../LevelBuilder")
+escape_event = NodePath("../EnvironmentLayer/EscapeEvent")
 
 [node name="HurtVignette" type="Control" parent="Hud" node_paths=PackedStringArray("stage_manager")]
 layout_mode = 3

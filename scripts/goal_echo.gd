@@ -5,7 +5,8 @@ extends Node2D
 ## Shards are left it points (in the shard colour) to the nearest one, in a
 ## straight line; once all are collected it points (gold) to the nearest open
 ## way out ("level_exit" group: the ancient light, the closed arena door, or
-## the boss once the door is open). It fades after show_time.
+## the boss once the door is open). It fades after show_time. While forced
+## (the collapse escape, EscapeEvent) it stays on all the time.
 ## Must live on the Echo's CanvasLayer with follow_viewport_enabled (unlit).
 
 @export var player: Player
@@ -29,11 +30,20 @@ extends Node2D
 
 var _delay_left: float = -1.0
 var _show_left: float = 0.0
+var _forced: bool = false
 
 
 func _ready() -> void:
+	add_to_group("goal_echo")
 	if player:
 		player.pulse_emitted.connect(_on_pulse_emitted)
+
+
+## Called (via the "goal_echo" group) by EscapeEvent: on = always showing.
+func set_forced(enabled: bool) -> void:
+	_forced = enabled
+	if enabled:
+		_show_left = show_time
 
 
 func _on_pulse_emitted(_origin: Vector2) -> void:
@@ -49,6 +59,9 @@ func _process(delta: float) -> void:
 		if _delay_left < 0.0:
 			_show_left = show_time
 	_show_left = maxf(_show_left - delta, 0.0)
+	if _forced:
+		# Stays at full strength (past the fade-in, before the fade-out).
+		_show_left = maxf(_show_left, show_time - fade_in_time)
 	queue_redraw()
 
 

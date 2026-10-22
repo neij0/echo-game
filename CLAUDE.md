@@ -45,6 +45,25 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   can be turned in quarter turns. Two neighbouring rooms connect when both have a doorway on
   the shared side; every other doorway is sealed with rock. One room per level is the
   **lockdown room** (`lockdown_cell`, on or near the way to the exit).
+- **Sentinels** (`Sentinel`, `scenes/sentinel.tscn`, `LevelDefinition.sentinels`, 1-2 per
+  level): posted next to some shards (picked by the seed). Wander / investigate only inside
+  `guard_radius` of the post, chase only while the player is inside `leash_radius`, then
+  swim back; more health (Calm 12 / Challenge 16). Spine crest + pale eyes; a pulse shows a
+  faint dashed ring of the area it guards. Answers: pulse + finisher together, sneak, lure.
+- **Lockdown** (`LockdownRoom` + `LockdownBarrier`, built by the `LevelBuilder`): when every
+  player is deep inside the lockdown room (`trigger_inset`), its connected doorways close
+  with rock (rumble, slam, shake) and a wave wakes on its Creature markers
+  (`lockdown_wave_calm` / `_challenge`). Once every wave creature is dead the doorways open
+  (chord + warm light in each doorway). Once per attempt; downed / revive, distress pulse and
+  close sense work inside; both downed = the normal restart rules.
+- **Navigation rebake**: lockdown barriers and the arena door rebake the mesh one frame after
+  the event, while its camera shake (`"shared_camera"` group, `shake_with`) hides the hitch.
+- **Collapse escape** (`EscapeEvent`, `LevelDefinition.escape_event`, level 2 of every
+  stage): the last shard starts it: falling rock + dust, rumble, shakes, every creature in
+  frenzy (`Creature.set_frenzy`: hunts the nearest standing player, never loses track; the
+  lockdown breaks open), the Echo's arrow points to the exit and stays on, and a HUD timer
+  (`escape_time_calm` / `_challenge`). Timer at 0 = every player downed (`Cause.COLLAPSE`).
+  `check_levels` requires each timer >= 1.6x the longest shard -> exit walk at 230 px/s.
 - **Creatures** (`Creature`): WANDER / INVESTIGATE (pulses, sword noise, alerts) / CHASE /
   SEARCH. They path with a navigation mesh the `LevelBuilder` bakes from every rock (doorways,
   corners; the closed arena door is an obstacle until it opens). Chase speed = the chased
@@ -178,15 +197,16 @@ linear float data and look much darker than the screen; convert each pixel with
   - `generate_sounds.py` (Python)
   - `check_levels.gd`: checks every room alone (markers reachable, doorways open), every
     level's room graph (branches, loop, dead ends, lockdown position), validates every level
-    (BFS) with many spawn seeds, reports the walking path start -> all shards -> exit, and
-    checks the structure, lighting and the generator:
+    (BFS) with many spawn seeds, reports the walking path start -> all shards -> exit, the
+    balance (Sentinels, lockdown wave per mode, escape timer vs path), and checks the
+    structure, lighting and the generator:
     `godot --headless --path . -s res://tools/check_levels.gd`
   - `test_save.gd`: save/load test (uses its own test files in `user://`):
     `godot --headless --path . -s res://tools/test_save.gd`
   - `test_creatures.tscn`: creature + shard test, run as a scene (needs the `Game` autoload):
     chase speeds per mode/awareness, lunge, alerting, search, downed Echo (ignored, distress
-    pulse, close sense, revive decay), pathing on every level (with and without navigation),
-    shards, locked exit and arena door:
+    pulse, close sense, revive decay), Sentinels, lockdown, collapse escape, pathing on every
+    level (with and without navigation), shards, locked exit and arena door:
     `godot --headless --path . --fixed-fps 60 res://tools/test_creatures.tscn`
   - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it
@@ -209,12 +229,15 @@ them through the `world_listeners` group (`apply_world(world)`), never hard-code
 2. Design its 9 levels as room grids (`LevelDefinition` in `worlds/<world>/`, or start from
    `tools/propose_level.gd`): `RoomPlacement`s (cell, room, quarter turns), start / exit /
    lockdown cells, shard count (default 3, boss levels 2), creature types and counts, corals,
-   stations, and on each stage's last level the boss (exit = a boss arena) and its health.
+   stations, sentinels, the lockdown wave per mode, on each stage's level 2 the collapse escape
+   (`escape_event` + timers), and on each stage's last level the boss (exit = a boss arena)
+   and its health. The lockdown room needs Creature markers (the wave wakes there).
    Every level needs branches, at least one loop and dead ends; shards go to different rooms
    (never the start or exit room), spread over the branches.
 3. Duplicate `worlds/ocean.tres` as `worlds/<world>.tres` and set: `world_id` (must match
    `Game.world_ids`), 3 `StageDefinition`s with their 3 levels each and their lighting, the
-   room pool and sizes (for the builder and the generator), the palette, the pressure (name,
+   room pool and sizes (for the builder and the generator), `sentinel_scene`,
+   `lockdown_creature_scene`, `lockdown_room_scene`, the palette, the pressure (name,
    drain, low warning, level refill, colour) and the pulse modifiers (radius, speed, cost).
 4. New creature types: a scene inheriting `scenes/creature.tscn` (or a script extending
    `Creature`), then add it to the levels' `creatures` lists.

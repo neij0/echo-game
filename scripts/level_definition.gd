@@ -17,13 +17,21 @@ extends Resource
 ## The exit room: its Goal marker gets the ancient light (or, in a boss level,
 ## it is the boss arena and its Boss marker gets the boss).
 @export var exit_cell: Vector2i = Vector2i.ZERO
-## The lockdown room (used by the lockdown event). (-1, -1) = none.
+## The lockdown room (LockdownRoom): when both players are inside, its
+## doorways close and a wave of creatures wakes; they reopen once the wave is
+## dead. (-1, -1) = none.
 @export var lockdown_cell: Vector2i = Vector2i(-1, -1)
+## Creatures in the lockdown wave (WorldConfig.lockdown_creature_scene).
+@export var lockdown_wave_calm: int = 2
+@export var lockdown_wave_challenge: int = 3
 
 @export_group("Shards")
 ## Echo Shards to collect before the exit opens, each in a different room
 ## (never the start or exit room), spread over the branches.
 @export var shard_count: int = 3
+## Sentinels (WorldConfig.sentinel_scene) guarding that many of the shards
+## (at most shard_count; which shards is picked by the spawn seed).
+@export var sentinels: int = 1
 
 @export_group("Spawns")
 ## Creature types and how many of each (placed on random Creature markers of
@@ -33,6 +41,16 @@ extends Resource
 @export var corals: int = 4
 ## Pressure stations placed on random Station markers (not in the start room).
 @export var stations: int = 2
+
+@export_group("Collapse Escape")
+## The stage's level-2 twist: after the last shard the level collapses
+## (EscapeEvent). Every creature hunts the players and a timer runs; reaching
+## the ancient light in time clears the level, otherwise both are downed.
+@export var escape_event: bool = false
+## Seconds to reach the exit per mode (tools/check_levels.gd checks they are at
+## least 1.6x the longest shard -> exit walk at full speed).
+@export var escape_time_calm: float = 90.0
+@export var escape_time_challenge: float = 70.0
 
 @export_group("Boss")
 ## Empty = a normal level: activating the ancient light clears it.
@@ -56,3 +74,11 @@ func get_placement(cell: Vector2i) -> RoomPlacement:
 
 func has_lockdown() -> bool:
 	return get_placement(lockdown_cell) != null
+
+
+func get_lockdown_wave(challenge: bool) -> int:
+	return lockdown_wave_challenge if challenge else lockdown_wave_calm
+
+
+func get_escape_time(challenge: bool) -> float:
+	return escape_time_challenge if challenge else escape_time_calm

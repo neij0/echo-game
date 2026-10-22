@@ -14,6 +14,14 @@ extends Node
 ## - downed Echo: creatures ignore downed players, the distress pulse (reveal,
 ##   Exposed, no oxygen), the Guardian's close sense (silhouette, eyes, lunge
 ##   flare) and revive progress that pauses and decays instead of resetting;
+## - Sentinels: placement next to shards, health, leash, guard area, return
+##   to the post, frenzy ignoring the leash;
+## - the lockdown room: doorways close (collision + navigation), the wave per
+##   mode, revive / distress pulse / close sense inside, reopening once the
+##   wave is dead;
+## - the collapse escape: starts on the last shard of a level-2, timer per mode,
+##   every creature hunts without losing track, the exit arrow stays on, the
+##   timer running out downs both players, a new level stops it;
 ## - shards: locked ancient light, collection, unlock, the Echo's arrow, and the
 ##   boss arena door blocking (collision + navigation) until all are collected.
 
@@ -61,6 +69,9 @@ func _run() -> void:
 	await _test_distress_pulse()
 	await _test_close_sense()
 	await _test_revive_decay()
+	await _test_sentinel()
+	await _test_lockdown()
+	await _test_escape()
 	await _test_shards()
 	await _test_pathing()
 
@@ -223,6 +234,204 @@ func _test_revive_decay() -> void:
 	Input.action_release("p2_action")
 	_check(not _echo.health.is_downed and helper.progress == 0.0, "finishing revives and resets the progress")
 	_protect_players()
+
+
+# --- Phase 3: Sentinels, lockdown, collapse escape ----------------------------
+
+func _test_sentinel() -> void:
+	print("== Sentinels ==")
+	var world: WorldConfig = _stage.world
+	var placed_ok: bool = true
+	for stage_index: int in world.get_stage_count():
+		for level_index: int in world.get_level_count(stage_index):
+			var definition: LevelDefinition = world.get_level(stage_index, level_index)
+			_stage.stage_index = stage_index
+			_stage._start_level(level_index)
+			var sentinels: int = 0
+			for creature: Creature in _builder.get_creatures():
+				var sentinel := creature as Sentinel
+				if sentinel == null:
+					continue
+				sentinels += 1
+				var nearest: float = INF
+				for shard: EchoShard in _builder.get_shards():
+					nearest = minf(nearest, shard.global_position.distance_to(sentinel.post))
+				if nearest > _builder.sentinel_post_offset + 1.0:
+					placed_ok = false
+			if sentinels != mini(definition.sentinels, definition.shard_count):
+				placed_ok = false
+	_check(placed_ok, "every level has its Sentinels, each posted next to a shard")
+
+	await _build(0, 0)
+	_guardian.global_position = _far_spot(_echo.global_position, 750.0)
+	var post_spot: Vector2 = _open_spot(_echo.global_position, 160.0)
+	var sentinel: Sentinel = _spawn_creature(post_spot, world.sentinel_scene) as Sentinel
+	await _frames(2)
+	sentinel.set_challenge_mode(true)
+	var basic: Creature = _spawn_creature(_far_spot(post_spot, 900.0))
+	print("  health %d (basic creature %d) | guard %.0f px, leash %.0f px" % [
+		sentinel.health, basic.max_health, sentinel.get_guard_radius(), sentinel.get_leash_radius()])
+	basic.queue_free()
+	_check(sentinel.health > basic.max_health, "a Sentinel is tougher than a basic creature")
+	# Spots and chases a player near its post.
+	for i: int in int(1.0 * PHYSICS_FPS):
+		await get_tree().physics_frame
+		_protect_players()
+		if sentinel.state == Creature.State.CHASE:
+			break
+	_check(sentinel.state == Creature.State.CHASE, "it chases a player near its post")
+	# The player leaves the leash: it gives up and swims back to its post.
+	_echo.global_position = _far_spot(sentinel.post, sentinel.get_leash_radius() + 350.0)
+	var gave_up: bool = false
+	var back_at: float = -1.0
+	for i: int in int(14.0 * PHYSICS_FPS):
+		await get_tree().physics_frame
+		_protect_players()
+		if sentinel.state != Creature.State.CHASE:
+			gave_up = true
+		if gave_up and sentinel.state == Creature.State.WANDER and sentinel.global_position.distance_to(sentinel.post) <= sentinel.get_guard_radius() + 20.0:
+			back_at = (i + 1) / PHYSICS_FPS
+			break
+	print("  player beyond the leash: gave up %s, back inside its guard area after %.1f s" % [gave_up, back_at])
+	_check(gave_up, "it stops chasing beyond its leash")
+	_check(back_at > 0.0, "it returns to its post")
+	# A far noise: it investigates only up to the edge of its guard area.
+	sentinel.hear_noise(sentinel.post + Vector2(900.0, 0.0), 2000.0)
+	_check(sentinel.state == Creature.State.INVESTIGATE and sentinel.target.distance_to(sentinel.post) <= sentinel.get_guard_radius() + 0.5,
+		"it investigates noises, but only inside its guard area")
+	# The collapse escape: the leash no longer holds it.
+	sentinel.set_frenzy(true)
+	await _frames(3)
+	_check(sentinel.state == Creature.State.CHASE, "in a frenzy it hunts beyond its leash")
+	sentinel.queue_free()
+	_protect_players()
+
+
+func _test_lockdown() -> void:
+	print("== Lockdown room ==")
+	await _build(0, 0)
+	var lockdown: LockdownRoom = _builder.get_lockdown()
+	_check(lockdown != null, "the level has a lockdown room")
+	if lockdown == null:
+		return
+	var definition: LevelDefinition = _builder._definition
+	_check(definition.get_lockdown_wave(false) < definition.get_lockdown_wave(true), "fewer wave creatures in Calm (%d) than in Challenge (%d)" % [
+		definition.get_lockdown_wave(false), definition.get_lockdown_wave(true)])
+	lockdown.enabled = true
+	var map: RID = get_viewport().world_2d.navigation_map
+	var center: Vector2 = NavigationServer2D.map_get_closest_point(map, _builder.to_global(lockdown.room_rect.get_center()))
+	var outside: Vector2 = _builder.get_spawn_position(1)
+	# One player inside is not enough.
+	_echo.global_position = center
+	await _frames(5)
+	_check(not lockdown.is_locked(), "one player inside does not lock it")
+	_teleport_players(center)
+	await _frames(3)
+	_check(lockdown.is_locked(), "both players inside lock the doorways")
+	var barriers_blocked: bool = true
+	for polygon: PackedVector2Array in lockdown.get_obstacles():
+		var middle := Vector2.ZERO
+		for point: Vector2 in polygon:
+			middle += point
+		if not _point_blocked(_builder.to_global(middle / polygon.size())):
+			barriers_blocked = false
+	_check(not lockdown.get_obstacles().is_empty() and barriers_blocked, "every doorway is sealed (%d)" % lockdown.get_obstacles().size())
+	await _frames(int((lockdown.wake_delay + 0.3) * PHYSICS_FPS))
+	var closed_path: PackedVector2Array = NavigationServer2D.map_get_path(map, center, outside, true)
+	var closed_gap: float = closed_path[closed_path.size() - 1].distance_to(outside) if closed_path.size() > 0 else INF
+	_check(closed_gap > 200.0, "the navigation no longer leads out")
+	print("  wave: %d creatures (Challenge) | path out ends %.0f px from the target while locked" % [lockdown.get_wave().size(), closed_gap])
+	_check(lockdown.get_wave().size() == lockdown.get_wave_size(), "the wave wakes")
+	for creature: Creature in lockdown.get_wave():
+		(creature.get_node("Hitbox") as Area2D).set_deferred("monitoring", false)
+
+	# Downed inside: the distress pulse, the close sense and the revive all work.
+	_protect_players()
+	_echo.health.down(PlayerHealth.Cause.CREATURE)
+	var distress: DistressPulse = _echo.get_node("DistressPulse") as DistressPulse
+	distress.cooldown_left = 0.0
+	Input.action_press("p1_action")
+	await _frames(2)
+	Input.action_release("p1_action")
+	_check(not distress.is_ready(), "a downed Echo can send the distress pulse inside")
+	var near_wave: Creature = lockdown.get_wave()[0]
+	near_wave.set_physics_process(false)
+	near_wave.global_position = _open_spot(_guardian.global_position, 60.0)
+	near_wave.set_physics_process(true)
+	await _frames(2)
+	near_wave.global_position = _open_spot(_guardian.global_position, 60.0)
+	await _frames(1)
+	_check(near_wave.sense_ratio >= 1.0 and near_wave.is_revealed(), "the Guardian senses (and can hit) a wave creature next to him")
+	_guardian.global_position = _echo.global_position + Vector2(30.0, 0.0)
+	var helper: ReviveHelper = _guardian.get_node("Revive") as ReviveHelper
+	Input.action_press("p2_action")
+	await _frames(int((helper.revive_time + 0.2) * PHYSICS_FPS))
+	Input.action_release("p2_action")
+	_check(not _echo.health.is_downed, "the Guardian can revive the Echo inside")
+
+	# The wave dies: the doorways open again.
+	for creature: Creature in lockdown.get_wave():
+		if is_instance_valid(creature):
+			creature.take_damage(999, _guardian, 0.0, 0.0)
+	await _frames(20)
+	var open_path: PackedVector2Array = NavigationServer2D.map_get_path(map, center, outside, true)
+	var open_gap: float = open_path[open_path.size() - 1].distance_to(outside) if open_path.size() > 0 else INF
+	_check(lockdown.phase == LockdownRoom.Phase.CLEARED and lockdown.get_obstacles().is_empty(), "with the wave dead the doorways open")
+	_check(open_gap < 60.0, "the navigation leads out again")
+	_teleport_players(outside)
+	await _frames(5)
+	_teleport_players(center)
+	await _frames(5)
+	_check(not lockdown.is_locked(), "it happens only once per attempt")
+	_protect_players()
+
+
+func _test_escape() -> void:
+	print("== Collapse escape (stage 1 level 2) ==")
+	await _build(0, 1)
+	var escape: EscapeEvent = _game.get_node("EnvironmentLayer/EscapeEvent") as EscapeEvent
+	var definition: LevelDefinition = _builder._definition
+	var goal: AncientLight = _builder.get_goal()
+	_check(definition.escape_event, "level 2 of the stage has the collapse escape")
+	_check(definition.get_escape_time(false) > definition.get_escape_time(true), "the Calm timer is longer (%.0f s vs %.0f s)" % [
+		definition.get_escape_time(false), definition.get_escape_time(true)])
+	var hunters: Array[Creature] = []
+	for i: int in 2:
+		var hunter: Creature = _spawn_creature(_far_spot(goal.global_position, 500.0 + i * 200.0))
+		hunter.safe_zone_push = 0.0
+		hunters.append(hunter)
+	var shards: Array[EchoShard] = _builder.get_shards().duplicate()
+	for i: int in shards.size():
+		if i == shards.size() - 1:
+			_check(not escape.is_active, "no collapse before the last shard")
+		_teleport_players(shards[i].global_position)
+		await _frames(3)
+	_check(escape.is_active and absf(escape.time_left - definition.get_escape_time(true)) < 0.5, "the last shard starts it (%.0f s, Challenge)" % escape.time_left)
+	_teleport_players(_builder.get_spawn_position(1))
+	var arrow: GoalEcho = _echo.get_node("UnlitLayer/GoalEcho") as GoalEcho
+	await _frames(int(3.0 * PHYSICS_FPS))
+	var all_hunting: bool = true
+	for hunter: Creature in hunters:
+		if not is_instance_valid(hunter) or hunter.state != Creature.State.CHASE or not hunter.is_frenzied:
+			all_hunting = false
+	_check(all_hunting, "every creature hunts the players (still after 3 s, without sight)")
+	_check(arrow.is_showing() and arrow._find_target() == goal, "the Echo's arrow points to the exit and stays on")
+	# Time runs out: both players are downed by the collapse.
+	_stage.is_over = true
+	escape.time_left = 0.05
+	await _frames(5)
+	_check(_echo.health.is_downed and _guardian.health.is_downed and _echo.health.last_cause == PlayerHealth.Cause.COLLAPSE,
+		"the timer running out downs both players (collapse)")
+	_check(not escape.is_active, "then it stops")
+	_stage.is_over = false
+	_protect_players()
+	# A new level never starts in a collapse.
+	escape.start(10.0)
+	await _build(0, 1)
+	_check(not escape.is_active, "a new attempt starts without the collapse")
+	for hunter: Creature in hunters:
+		if is_instance_valid(hunter):
+			hunter.queue_free()
 
 
 # --- Speeds -------------------------------------------------------------------
@@ -522,6 +731,9 @@ func _build(stage_index: int, level_index: int) -> void:
 	_clear_creatures()
 	if _builder.get_boss():
 		_builder.get_boss().set_physics_process(false)
+	# The lockdown only runs in its own test (players are teleported around).
+	if _builder.get_lockdown():
+		_builder.get_lockdown().enabled = false
 	_awareness.value = 0.0
 	# The navigation map syncs a few physics frames after the level is built.
 	await _frames(12)
@@ -536,8 +748,9 @@ func _clear_creatures() -> void:
 			creature.queue_free()
 
 
-func _spawn_creature(at: Vector2) -> Creature:
-	var creature := (load(CREATURE_SCENE) as PackedScene).instantiate() as Creature
+func _spawn_creature(at: Vector2, scene: PackedScene = null) -> Creature:
+	var source: PackedScene = scene if scene else load(CREATURE_SCENE) as PackedScene
+	var creature := source.instantiate() as Creature
 	creature.position = _builder.to_local(at)
 	_builder._level.add_child(creature)
 	creature.challenge_mode = _stage.mode == SaveData.Mode.CHALLENGE

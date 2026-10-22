@@ -141,6 +141,35 @@ SHARD_ARPEGGIO = 0.05       # seconds between the partials starting (a tiny spar
 SHARD_DECAY = 0.35          # seconds, time constant of each partial
 SHARD_PEAK = 0.6
 
+# --- Rumble: deep rolling rock rumble (lockdown doors, collapse) -------------
+RUMBLE_LENGTH = 3.0
+RUMBLE_SMOOTH = 0.997       # 0-1 low-pass of the noise, higher = deeper
+RUMBLE_SWELL = 0.4          # seconds to full volume
+RUMBLE_WOBBLE_RATE = 3.5    # Hz of the slow rolling in the loudness
+RUMBLE_WOBBLE = 0.35        # amount of that rolling
+RUMBLE_TONE = 38.0          # Hz, a low tone under the noise
+RUMBLE_TONE_GAIN = 0.25
+RUMBLE_FADE_OUT = 1.2       # seconds of fade at the end
+RUMBLE_PEAK = 0.85
+
+# --- Rock slam: a heavy stone thud with a short crack (a barrier lands) -------
+SLAM_LENGTH = 0.9
+SLAM_FREQ = 48.0            # Hz of the thud
+SLAM_DECAY = 0.16
+SLAM_CRACK = 0.8            # amount of the noise crack on impact
+SLAM_CRACK_DECAY = 0.03
+SLAM_GRIT = 0.25            # amount of gravel noise trailing after the impact
+SLAM_GRIT_DECAY = 0.25
+SLAM_PEAK = 0.9
+
+# --- Lockdown clear: a rising, open chord (the doors open again) -------------
+CLEAR_LENGTH = 2.2
+CLEAR_ROOT = 330.0          # Hz
+CLEAR_NOTES = [(1.0, 1.0), (1.25, 0.8), (1.5, 0.7), (2.0, 0.55)]  # a major arpeggio
+CLEAR_ARPEGGIO = 0.12       # seconds between the notes starting
+CLEAR_DECAY = 0.7           # seconds, time constant of each note
+CLEAR_PEAK = 0.7
+
 RANDOM_SEED = 7
 
 
@@ -434,6 +463,57 @@ def make_shard() -> list[float]:
     return normalize(samples, SHARD_PEAK)
 
 
+def make_rumble() -> list[float]:
+    rng = random.Random(RANDOM_SEED + 11)
+    count = int(RUMBLE_LENGTH * SAMPLE_RATE)
+    samples = []
+    low = 0.0
+    lower = 0.0
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        # Two low-pass stages: a deep, rolling noise.
+        low = low + (1.0 - RUMBLE_SMOOTH) * (rng.uniform(-1.0, 1.0) - low)
+        lower = lower + (1.0 - RUMBLE_SMOOTH) * (low - lower)
+        tone = math.sin(2.0 * math.pi * RUMBLE_TONE * t) * RUMBLE_TONE_GAIN
+        wobble = 1.0 - RUMBLE_WOBBLE * (0.5 + 0.5 * math.sin(2.0 * math.pi * RUMBLE_WOBBLE_RATE * t))
+        env = min(t / RUMBLE_SWELL, 1.0) * min((RUMBLE_LENGTH - t) / RUMBLE_FADE_OUT, 1.0)
+        samples.append((lower * 40.0 + tone) * wobble * env)
+    return normalize(samples, RUMBLE_PEAK)
+
+
+def make_slam() -> list[float]:
+    rng = random.Random(RANDOM_SEED + 12)
+    count = int(SLAM_LENGTH * SAMPLE_RATE)
+    samples = []
+    grit = 0.0
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        thud = math.sin(2.0 * math.pi * SLAM_FREQ * t * (1.0 - 0.3 * min(t / 0.2, 1.0))) * envelope(t, 0.003, SLAM_DECAY)
+        crack = rng.uniform(-1.0, 1.0) * SLAM_CRACK * math.exp(-t / SLAM_CRACK_DECAY)
+        grit = grit + 0.4 * (rng.uniform(-1.0, 1.0) - grit)
+        samples.append(thud + crack + grit * SLAM_GRIT * math.exp(-t / SLAM_GRIT_DECAY))
+    return normalize(one_pole_lowpass(samples, 0.3), SLAM_PEAK)
+
+
+def make_clear() -> list[float]:
+    count = int(CLEAR_LENGTH * SAMPLE_RATE)
+    samples = []
+    for n in range(count):
+        t = n / SAMPLE_RATE
+        value = 0.0
+        for i, (ratio, gain) in enumerate(CLEAR_NOTES):
+            start = i * CLEAR_ARPEGGIO
+            if t >= start:
+                local = t - start
+                note = math.sin(2.0 * math.pi * CLEAR_ROOT * ratio * local) + 0.3 * math.sin(4.0 * math.pi * CLEAR_ROOT * ratio * local)
+                value += gain * note * envelope(local, 0.02, CLEAR_DECAY)
+        samples.append(value)
+    fade_count = int(0.2 * SAMPLE_RATE)
+    for k in range(fade_count):
+        samples[count - fade_count + k] *= 1.0 - k / fade_count
+    return normalize(samples, CLEAR_PEAK)
+
+
 def write_wav(path: Path, samples: list[float]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as file:
@@ -458,3 +538,6 @@ if __name__ == "__main__":
     write_wav(OUTPUT_DIR / "exposed_kill.wav", make_exposed_kill())
     write_wav(OUTPUT_DIR / "creature_lunge.wav", make_lunge())
     write_wav(OUTPUT_DIR / "shard_collect.wav", make_shard())
+    write_wav(OUTPUT_DIR / "rumble.wav", make_rumble())
+    write_wav(OUTPUT_DIR / "rock_slam.wav", make_slam())
+    write_wav(OUTPUT_DIR / "lockdown_clear.wav", make_clear())
