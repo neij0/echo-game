@@ -54,7 +54,10 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   player is deep inside the lockdown room (`trigger_inset`), its connected doorways close
   with rock (rumble, slam, shake) and a wave wakes on its Creature markers
   (`lockdown_wave_calm` / `_challenge`). Once every wave creature is dead the doorways open
-  (chord + warm light in each doorway). Once per attempt; downed / revive, distress pulse and
+  (chord + warm light in each doorway). While locked the passive oxygen drain is scaled
+  (`calm_drain_scale` 0 = paused, `challenge_drain_scale` 0.5; pulses cost as usual); clearing
+  the wave gives both players `clear_pressure_ratio` (25 %) back (refill sound + ring).
+  Once per attempt; downed / revive, distress pulse and
   close sense work inside; both downed = the normal restart rules.
 - **Navigation rebake**: lockdown barriers and the arena door rebake the mesh one frame after
   the event, while its camera shake (`"shared_camera"` group, `shake_with`) hides the hitch.

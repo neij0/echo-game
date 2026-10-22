@@ -10,6 +10,9 @@ extends Node2D
 ## navigation is rebaked when the doorways close and open (navigation_changed,
 ## LevelBuilder), behind the camera shake. Wave sizes come from the
 ## LevelDefinition per mode; the StageManager sets the mode ("mode_listeners").
+## While locked, the players' passive oxygen drain is scaled (per mode; pulses
+## still cost as usual). Clearing the wave gives every player back a share of
+## the meter, with a refill sound and a ring around each player.
 ## Built and set up by the LevelBuilder (all positions in its space).
 
 signal locked
@@ -24,6 +27,21 @@ enum Phase { WAITING, LOCKED, CLEARED }
 @export var trigger_inset: float = 260.0
 ## Seconds between the doorways closing and the wave waking.
 @export var wake_delay: float = 0.8
+
+@export_group("Oxygen")
+## Share of the passive pressure drain while locked (0 = paused).
+@export_range(0.0, 1.0) var calm_drain_scale: float = 0.0
+@export_range(0.0, 1.0) var challenge_drain_scale: float = 0.5
+## Share (0-1) of a full meter every player gets back when the wave is dead.
+@export_range(0.0, 1.0) var clear_pressure_ratio: float = 0.25
+@export var refill_stream: AudioStream
+@export var refill_volume_db: float = -2.0
+## Ring that grows around each player when the meter is refilled.
+@export var refill_ring_color: Color = Color(0.35, 0.8, 1.0)
+@export var refill_ring_energy: float = 2.5
+@export var refill_ring_radius: float = 90.0
+@export var refill_ring_width: float = 3.0
+@export var refill_ring_time: float = 0.9
 
 @export_group("Feedback")
 @export var close_shake_strength: float = 9.0
@@ -56,6 +74,9 @@ var _wake_left: float = -1.0
 var _rumble: AudioStreamPlayer
 var _slam: AudioStreamPlayer
 var _clear: AudioStreamPlayer
+var _refill: AudioStreamPlayer
+var _ring_left: float = 0.0
+var _ring: Node2D
 
 
 func _ready() -> void:
@@ -71,6 +92,18 @@ func _ready() -> void:
 	_rumble = _make_player(rumble_stream, rumble_volume_db)
 	_slam = _make_player(slam_stream, slam_volume_db)
 	_clear = _make_player(clear_stream, clear_volume_db)
+	_refill = _make_player(refill_stream, refill_volume_db)
+	var layer := CanvasLayer.new()
+	layer.follow_viewport_enabled = true
+	add_child(layer)
+	_ring = Node2D.new()
+	layer.add_child(_ring)
+	_ring.draw.connect(_draw_refill_rings)
+
+
+func _exit_tree() -> void:
+	# A retry rebuilds the level while it may still be locked.
+	_set_drain_scale(1.0)
 
 
 ## Called (via the "mode_listeners" group) by StageManager.
@@ -80,6 +113,10 @@ func set_challenge_mode(enabled_value: bool) -> void:
 
 func get_wave_size() -> int:
 	return wave_challenge if challenge_mode else wave_calm
+
+
+func get_drain_scale() -> float:
+	return challenge_drain_scale if challenge_mode else calm_drain_scale
 
 
 func is_locked() -> bool:
@@ -100,6 +137,12 @@ func contains(point: Vector2) -> bool:
 	return room_rect.grow(-trigger_inset).has_point(point)
 
 
+func _process(delta: float) -> void:
+	if _ring_left > 0.0:
+		_ring_left = maxf(_ring_left - delta, 0.0)
+		_ring.queue_redraw()
+
+
 func _physics_process(delta: float) -> void:
 	match phase:
 		Phase.WAITING:
@@ -111,7 +154,7 @@ func _physics_process(delta: float) -> void:
 				if _wake_left < 0.0:
 					_spawn_wave()
 			elif _wave_dead():
-				unlock()
+				unlock(true)
 
 
 func _everyone_inside() -> bool:
@@ -135,17 +178,22 @@ func lock() -> void:
 	_play(_slam)
 	_shake(close_shake_strength, close_shake_time)
 	_wake_left = wake_delay
+	_set_drain_scale(get_drain_scale())
 	get_tree().call_group("sonar_overlay", "rebuild_samples")
 	navigation_changed.emit()
 	locked.emit()
 
 
-## Opens the doorways again (the wave is dead, or the collapse broke them).
-func unlock() -> void:
+## Opens the doorways again (the wave is dead = rewarded with oxygen, or the
+## collapse broke them).
+func unlock(rewarded: bool = false) -> void:
 	if phase != Phase.LOCKED:
 		return
 	phase = Phase.CLEARED
 	_wake_left = -1.0
+	_set_drain_scale(1.0)
+	if rewarded:
+		_refill_players()
 	for barrier: LockdownBarrier in _barriers:
 		barrier.open()
 	_play(_clear)
@@ -164,7 +212,7 @@ func cancel() -> void:
 
 func _spawn_wave() -> void:
 	if creature_scene == null or spawn_points.is_empty():
-		unlock()
+		unlock(true)
 		return
 	# Markers farthest from the players first, so nothing wakes on top of them.
 	var points: Array[Vector2] = spawn_points.duplicate()
@@ -197,6 +245,28 @@ func _wave_dead() -> bool:
 		if is_instance_valid(creature) and not creature.is_dying():
 			return false
 	return true
+
+
+func _set_drain_scale(share: float) -> void:
+	for player: Player in Players.all(get_tree()):
+		player.pressure.drain_scale = share
+
+
+func _refill_players() -> void:
+	for player: Player in Players.all(get_tree()):
+		player.pressure.add_ratio(clear_pressure_ratio)
+	_play(_refill)
+	_ring_left = refill_ring_time
+
+
+func _draw_refill_rings() -> void:
+	if _ring_left <= 0.0:
+		return
+	var t: float = 1.0 - _ring_left / maxf(refill_ring_time, 0.01)
+	var color := Color(refill_ring_color.r * refill_ring_energy, refill_ring_color.g * refill_ring_energy,
+		refill_ring_color.b * refill_ring_energy, 1.0 - t)
+	for player: Player in Players.all(get_tree()):
+		_ring.draw_arc(player.global_position, refill_ring_radius * (0.3 + 0.7 * t), 0.0, TAU, 40, color, refill_ring_width * (1.0 - t) + 1.0, true)
 
 
 func get_wave() -> Array[Creature]:

@@ -345,6 +345,21 @@ func _test_lockdown() -> void:
 	for creature: Creature in lockdown.get_wave():
 		(creature.get_node("Hitbox") as Area2D).set_deferred("monitoring", false)
 
+	# Oxygen while locked: passive drain scaled per mode, pulses cost as usual.
+	var pressure: PlayerPressure = _echo.pressure
+	pressure.value = pressure.max_value * 0.5
+	var before: float = pressure.value
+	await _frames(int(PHYSICS_FPS))
+	var normal_drain: float = pressure.max_value / (pressure.drain_seconds * pressure.drain_multiplier)
+	var drained: float = before - pressure.value
+	print("  oxygen while locked: drained %.3f in 1 s (normal %.3f) | drain scale Calm %.2f, Challenge %.2f" % [
+		drained, normal_drain, lockdown.calm_drain_scale, lockdown.challenge_drain_scale])
+	_check(absf(drained - normal_drain * lockdown.challenge_drain_scale) < normal_drain * 0.1, "Challenge: passive drain at %d%%" % roundi(lockdown.challenge_drain_scale * 100.0))
+	_check(lockdown.calm_drain_scale == 0.0, "Calm: passive drain paused")
+	before = pressure.value
+	(_echo.get_node("Pulse") as PulseAbility).emit_pulse()
+	_check(absf(before - pressure.value - pressure.max_value * pressure.pulse_cost_ratio) < 0.5, "a pulse still costs its oxygen")
+
 	# Downed inside: the distress pulse, the close sense and the revive all work.
 	_protect_players()
 	_echo.health.down(PlayerHealth.Cause.CREATURE)
@@ -369,7 +384,9 @@ func _test_lockdown() -> void:
 	Input.action_release("p2_action")
 	_check(not _echo.health.is_downed, "the Guardian can revive the Echo inside")
 
-	# The wave dies: the doorways open again.
+	# The wave dies: the doorways open again, with oxygen back for both.
+	for player: Player in [_echo, _guardian]:
+		player.pressure.value = player.pressure.max_value * 0.4
 	for creature: Creature in lockdown.get_wave():
 		if is_instance_valid(creature):
 			creature.take_damage(999, _guardian, 0.0, 0.0)
@@ -378,6 +395,13 @@ func _test_lockdown() -> void:
 	var open_gap: float = open_path[open_path.size() - 1].distance_to(outside) if open_path.size() > 0 else INF
 	_check(lockdown.phase == LockdownRoom.Phase.CLEARED and lockdown.get_obstacles().is_empty(), "with the wave dead the doorways open")
 	_check(open_gap < 60.0, "the navigation leads out again")
+	var refilled: bool = true
+	for player: Player in [_echo, _guardian]:
+		var ratio: float = player.pressure.get_ratio()
+		if absf(ratio - (0.4 + lockdown.clear_pressure_ratio)) > 0.01 or player.pressure.drain_scale != 1.0:
+			refilled = false
+	_check(refilled, "clearing it gives both players %d%% oxygen and normal drain again" % roundi(lockdown.clear_pressure_ratio * 100.0))
+	_check(lockdown._refill.playing and lockdown._ring_left > 0.0, "with a refill sound and a ring")
 	_teleport_players(outside)
 	await _frames(5)
 	_teleport_players(center)

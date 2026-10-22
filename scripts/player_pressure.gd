@@ -30,6 +30,9 @@ var pulse_cost_ratio: float = 0.0
 var level_refill_ratio: float = 0.0
 ## Set by the StageManager: Calm mode makes the meter last longer (> 1).
 var drain_multiplier: float = 1.0
+## Share of the passive drain that applies right now (set by an active
+## LockdownRoom: 0 = paused). Pulses still cost their full share.
+var drain_scale: float = 1.0
 
 var value: float = 0.0
 var _is_low: bool = false
@@ -60,7 +63,7 @@ func apply_world(world: WorldConfig) -> void:
 func _process(delta: float) -> void:
 	if health and health.is_downed:
 		return
-	value = maxf(value - max_value / (drain_seconds * drain_multiplier) * delta, 0.0)
+	value = maxf(value - max_value / (drain_seconds * drain_multiplier) * drain_scale * delta, 0.0)
 	_update_low()
 	if _is_low:
 		_update_alarm(delta)
