@@ -60,6 +60,9 @@ const STRINGS: Dictionary = {
 	"pressure_Oxygen": {"en": "oxygen", "ar": "الأكسجين"},
 	"shards": {"en": "Echo Shards: %d / %d", "ar": "شظايا الصدى: %d من %d"},
 	"exit_open": {"en": "The ancient light is awake: find it", "ar": "استيقظ الضوء القديم: اعثرا عليه"},
+	# Downed Echo (HUD hint)
+	"distress_ready": {"en": "Downed: press the pulse button for a distress pulse", "ar": "سقطتِ: اضغطي زر النبضة لإطلاق نبضة استغاثة"},
+	"distress_cooldown": {"en": "Distress pulse in %.1f s", "ar": "نبضة الاستغاثة بعد %.1f ث"},
 	"arena_open": {"en": "The arena door is open", "ar": "انفتح باب الساحة"},
 
 	# World map

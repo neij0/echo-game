@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1_base"]
 [ext_resource type="Script" path="res://scripts/sword_ability.gd" id="2_sword"]
@@ -6,6 +6,7 @@
 [ext_resource type="AudioStream" path="res://assets/audio/sword_hit.wav" id="4_hit"]
 [ext_resource type="AudioStream" path="res://assets/audio/exposed_kill.wav" id="5_kill"]
 [ext_resource type="Script" path="res://scripts/guardian_visual.gd" id="6_visual"]
+[ext_resource type="Script" path="res://scripts/close_sense.gd" id="7_sense"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_body"]
 radius = 13.0
@@ -40,3 +41,7 @@ player = NodePath("../..")
 swing_stream = ExtResource("3_swing")
 hit_stream = ExtResource("4_hit")
 exposed_kill_stream = ExtResource("5_kill")
+
+[node name="CloseSense" type="Node" parent="." node_paths=PackedStringArray("player")]
+script = ExtResource("7_sense")
+player = NodePath("..")

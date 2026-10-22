@@ -240,6 +240,9 @@ var _was_in_light: bool = false
 var _exposed_left: float = 0.0
 ## 0 = no silhouette, 1 = full silhouette (see the Silhouette group).
 var silhouette_ratio: float = 0.0
+## 0-1: how strongly a CloseSense (the Guardian) feels it right now. Keeps the
+## silhouette and the eyes visible at melee range without the Echo's light.
+var sense_ratio: float = 0.0
 var _silhouette_check_left: float = 0.0
 var _silhouette_blocked: bool = false
 var _anim_time: float = 0.0
@@ -814,10 +817,23 @@ func _update_reveal(delta: float) -> void:
 	if velocity.length() > 1.0:
 		_facing = _facing.lerp(velocity.normalized(), 1.0 - exp(-8.0 * delta)).normalized()
 	var previous_silhouette: float = silhouette_ratio
-	silhouette_ratio = 0.0 if in_light else _compute_silhouette(delta)
+	sense_ratio = _compute_sense()
+	silhouette_ratio = 0.0 if in_light else maxf(_compute_silhouette(delta), sense_ratio)
 	# Visible shapes move (tendrils, fins), so they redraw every frame.
 	if in_light or silhouette_ratio > 0.0 or previous_silhouette > 0.0 or not hidden_until_pinged:
 		queue_redraw()
+
+
+## The strongest CloseSense on this creature (0 = nobody senses it).
+func _compute_sense() -> float:
+	if not silhouette_enabled or not hidden_until_pinged:
+		return 0.0
+	var best: float = 0.0
+	for node: Node in get_tree().get_nodes_in_group("close_senses"):
+		var sense := node as CloseSense
+		if sense:
+			best = maxf(best, sense.get_sense_ratio(global_position, body_radius))
+	return best
 
 
 ## 1 at the edge of the Echo's full reveal, 0 at the edge of her light.

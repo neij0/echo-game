@@ -2,7 +2,8 @@ class_name CreatureEyes
 extends Node2D
 ## Two faint glowing eyes that fade in when the hidden creature is very close to
 ## the nearest player (no pulse needed), or faintly when it is a silhouette in
-## the Echo's light (Creature.silhouette_ratio), looking where it is moving.
+## the Echo's light (Creature.silhouette_ratio), and clearly when the Guardian's
+## close sense feels it (Creature.sense_ratio), looking where it is moving.
 ## They flare up (brighter, bigger, fully visible) during the creature's lunge
 ## wind-up: the warning that a lunge is coming.
 ## Must live on a CanvasLayer with follow_viewport_enabled, so the world's
@@ -36,6 +37,9 @@ extends Node2D
 ## full reveal and the edge of her light): this share of max_alpha at full
 ## silhouette, so they stay faint.
 @export_range(0.0, 1.0) var silhouette_eye_share: float = 0.45
+## Eyes of a creature felt by the Guardian's close sense: this share of
+## max_alpha (high, so he always sees what is about to hit him).
+@export_range(0.0, 1.0) var sensed_eye_share: float = 1.0
 ## Lunge flare (Creature.get_lunge_flare): brightness and size multipliers at
 ## its peak, and its colour.
 @export var flare_energy: float = 3.0
@@ -63,6 +67,7 @@ func _physics_process(_delta: float) -> void:
 		if not get_world_2d().direct_space_state.intersect_ray(query).is_empty():
 			_visible_target = 0.0
 	_visible_target = maxf(_visible_target, creature.silhouette_ratio * silhouette_eye_share)
+	_visible_target = maxf(_visible_target, creature.sense_ratio * sensed_eye_share)
 
 
 func _process(delta: float) -> void:

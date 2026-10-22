@@ -110,6 +110,8 @@ func _start_stage() -> void:
 		register_player(player)
 		player.pressure.drain_multiplier = calm_drain_multiplier if mode == SaveData.Mode.CALM else 1.0
 		player.health.set_challenge_mode(mode == SaveData.Mode.CHALLENGE)
+	# DistressPulse, CloseSense, ReviveHelper: their values depend on the mode.
+	get_tree().call_group("mode_listeners", "set_challenge_mode", mode == SaveData.Mode.CHALLENGE)
 	_start_level(0)
 
 

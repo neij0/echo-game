@@ -28,6 +28,8 @@ extends Node2D
 @export var revive_energy: float = 2.5
 @export var revive_radius: float = 38.0
 @export var revive_width: float = 4.0
+## Opacity of the ring while the revive is interrupted (paused or decaying).
+@export_range(0.0, 1.0) var revive_interrupted_alpha: float = 0.45
 
 var _time: float = 0.0
 
@@ -56,7 +58,8 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, downed_radius * lerpf(0.9, 1.1, pulse), 0.0, TAU, 40, color, 2.0, true)
 		var reviver: ReviveHelper = _find_reviver()
 		if reviver and reviver.progress > 0.0:
-			var ring: Color = _hdr(revive_color, revive_energy, 1.0)
+			var ring_alpha: float = revive_interrupted_alpha if reviver.is_interrupted() else 1.0
+			var ring: Color = _hdr(revive_color, revive_energy, ring_alpha)
 			draw_arc(Vector2.ZERO, revive_radius, -PI * 0.5, -PI * 0.5 + TAU * reviver.get_progress_ratio(), 48, ring, revive_width, true)
 
 
@@ -70,12 +73,10 @@ func _draw_capsule_outline(color: Color) -> void:
 		draw_line(Vector2(radius, -straight), Vector2(radius, straight), color, outline_width, true)
 
 
-## The partner's ReviveHelper if it is currently reviving this player.
+## The partner's ReviveHelper (its progress on this player is kept while
+## interrupted, so the ring shows even when the partner stepped away).
 func _find_reviver() -> ReviveHelper:
 	var partner: Player = player.get_partner()
 	if partner == null:
 		return null
-	var helper := partner.get_node_or_null("Revive") as ReviveHelper
-	if helper and helper.get_target() == player:
-		return helper
-	return null
+	return partner.get_node_or_null("Revive") as ReviveHelper

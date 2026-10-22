@@ -11,6 +11,9 @@ extends Node
 ## - persistence (CHASE -> SEARCH at the last seen spot -> WANDER);
 ## - pathing: creatures reaching a far room through doorways, with and without
 ##   the navigation mesh, on every level;
+## - downed Echo: creatures ignore downed players, the distress pulse (reveal,
+##   Exposed, no oxygen), the Guardian's close sense (silhouette, eyes, lunge
+##   flare) and revive progress that pauses and decays instead of resetting;
 ## - shards: locked ancient light, collection, unlock, the Echo's arrow, and the
 ##   boss arena door blocking (collision + navigation) until all are collected.
 
@@ -54,6 +57,10 @@ func _run() -> void:
 	await _test_lunge()
 	await _test_alert()
 	await _test_search()
+	await _test_downed_ignored()
+	await _test_distress_pulse()
+	await _test_close_sense()
+	await _test_revive_decay()
 	await _test_shards()
 	await _test_pathing()
 
@@ -61,6 +68,155 @@ func _run() -> void:
 	_game.queue_free()
 	await get_tree().process_frame
 	get_tree().quit(0 if _failures == 0 else 1)
+
+
+# --- Downed Echo -------------------------------------------------------------
+
+func _test_downed_ignored() -> void:
+	print("== Creatures ignore downed players ==")
+	await _build(0, 0)
+	_guardian.global_position = _far_spot(_echo.global_position, 750.0)
+	var creature: Creature = _spawn_creature(_open_spot(_echo.global_position, 150.0))
+	creature._spot(_echo)
+	_echo.health.down(PlayerHealth.Cause.CREATURE)
+	await _frames(3)
+	_check(creature.state != Creature.State.CHASE, "a chase on a player who goes down ends")
+	creature._end_search()
+	creature._respot_left = 0.0
+	await _frames(10)
+	_check(creature.state != Creature.State.CHASE, "a downed player is never spotted")
+	creature.hear_pulse(_echo.global_position, _echo)
+	_check(creature.state != Creature.State.CHASE, "a downed player's pulse does not give them away")
+	var before: float = _echo.health.value
+	_echo.health._invulnerable_left = 0.0
+	_echo.health.take_hit(creature.global_position)
+	_check(_echo.health.value == before and _echo.health.is_downed, "a downed player takes no damage")
+	creature.queue_free()
+	_protect_players()
+
+
+func _test_distress_pulse() -> void:
+	print("== Distress pulse (downed Echo) ==")
+	await _build(0, 0)
+	var distress: DistressPulse = _echo.get_node("DistressPulse") as DistressPulse
+	_guardian.global_position = _far_spot(_echo.global_position, 750.0)
+	var near: Creature = _spawn_creature(_open_spot(_echo.global_position, distress.get_radius() * 0.6))
+	var far: Creature = _spawn_creature(_far_spot(_echo.global_position, distress.get_radius() * 2.5))
+	for creature: Creature in [near, far]:
+		creature.set_physics_process(false)
+	await _frames(2)
+	# Not downed: the button is the normal pulse, the distress pulse stays unused.
+	Input.action_press("p1_action")
+	await _frames(2)
+	Input.action_release("p1_action")
+	_check(distress.is_ready(), "no distress pulse while the Echo is up")
+	# Clear the normal pulse's reveal (their physics is off, so it does not run out).
+	await _frames(int(3.5 * PHYSICS_FPS))
+	for creature: Creature in [near, far]:
+		creature._exposed_left = 0.0
+		creature._revealed_left = 0.0
+	_echo.health.down(PlayerHealth.Cause.CREATURE)
+	var oxygen: float = _echo.pressure.value
+	var pulses: int = _stage.pulses_used
+	Input.action_press("p1_action")
+	await _frames(2)
+	Input.action_release("p1_action")
+	_check(not distress.is_ready() and absf(distress.cooldown_left - distress.get_cooldown()) < 0.1,
+		"a downed Echo's button sends the distress pulse (cooldown %.1f s)" % distress.get_cooldown())
+	await _frames(int((distress.expand_time + 0.15) * PHYSICS_FPS))
+	print("  radius %.0f px | near creature %.0f px: revealed %s, exposed %s | far creature %.0f px: exposed %s" % [
+		distress.get_radius(), near.global_position.distance_to(_echo.global_position), near.is_revealed(), near.is_exposed(),
+		far.global_position.distance_to(_echo.global_position), far.is_exposed()])
+	_check(near.is_revealed() and near.is_exposed(), "it reveals and Exposes a creature inside its radius")
+	_check(not far.is_exposed(), "a creature outside its radius is not Exposed")
+	_check(is_equal_approx(_echo.pressure.value, oxygen), "it costs no oxygen")
+	_check(_stage.pulses_used == pulses, "it is not a normal pulse (no Depth Awareness, no spotting)")
+	Input.action_press("p1_action")
+	await _frames(2)
+	Input.action_release("p1_action")
+	_check(distress.cooldown_left < distress.get_cooldown() - 0.3, "the cooldown blocks a second pulse")
+	near.queue_free()
+	far.queue_free()
+	_protect_players()
+
+
+func _test_close_sense() -> void:
+	print("== Guardian close sense ==")
+	await _build(0, 0)
+	var sense: CloseSense = _guardian.get_node("CloseSense") as CloseSense
+	# The Echo is downed far away: no light of hers reveals anything near him.
+	_echo.global_position = _far_spot(_guardian.global_position, 750.0)
+	_echo.health.down(PlayerHealth.Cause.CREATURE)
+	var close: Creature = _spawn_creature(_open_spot(_guardian.global_position, sense.get_radius() * 0.8))
+	var outside: Creature = _spawn_creature(_open_spot(_guardian.global_position, sense.get_radius() + sense.fade_band + 80.0))
+	var close_spot: Vector2 = close.global_position
+	var outside_spot: Vector2 = outside.global_position
+	for i: int in 20:
+		await get_tree().physics_frame
+		close.global_position = close_spot
+		outside.global_position = outside_spot
+		close.velocity = Vector2.ZERO
+		outside.velocity = Vector2.ZERO
+	var close_eyes: CreatureEyes = close.get_node("EchoLayer/Eyes") as CreatureEyes
+	print("  radius %.0f px | close creature: sense %.2f, silhouette %.2f, eyes %.2f, hittable %s | outside: sense %.2f" % [
+		sense.get_radius(), close.sense_ratio, close.silhouette_ratio, close_eyes._alpha, close.is_revealed(), outside.sense_ratio])
+	_check(close.sense_ratio >= 1.0 and close.silhouette_ratio >= 1.0, "a creature within the radius is shown as a silhouette")
+	_check(close_eyes._alpha >= close_eyes.sensed_eye_share * 0.99, "its eyes glow clearly")
+	_check(not close.is_revealed(), "sensing does not make it hittable (the Echo stays needed)")
+	_check(outside.sense_ratio == 0.0, "beyond the radius the normal rules apply")
+	close.queue_free()
+	outside.queue_free()
+	await _frames(2)
+	# The lunge wind-up flare is visible to him even outside the sense radius.
+	var lunger: Creature = _spawn_creature(_open_spot(_guardian.global_position, 260.0))
+	var lunger_eyes: CreatureEyes = lunger.get_node("EchoLayer/Eyes") as CreatureEyes
+	lunger._spot(_guardian)
+	var flare_alpha: float = -1.0
+	for i: int in int(4.0 * PHYSICS_FPS):
+		await get_tree().physics_frame
+		_guardian.health._invulnerable_left = 999.0
+		if lunger.lunge_phase == Creature.Lunge.WIND_UP:
+			await get_tree().process_frame
+			flare_alpha = lunger_eyes._alpha
+			break
+	print("  lunge wind-up: eye alpha %.2f at %.0f px from the Guardian" % [flare_alpha, lunger.global_position.distance_to(_guardian.global_position)])
+	_check(flare_alpha > 0.0, "the lunge wind-up flare shows without the Echo")
+	lunger.queue_free()
+	_protect_players()
+
+
+func _test_revive_decay() -> void:
+	print("== Revive progress (interrupted) ==")
+	await _build(0, 0)
+	var helper: ReviveHelper = _guardian.get_node("Revive") as ReviveHelper
+	var delay: float = helper.challenge_decay_delay if helper.challenge_mode else helper.calm_decay_delay
+	var decay: float = helper.challenge_decay_per_second if helper.challenge_mode else helper.calm_decay_per_second
+	_echo.health.down(PlayerHealth.Cause.CREATURE)
+	_guardian.global_position = _echo.global_position + Vector2(30.0, 0.0)
+	await _frames(2)
+	Input.action_press("p2_action")
+	await _frames(int(helper.revive_time * 0.5 * PHYSICS_FPS))
+	Input.action_release("p2_action")
+	var held: float = helper.get_progress_ratio()
+	await _frames(int(delay * 0.8 * PHYSICS_FPS))
+	var paused: float = helper.get_progress_ratio()
+	await _frames(int((delay * 0.2 + 1.0) * PHYSICS_FPS))
+	var decayed: float = helper.get_progress_ratio()
+	print("  held %.2f -> paused %.2f -> after 1 s of decay %.2f (expected %.2f)" % [held, paused, decayed, held - decay])
+	_check(held > 0.4, "holding fills the progress")
+	_check(is_equal_approx(paused, held), "letting go pauses the progress (decay delay %.1f s)" % delay)
+	_check(absf(decayed - (held - decay)) < 0.05, "then it decays %.0f%% per second" % (decay * 100.0))
+	# Stepping away keeps the progress too.
+	var kept: float = helper.get_progress_ratio()
+	_guardian.global_position = _echo.global_position + Vector2(helper.revive_distance * 2.0, 0.0)
+	await _frames(5)
+	_check(helper.get_progress_ratio() > 0.0 and helper.get_progress_ratio() >= kept - 0.02, "stepping away does not reset it")
+	_guardian.global_position = _echo.global_position + Vector2(30.0, 0.0)
+	Input.action_press("p2_action")
+	await _frames(int(helper.revive_time * PHYSICS_FPS))
+	Input.action_release("p2_action")
+	_check(not _echo.health.is_downed and helper.progress == 0.0, "finishing revives and resets the progress")
+	_protect_players()
 
 
 # --- Speeds -------------------------------------------------------------------

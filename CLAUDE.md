@@ -62,8 +62,15 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   (+1 segment to every player not downed) or a revive (1 segment). Health carries over
   between the levels of a stage. HUD: `HealthSegments` per player; at 1 segment or less a
   heartbeat + red edge pulse (`HurtVignette`). At zero the player is downed.
-- **Downed**: a caught player can be revived by the partner. If both are downed at the same
-  time, it depends on the mode (main menu, changeable later):
+- **Downed**: creatures ignore a downed player (no spotting, chase ends, no damage). A caught
+  player can be revived by the partner; interrupted revive progress pauses
+  (`decay_delay`, 1 s) then decays (20 %/s) instead of resetting (`ReviveHelper`). A downed
+  Echo can send a **distress pulse** (`DistressPulse`: action button, 200 px, 4 s cooldown,
+  no oxygen / awareness; reveals + Exposes creatures it reaches, its noise draws creatures to
+  INVESTIGATE). The Guardian's **close sense** (`CloseSense`, 90 px): creatures that close
+  always show as a silhouette with clearly glowing eyes (not hittable; the lunge flare is
+  always visible). Per-mode values reach these via the `mode_listeners` group. If both are
+  downed at the same time, it depends on the mode (main menu, changeable later):
   **Calm** = restart the current level (and the meter drains slower);
   **Challenge** = restart the current stage from level 1.
 - **Save** (`user://save.json`, `SaveData`): current world, current stage, unlocked worlds,
@@ -176,8 +183,9 @@ linear float data and look much darker than the screen; convert each pixel with
   - `test_save.gd`: save/load test (uses its own test files in `user://`):
     `godot --headless --path . -s res://tools/test_save.gd`
   - `test_creatures.tscn`: creature + shard test, run as a scene (needs the `Game` autoload):
-    chase speeds per mode/awareness, lunge, alerting, search, pathing on every level (with and
-    without navigation), shards, locked exit and arena door:
+    chase speeds per mode/awareness, lunge, alerting, search, downed Echo (ignored, distress
+    pulse, close sense, revive decay), pathing on every level (with and without navigation),
+    shards, locked exit and arena door:
     `godot --headless --path . --fixed-fps 60 res://tools/test_creatures.tscn`
   - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it
