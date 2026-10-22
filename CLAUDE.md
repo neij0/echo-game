@@ -66,9 +66,10 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   player can be revived by the partner; interrupted revive progress pauses
   (`decay_delay`, 1 s) then decays (20 %/s) instead of resetting (`ReviveHelper`). A downed
   Echo can send a **distress pulse** (`DistressPulse`: action button, 200 px, 4 s cooldown,
-  no oxygen / awareness; reveals + Exposes creatures it reaches, its noise draws creatures to
-  INVESTIGATE). The Guardian's **close sense** (`CloseSense`, 90 px): creatures that close
-  always show as a silhouette with clearly glowing eyes (not hittable; the lunge flare is
+  no oxygen / awareness; reveals + Exposes creatures it reaches; its noise draws creatures within
+  `noise_radius` to INVESTIGATE: Calm 0, Challenge 200 px). The Guardian's **close sense** (`CloseSense`, 90 px): creatures that close
+  always show as a silhouette with clearly glowing eyes and are hittable with normal sword
+  damage (only an Echo pulse makes them Exposed for the instant kill; the lunge flare is
   always visible). Per-mode values reach these via the `mode_listeners` group. If both are
   downed at the same time, it depends on the mode (main menu, changeable later):
   **Calm** = restart the current level (and the meter drains slower);

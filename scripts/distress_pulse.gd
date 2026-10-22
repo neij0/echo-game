@@ -5,7 +5,7 @@ extends Node
 ## Guardian can see and fight the creatures around her. It works like a normal
 ## pulse front (SonarOverlay): creatures it reaches are revealed and Exposed.
 ## It does not emit pulse_emitted (no oxygen, no Depth Awareness, no spotting),
-## but its noise makes creatures within noise_radius INVESTIGATE.
+## but its noise makes creatures within noise_radius INVESTIGATE (0 = silent).
 ## Values per mode; the StageManager sets the mode ("mode_listeners" group).
 
 @export var player: Player
@@ -14,12 +14,12 @@ extends Node
 @export_group("Calm")
 @export var calm_radius: float = 200.0
 @export var calm_cooldown: float = 4.0
-@export var calm_noise_radius: float = 350.0
+@export var calm_noise_radius: float = 0.0
 
 @export_group("Challenge")
 @export var challenge_radius: float = 200.0
 @export var challenge_cooldown: float = 4.0
-@export var challenge_noise_radius: float = 450.0
+@export var challenge_noise_radius: float = 200.0
 
 @export_group("Look")
 @export var expand_time: float = 0.45
@@ -69,4 +69,5 @@ func emit_pulse() -> void:
 		ring.position = player.position
 		player.get_parent().add_child(ring)
 	var noise: float = challenge_noise_radius if challenge_mode else calm_noise_radius
-	get_tree().call_group("creatures", "hear_noise", player.global_position, noise)
+	if noise > 0.0:
+		get_tree().call_group("creatures", "hear_noise", player.global_position, noise)

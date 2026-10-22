@@ -289,7 +289,8 @@ func _apply_damage() -> void:
 			continue
 		if absf(_swing_dir.angle_to(offset)) > half_arc:
 			continue
-		# Unrevealed creatures cannot be hurt: the Guardian only fights what the Echo shows.
+		# Unrevealed creatures cannot be hurt: the Guardian only fights what the Echo
+		# shows, or what is right next to him (his close sense).
 		if not creature.is_revealed():
 			continue
 		var damage: int = finisher_damage if is_finisher else quick_damage

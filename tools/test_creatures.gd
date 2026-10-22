@@ -162,7 +162,13 @@ func _test_close_sense() -> void:
 		sense.get_radius(), close.sense_ratio, close.silhouette_ratio, close_eyes._alpha, close.is_revealed(), outside.sense_ratio])
 	_check(close.sense_ratio >= 1.0 and close.silhouette_ratio >= 1.0, "a creature within the radius is shown as a silhouette")
 	_check(close_eyes._alpha >= close_eyes.sensed_eye_share * 0.99, "its eyes glow clearly")
-	_check(not close.is_revealed(), "sensing does not make it hittable (the Echo stays needed)")
+	_check(close.is_revealed() and not close.is_exposed(), "a sensed creature is hittable but not Exposed")
+	var sword: SwordAbility = _guardian.get_node("UnlitLayer/Sword") as SwordAbility
+	var health_before: int = close.health
+	var killed: bool = close.take_damage(sword.finisher_damage, _guardian, 0.0, 0.0, true)
+	_check(not killed and close.health == health_before - sword.finisher_damage, "a finisher on it deals normal damage (no instant kill)")
+	_check(sword.finisher_range <= sense.get_radius(), "the sword's reach is inside the close sense")
+	_check(not outside.is_revealed(), "a creature beyond it is not hittable")
 	_check(outside.sense_ratio == 0.0, "beyond the radius the normal rules apply")
 	close.queue_free()
 	outside.queue_free()

@@ -300,10 +300,11 @@ func set_challenge_mode(enabled: bool) -> void:
 	challenge_mode = enabled
 
 
-## True while the Guardian can hurt it: inside a revealing light (the Echo's)
-## or shortly after a pulse front passed over it.
+## True while the Guardian can hurt it: inside a revealing light (the Echo's),
+## shortly after a pulse front passed over it, or fully inside a CloseSense
+## (melee self-defence; only a pulse makes it Exposed for the instant kill).
 func is_revealed() -> bool:
-	return _revealed_left > 0.0 or is_in_echo_light()
+	return _revealed_left > 0.0 or is_in_echo_light() or sense_ratio >= 1.0
 
 
 func is_in_echo_light() -> bool:

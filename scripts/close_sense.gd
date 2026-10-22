@@ -4,8 +4,9 @@ extends Node
 ## shown at least as a dark silhouette with clearly glowing eyes (Creature
 ## sense_ratio, CreatureEyes), even without the Echo's light, so he is never hit
 ## by something he could not see at melee range. Beyond it the normal
-## visibility rules apply. It does not make creatures hittable: only the Echo
-## (her light or a pulse) does. Values per mode ("mode_listeners" group).
+## visibility rules apply. Fully sensed creatures are hittable with normal
+## sword damage (melee self-defence); only the Echo's pulse makes them Exposed
+## for the instant-kill finisher. Values per mode ("mode_listeners" group).
 
 @export var player: Player
 @export var calm_radius: float = 90.0
