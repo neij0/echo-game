@@ -14,7 +14,12 @@ extends Node2D
 ## arena's doorway (boss levels), and a navigation mesh baked from every rock,
 ## so creatures can path through doorways and around corners. When a door or a
 ## lockdown barrier changes, the mesh is rebaked one frame later, while the
-## camera shake started by that event hides the short hitch.
+## camera shake started by that event hides the short hitch. Large creatures
+## (the boss) get their own mesh, baked with a bigger agent radius on a second
+## navigation map (navigation_map_for), so their paths never lead through gaps
+## their body cannot fit through. Known: Godot 4.7 logs "edge error(s)"
+## warnings for that second map on some levels (the same mesh on the default
+## map is silent); the paths themselves test fine.
 
 signal level_built(level_index: int)
 
@@ -36,6 +41,11 @@ signal level_built(level_index: int)
 ## Creature clearance used when baking the navigation mesh (about the radius
 ## of a normal creature plus a small margin).
 @export var navigation_agent_radius: float = 26.0
+## Clearance a creature needs beyond its body radius. A creature whose
+## body_radius + this is bigger than navigation_agent_radius uses the large mesh.
+@export var navigation_margin: float = 6.0
+## Agent radius of the large mesh (the biggest creature, the boss: 46 + margin).
+@export var large_navigation_agent_radius: float = 52.0
 
 @export_group("Sentinels")
 ## A Sentinel's post is this far from its shard, towards the room's centre
@@ -125,6 +135,8 @@ var _shards: Array[EchoShard] = []
 var _door: ShardDoor
 var _lockdown: LockdownRoom
 var _navigation: NavigationRegion2D
+var _navigation_large: NavigationRegion2D
+var _large_map: RID
 var _rebake_pending: bool = false
 ## Rock outlines of the current level (navigation obstructions, door excluded).
 var _nav_obstacles: Array[PackedVector2Array] = []
@@ -133,6 +145,27 @@ var _nav_bounds := Rect2()
 
 func _ready() -> void:
 	add_to_group("level")
+	_large_map = NavigationServer2D.map_create()
+	var default_map: RID = get_world_2d().navigation_map
+	NavigationServer2D.map_set_cell_size(_large_map, NavigationServer2D.map_get_cell_size(default_map))
+	NavigationServer2D.map_set_edge_connection_margin(_large_map, NavigationServer2D.map_get_edge_connection_margin(default_map))
+	NavigationServer2D.map_set_merge_rasterizer_cell_scale(_large_map, NavigationServer2D.map_get_merge_rasterizer_cell_scale(default_map))
+	NavigationServer2D.map_set_use_edge_connections(_large_map, NavigationServer2D.map_get_use_edge_connections(default_map))
+	NavigationServer2D.map_set_link_connection_radius(_large_map, NavigationServer2D.map_get_link_connection_radius(default_map))
+	NavigationServer2D.map_set_active(_large_map, true)
+
+
+func _exit_tree() -> void:
+	if _large_map.is_valid():
+		NavigationServer2D.free_rid(_large_map)
+		_large_map = RID()
+
+
+## The navigation map a creature of this body radius paths on.
+func navigation_map_for(body_radius: float) -> RID:
+	if body_radius + navigation_margin > navigation_agent_radius and _large_map.is_valid():
+		return _large_map
+	return get_world_2d().navigation_map
 
 
 ## A fresh spawn seed for the next build (random, or derived from forced_seed).
@@ -504,6 +537,12 @@ func _add_navigation(layout: Layout) -> void:
 	_navigation.name = "Navigation"
 	_navigation.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _changing_obstacles())
 	_level.add_child(_navigation)
+	_navigation_large = NavigationRegion2D.new()
+	_navigation_large.name = "NavigationLarge"
+	_navigation_large.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _changing_obstacles(), large_navigation_agent_radius)
+	# Before it enters the tree, so it never sits on the default map.
+	_navigation_large.set_navigation_map(_large_map)
+	_level.add_child(_navigation_large)
 
 
 ## Rock that can open or close: the closed arena door, closed lockdown barriers.
@@ -526,11 +565,13 @@ func _rebake_navigation_soon() -> void:
 	_rebake_pending = false
 	if is_instance_valid(_navigation):
 		_navigation.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _changing_obstacles())
+	if is_instance_valid(_navigation_large):
+		_navigation_large.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _changing_obstacles(), large_navigation_agent_radius)
 
 
 ## A navigation mesh over bounds with every obstacle cut out (extras = rock
-## that can open or close; may be empty).
-func bake_navigation(obstacles: Array[PackedVector2Array], bounds: Rect2, extras: Array[PackedVector2Array]) -> NavigationPolygon:
+## that can open or close; may be empty). agent_radius < 0 = navigation_agent_radius.
+func bake_navigation(obstacles: Array[PackedVector2Array], bounds: Rect2, extras: Array[PackedVector2Array], agent_radius: float = -1.0) -> NavigationPolygon:
 	var source := NavigationMeshSourceGeometryData2D.new()
 	source.add_traversable_outline(PackedVector2Array([bounds.position, Vector2(bounds.end.x, bounds.position.y),
 		bounds.end, Vector2(bounds.position.x, bounds.end.y)]))
@@ -539,7 +580,7 @@ func bake_navigation(obstacles: Array[PackedVector2Array], bounds: Rect2, extras
 	for polygon: PackedVector2Array in extras:
 		source.add_obstruction_outline(polygon)
 	var navigation := NavigationPolygon.new()
-	navigation.agent_radius = navigation_agent_radius
+	navigation.agent_radius = agent_radius if agent_radius >= 0.0 else navigation_agent_radius
 	NavigationServer2D.bake_from_source_geometry_data(navigation, source)
 	return navigation
 

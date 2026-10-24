@@ -75,6 +75,15 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   (within ~120 px: 0.3 s telegraphed wind-up with flaring eyes + sound, burst, recovery).
   Losing sight: go where the player was heading and SEARCH there a few seconds. Entering
   CHASE alerts creatures within `alert_radius` (they INVESTIGATE towards it).
+  **Navigation per size**: the normal mesh is baked for 26 px; creatures with
+  `body_radius + navigation_margin` above that (the boss) path on a second map baked for
+  52 px (`LevelBuilder.navigation_map_for`). Godot 4.7 logs harmless "edge error(s)" warnings
+  for that second map on some levels. Near a lit coral, creatures slide around its safe zone
+  (never steer into it; a wall flips the side) and a target inside the zone counts as reached.
+  **Stuck watch** (`CreatureStuckWatch` on every creature): < 10 px in 0.75 s while it should
+  move = stuck (logged when `log_enabled`); 2 windows = repath, 3 = nudge off the wall / onto
+  the mesh. **F3** (`NavDebugDraw`) draws every creature's path, next point, target, state
+  and a red ring while stuck.
 - **Health** (`PlayerHealth`, in segments; `segment_count` per character, default 4): a
   creature touch costs `calm_hit_damage` (1.0) / `challenge_hit_damage` (1.5) segments, with
   knockback and a short invulnerability. A partly damaged segment refills on its own after
@@ -211,6 +220,10 @@ linear float data and look much darker than the screen; convert each pixel with
     pulse, close sense, revive decay), Sentinels, lockdown, collapse escape, pathing on every
     level (with and without navigation), shards, locked exit and arena door:
     `godot --headless --path . --fixed-fps 60 res://tools/test_creatures.tscn`
+  - `test_stuck.tscn`: creatures (normal + boss size) chase hopping players through every
+    level, plus a normal-AI pass with pulses and lit corals; fails on any stuck >= 1.5 s
+    (`-- log` prints every stuck window, `-- norecover` turns the safety net off):
+    `godot --headless --path . --fixed-fps 60 res://tools/test_stuck.tscn`
   - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it
     and saves it as `worlds/<world>/proposed_<seed>.tres` to edit by hand.

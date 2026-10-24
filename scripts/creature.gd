@@ -43,6 +43,9 @@ signal killed
 @export var hearing_range: float = 1800.0
 ## How strongly lit coral zones push the creature away.
 @export var safe_zone_push: float = 400.0
+## Near a lit coral's zone (this much beyond its edge) the creature steers
+## around it instead of into it, so the push and the path never fight.
+@export var safe_zone_steer_margin: float = 40.0
 ## Spots a player this close if nothing blocks the line of sight.
 @export var spot_distance: float = 220.0
 ## Spots a player who pulses this close (no line of sight needed).
@@ -114,6 +117,8 @@ signal killed
 @export var path_refresh_time: float = 0.25
 ## A new path is requested when the target moved this far from the last one.
 @export var path_retarget_distance: float = 40.0
+## Stuck recovery (CreatureStuckWatch): how far a nudge pushes it off the wall.
+@export var unstick_nudge_distance: float = 24.0
 
 @export_group("Alerting")
 ## Entering CHASE alerts the other creatures this close: they INVESTIGATE
@@ -250,6 +255,16 @@ var _silhouette_blocked: bool = false
 var _anim_time: float = 0.0
 ## Frenzy (collapse escape): chases the nearest standing player, never loses track.
 var is_frenzied: bool = false
+## Debug counters (CreatureStuckWatch): path requests and state changes so far.
+var path_requests: int = 0
+var state_changes: int = 0
+var lunges_started: int = 0
+var _last_state: State = State.WANDER
+var _navigation_map: RID
+var _last_wall_normal: Vector2 = Vector2.ZERO
+## Which way it slides around a lit coral's zone (+1 / -1); flips on a wall.
+var _zone_side: float = 0.0
+var _steering_around_zone: bool = false
 ## Where the creature points (last movement direction).
 var _facing: Vector2 = Vector2.RIGHT
 
@@ -549,6 +564,7 @@ func _update_lunge(delta: float) -> bool:
 		if not _can_start_lunge():
 			return false
 		lunge_phase = Lunge.WIND_UP
+		lunges_started += 1
 		_lunge_left = lunge_wind_up
 		if _lunge_sound:
 			_lunge_sound.play()
@@ -669,6 +685,9 @@ func get_current_speed() -> float:
 
 func _physics_process(delta: float) -> void:
 	_update_reveal(delta)
+	if state != _last_state:
+		_last_state = state
+		state_changes += 1
 	if _stagger_left > 0.0:
 		# Staggered: no steering, just slide out the knockback.
 		_stagger_left -= delta
@@ -687,16 +706,20 @@ func _physics_process(delta: float) -> void:
 	var desired: Vector2 = Vector2.ZERO
 	if _pause_left > 0.0:
 		_pause_left -= delta
-	elif state != State.CHASE and (global_position.distance_to(target) <= arrive_distance or _is_path_finished()):
+	elif state != State.CHASE and (global_position.distance_to(target) <= arrive_distance or _is_path_finished() or _target_behind_safe_zone()):
 		_on_target_reached()
 	else:
 		desired = _steer_direction(delta) * get_current_speed()
 
-	desired += _safe_zone_push()
+	desired = _steer_around_safe_zones(desired) + _safe_zone_push()
 	velocity = velocity.lerp(desired, 1.0 - exp(-steering * delta))
 	move_and_slide()
 
 	if get_slide_collision_count() > 0:
+		_last_wall_normal = get_slide_collision(0).get_normal()
+		if _steering_around_zone:
+			# This way round the zone runs into rock: try the other side.
+			_zone_side = -_zone_side
 		if not _path.is_empty():
 			# Following the navigation mesh: only give up after a long contact.
 			_on_blocked_on_path(delta)
@@ -732,10 +755,68 @@ func _next_path_point(delta: float) -> Vector2:
 
 
 func _request_path() -> void:
+	path_requests += 1
 	_path_target = target
 	_path_refresh_left = path_refresh_time
-	_path = NavigationServer2D.map_get_path(get_world_2d().navigation_map, global_position, target, true)
+	_path = NavigationServer2D.map_get_path(get_navigation_map(), global_position, target, true)
 	_path_index = 0
+
+
+## The navigation map for its size (the LevelBuilder has a mesh for large
+## creatures), looked up once.
+func get_navigation_map() -> RID:
+	if not _navigation_map.is_valid():
+		var level := get_tree().get_first_node_in_group("level") as LevelBuilder
+		_navigation_map = level.navigation_map_for(body_radius) if level else get_world_2d().navigation_map
+	return _navigation_map
+
+
+## Stuck recovery, step 1: drop the path and ask for a new one now.
+func force_repath() -> void:
+	_reset_detour()
+	_reset_path()
+	if use_navigation:
+		_request_path()
+
+
+## Stuck recovery, step 2: move it off the wall (along the last wall normal),
+## or onto the nearest point of its navigation mesh, then repath.
+func nudge_unstuck() -> void:
+	var on_mesh: Vector2 = NavigationServer2D.map_get_closest_point(get_navigation_map(), global_position)
+	if on_mesh.distance_to(global_position) > 1.0:
+		global_position = on_mesh
+	elif _last_wall_normal != Vector2.ZERO:
+		global_position += _last_wall_normal * unstick_nudge_distance
+	velocity = Vector2.ZERO
+	force_repath()
+
+
+## True when it has reached the end of a path that stops short of the target
+## (the target is somewhere it cannot fit): standing there is not being stuck.
+func is_at_path_end() -> bool:
+	return _is_path_finished()
+
+
+## The navigation path it follows right now (debug drawing, stuck logs).
+func get_path_points() -> PackedVector2Array:
+	return _path
+
+
+func get_path_size() -> int:
+	return _path.size()
+
+
+## The path point it steers to (its target when there is no path).
+func get_next_path_point() -> Vector2:
+	return _path[_path_index] if _path_index < _path.size() else target
+
+
+func get_blocked_time() -> float:
+	return _blocked_time
+
+
+func is_staggered() -> bool:
+	return _stagger_left > 0.0
 
 
 ## The path ends short of the target (target inside rock): treat as reached.
@@ -827,6 +908,45 @@ func _set_home(at: Vector2) -> void:
 func _pick_wander_target() -> void:
 	var offset: Vector2 = Vector2.from_angle(randf() * TAU) * randf_range(0.3, 1.0) * wander_radius
 	target = _home + offset
+
+
+## Removes the part of the steering that points into a lit coral's zone when
+## it is close to it, so it slides around the zone (no tug-of-war with the push).
+func _steer_around_safe_zones(desired: Vector2) -> Vector2:
+	_steering_around_zone = false
+	for node: Node in get_tree().get_nodes_in_group("corals"):
+		var coral := node as Coral
+		if coral == null or not coral.is_lit():
+			continue
+		var offset: Vector2 = global_position - coral.global_position
+		if offset.length() > coral.safe_radius + safe_zone_steer_margin or offset == Vector2.ZERO:
+			continue
+		var outward: Vector2 = offset.normalized()
+		var inward: float = desired.dot(outward)
+		if inward < 0.0:
+			# Keep the speed: slide along the edge instead of pushing in.
+			var tangent: Vector2 = outward.orthogonal()
+			if _zone_side == 0.0:
+				_zone_side = 1.0 if desired.dot(tangent) >= 0.0 else -1.0
+			var slid: Vector2 = desired - outward * inward
+			if slid.dot(tangent * _zone_side) <= 0.0:
+				slid = tangent * _zone_side * desired.length()
+			desired = slid.normalized() * desired.length()
+			_steering_around_zone = true
+	if not _steering_around_zone:
+		_zone_side = 0.0
+	return desired
+
+
+## Its (non-chase) target lies in a lit coral's zone and it is at that zone's
+## edge: as close as it may get, so it counts as arrived.
+func _target_behind_safe_zone() -> bool:
+	for node: Node in get_tree().get_nodes_in_group("corals"):
+		var coral := node as Coral
+		if coral and coral.is_in_safe_zone(target) \
+				and global_position.distance_to(coral.global_position) <= coral.safe_radius + safe_zone_steer_margin:
+			return true
+	return false
 
 
 func _safe_zone_push() -> Vector2:
