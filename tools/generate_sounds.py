@@ -1,7 +1,10 @@
 """Generates Echo's placeholder sounds procedurally (no downloaded assets).
 
 Run from the project root:
-    python tools/generate_sounds.py
+    python tools/generate_sounds.py            (the sounds the game uses now)
+    python tools/generate_sounds.py preview    (the audio pass preview, in
+                                                assets/audio/preview/; needs
+                                                numpy + scipy)
 
 Writes 16-bit mono .wav files to assets/audio/. Tweak the constants below and
 run it again; Godot re-imports the files automatically.
@@ -525,7 +528,713 @@ def write_wav(path: Path, samples: list[float]) -> None:
     print(f"Wrote {path} ({len(samples) / SAMPLE_RATE:.2f}s)")
 
 
+# =============================================================================
+# AUDIO PASS PREVIEW  (python tools/generate_sounds.py preview)
+# Writes to assets/audio/preview/ for listening in tools/sound_test.tscn.
+# Uses numpy + scipy (only this section; the sounds above need nothing extra).
+# Loops are rendered circularly (every tone has a whole number of cycles in the
+# loop, noise is filtered and reverbed with circular FFTs), so they repeat
+# without a click, and get a WAV "smpl" loop chunk, which Godot reads on
+# import ("Detect From WAV"): a replacement file with its own loop points
+# works the same way. One-shots get their random pitch / volume in the game.
+# =============================================================================
+
+PREVIEW_DIR = OUTPUT_DIR / "preview"
+PREVIEW_SEED = 2026
+
+# --- Mix targets (peak, 0-1) per kind of sound --------------------------------
+PEAK_AMBIENCE = 0.5
+PEAK_MUSIC = 0.6
+PEAK_STINGER = 0.75
+PEAK_SFX = 0.85
+PEAK_SOFT = 0.45            # quiet one-shots (bubbles, movement, hums)
+
+# --- Music grid: every layer shares the tempo, so they stay in step -----------
+MUSIC_BPM = 120.0
+MUSIC_LOOP = 8.0            # seconds (4 bars) for Tension / Chase / Intense
+BOSS_LOOP = 16.0            # seconds (8 bars)
+AMBIENCE_LOOP = 24.0        # seconds
+
+# --- Ocean ambience bed -------------------------------------------------------
+BED_DRONE = 55.0            # Hz, the deep drone...
+BED_DRONE_BEAT = 5.0 / 24.0  # ...and a second one this much higher (slow beating)
+BED_DRONE_GAIN = 1.0
+BED_PAD_NOTES = [110.0, 164.79, 220.0, 261.625]  # soft filtered pad (A minor)
+BED_PAD_GAIN = 0.28
+BED_PAD_CUTOFF = 650.0      # Hz
+BED_NOISE_GAIN = 0.35
+BED_NOISE_CUTOFF = 380.0    # Hz, the underwater noise bed
+BED_REVERB_TIME = 4.5       # seconds
+BED_REVERB_MIX = 0.45
+
+# --- Reverb (synthetic impulse: decaying, darkening noise) --------------------
+REVERB_LOWPASS = 3000.0     # Hz, the tail gets darker than this
+
+
+try:
+    import numpy as np
+    from scipy import signal
+except ImportError:  # only needed for the preview pass
+    np = None
+    signal = None
+
+
+def _t(seconds: float) -> "np.ndarray":
+    return np.arange(int(seconds * SAMPLE_RATE)) / SAMPLE_RATE
+
+
+def _osc(freq, seconds: float = 0.0, partials=((1.0, 1.0),)) -> "np.ndarray":
+    """Additive oscillator. freq: a number or an array (glides)."""
+    if np.isscalar(freq):
+        freq = np.full(int(seconds * SAMPLE_RATE), float(freq))
+    phase = 2.0 * np.pi * np.cumsum(freq) / SAMPLE_RATE
+    out = np.zeros_like(phase)
+    for ratio, gain in partials:
+        out += gain * np.sin(phase * ratio)
+    return out
+
+
+def _loop_tone(freq: float, length: float, partials=((1.0, 1.0),)) -> "np.ndarray":
+    """A tone with a whole number of cycles in the loop (seamless)."""
+    cycles = max(round(freq * length), 1)
+    phase = 2.0 * np.pi * cycles * np.arange(int(length * SAMPLE_RATE)) / int(length * SAMPLE_RATE)
+    out = np.zeros_like(phase)
+    for ratio, gain in partials:
+        out += gain * np.sin(phase * round(ratio))
+    return out
+
+
+def _loop_lfo(cycles: int, length: float, depth: float, offset: float = 0.0) -> "np.ndarray":
+    """1 - depth .. 1, a whole number of cycles over the loop."""
+    n = int(length * SAMPLE_RATE)
+    return 1.0 - depth * (0.5 + 0.5 * np.sin(2.0 * np.pi * cycles * np.arange(n) / n + offset))
+
+
+def _noise(seconds: float, rng) -> "np.ndarray":
+    return rng.uniform(-1.0, 1.0, int(seconds * SAMPLE_RATE))
+
+
+def _filter(x, kind: str, cutoff, order: int = 2):
+    sos = signal.butter(order, cutoff, btype=kind, fs=SAMPLE_RATE, output="sos")
+    return signal.sosfilt(sos, x)
+
+
+def _circular_band(x, low: float = 0.0, high: float = 20000.0, soft: float = 0.3):
+    """Band filter in the frequency domain (circular: keeps loops seamless)."""
+    spectrum = np.fft.rfft(x)
+    freqs = np.fft.rfftfreq(len(x), 1.0 / SAMPLE_RATE)
+    mask = np.ones_like(freqs)
+    if low > 0.0:
+        mask *= 1.0 / (1.0 + (low / np.maximum(freqs, 1e-3)) ** (2.0 / soft))
+    if high < 20000.0:
+        mask *= 1.0 / (1.0 + (freqs / high) ** (2.0 / soft))
+    return np.fft.irfft(spectrum * mask, len(x))
+
+
+def _impulse(seconds: float, rng, lowpass: float = REVERB_LOWPASS):
+    t = _t(seconds)
+    tail = rng.normal(0.0, 1.0, len(t)) * np.exp(-6.9 * t / seconds)
+    tail = _filter(tail, "lowpass", lowpass)
+    # Later reflections get darker: a second, darker copy takes over.
+    dark = _filter(tail, "lowpass", lowpass * 0.3)
+    mix = np.clip(t / seconds, 0.0, 1.0)
+    tail = tail * (1.0 - mix) + dark * mix
+    return tail / (np.sqrt(np.sum(tail ** 2)) + 1e-9)
+
+
+def _reverb(x, seconds: float, mix: float, rng, circular: bool = False, tail: bool = True):
+    ir = _impulse(seconds, rng)
+    if circular:
+        # Fold the impulse onto the loop length: the tail wraps into the start.
+        n = len(x)
+        folded = np.zeros(n)
+        for start in range(0, len(ir), n):
+            part = ir[start:start + n]
+            folded[: len(part)] += part
+        wet = np.fft.irfft(np.fft.rfft(x) * np.fft.rfft(folded), n)
+        return x * (1.0 - mix) + wet * mix * 3.0
+    padded = np.pad(x, (0, len(ir) if tail else 0))
+    wet = signal.fftconvolve(padded, ir)[: len(padded)]
+    return padded * (1.0 - mix) + wet * mix * 3.0
+
+
+def _env(t, attack: float, decay: float):
+    return np.where(t < attack, t / max(attack, 1e-6), np.exp(-(t - attack) / max(decay, 1e-6)))
+
+
+def _fade(x, fade_in: float = 0.005, fade_out: float = 0.05):
+    n_in = min(int(fade_in * SAMPLE_RATE), len(x))
+    n_out = min(int(fade_out * SAMPLE_RATE), len(x))
+    x = x.copy()
+    if n_in > 0:
+        x[:n_in] *= np.linspace(0.0, 1.0, n_in)
+    if n_out > 0:
+        x[-n_out:] *= np.linspace(1.0, 0.0, n_out)
+    return x
+
+
+def _trim_tail(x, threshold: float = 0.0008):
+    """Cuts the silent end of a reverb tail."""
+    loud = np.nonzero(np.abs(x) > threshold * np.max(np.abs(x)))[0]
+    end = loud[-1] + int(0.05 * SAMPLE_RATE) if len(loud) else len(x)
+    return _fade(x[: min(end, len(x))], 0.0, 0.08)
+
+
+def _norm(x, peak: float):
+    return x / (np.max(np.abs(x)) + 1e-9) * peak
+
+
+def _place(buffer, sound, at_seconds: float, gain: float = 1.0, wrap: bool = False):
+    """Adds a sound into the buffer at a time (wrap = around the loop's end)."""
+    idx = np.arange(len(sound)) + int(at_seconds * SAMPLE_RATE)
+    if wrap:
+        np.add.at(buffer, idx % len(buffer), sound * gain)
+    else:
+        keep = idx < len(buffer)
+        buffer[idx[keep]] += sound[keep] * gain
+    return buffer
+
+
+def write_wav_np(path: Path, x, loop: bool = False) -> None:
+    """16-bit mono WAV; loop=True adds a "smpl" chunk looping the whole file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = (np.clip(x, -1.0, 1.0) * 32767.0).astype("<i2").tobytes()
+    fmt = struct.pack("<HHIIHH", 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16)
+    chunks = b"fmt " + struct.pack("<I", len(fmt)) + fmt
+    chunks += b"data" + struct.pack("<I", len(data)) + data
+    if loop:
+        frames = len(x)
+        smpl = struct.pack("<9I", 0, 0, int(1e9 / SAMPLE_RATE), 60, 0, 0, 0, 1, 0)
+        smpl += struct.pack("<6I", 0, 0, 0, frames - 1, 0, 0)
+        chunks += b"smpl" + struct.pack("<I", len(smpl)) + smpl
+    with open(path, "wb") as file:
+        file.write(b"RIFF" + struct.pack("<I", 4 + len(chunks)) + b"WAVE" + chunks)
+    print(f"Wrote {path.relative_to(OUTPUT_DIR.parent.parent)} ({len(x) / SAMPLE_RATE:.2f}s{', loop' if loop else ''})")
+
+
+# --- 1. Ocean ambience ----------------------------------------------------------
+
+def make_ocean_bed(rng):
+    length = AMBIENCE_LOOP
+    drone = _loop_tone(BED_DRONE, length, ((1.0, 1.0), (2.0, 0.25), (3.0, 0.08)))
+    drone += _loop_tone(BED_DRONE + BED_DRONE_BEAT, length, ((1.0, 0.9), (2.0, 0.2)))
+    drone *= _loop_lfo(2, length, 0.25)
+    pad = np.zeros_like(drone)
+    for i, note in enumerate(BED_PAD_NOTES):
+        saw = tuple((k, 1.0 / k) for k in range(1, 9))
+        voice = _loop_tone(note, length, saw) + _loop_tone(note * 1.003, length, saw)
+        pad += voice * _loop_lfo(1 + i % 2, length, 0.6, i * 1.7)
+    pad = _circular_band(pad, 60.0, BED_PAD_CUTOFF)
+    bed = _circular_band(_noise(length, rng), 30.0, BED_NOISE_CUTOFF, 0.5) * _loop_lfo(3, length, 0.4)
+    mix = drone * BED_DRONE_GAIN / np.max(np.abs(drone)) \
+        + pad * BED_PAD_GAIN / np.max(np.abs(pad)) \
+        + bed * BED_NOISE_GAIN / np.max(np.abs(bed))
+    mix = _reverb(mix, BED_REVERB_TIME, BED_REVERB_MIX, rng, circular=True)
+    return _norm(mix, PEAK_AMBIENCE)
+
+
+def make_bubbles(rng, count: int):
+    out = np.zeros(int(1.2 * SAMPLE_RATE))
+    for i in range(count):
+        f0 = rng.uniform(450.0, 1300.0)
+        dur = rng.uniform(0.03, 0.07)
+        t = _t(dur)
+        bubble = np.sin(2 * np.pi * np.cumsum(f0 * (1.0 + 1.6 * t / dur)) / SAMPLE_RATE) * _env(t, 0.002, dur * 0.4)
+        _place(out, bubble, rng.uniform(0.0, 0.5) if i else 0.0, rng.uniform(0.4, 1.0))
+    out = _reverb(_filter(out, "lowpass", 3500.0), 1.2, 0.3, rng)
+    return _norm(_trim_tail(out), PEAK_SOFT)
+
+
+def make_whale(rng, f_start: float, f_peak: float, f_end: float, seconds: float):
+    t = _t(seconds)
+    k = t / seconds
+    # Glide up to the peak in the first 40 %, then sink.
+    freq = np.where(k < 0.4, f_start + (f_peak - f_start) * np.sin(k / 0.4 * np.pi / 2),
+                    f_peak + (f_end - f_peak) * (k - 0.4) / 0.6)
+    freq = freq * (1.0 + 0.012 * np.sin(2 * np.pi * 4.5 * t))
+    voice = _osc(freq, partials=((1.0, 1.0), (2.0, 0.6), (3.0, 0.45), (4.0, 0.25), (5.0, 0.15)))
+    voice = _filter(voice, "bandpass", [180.0, 900.0])
+    voice *= np.sin(np.pi * k) ** 1.5
+    voice = _filter(voice, "lowpass", 700.0)
+    out = _reverb(voice, 5.0, 0.75, rng)
+    return _norm(_trim_tail(out), PEAK_SOFT)
+
+
+# --- 2. Music layers (all at MUSIC_BPM) ---------------------------------------
+
+def _beat() -> float:
+    return 60.0 / MUSIC_BPM
+
+
+def _kick(freq_start: float, freq_end: float, decay: float, seconds: float = 0.5):
+    t = _t(seconds)
+    freq = freq_end + (freq_start - freq_end) * np.exp(-t / 0.04)
+    return _osc(freq) * _env(t, 0.003, decay)
+
+
+def make_tension(rng):
+    length = MUSIC_LOOP
+    n = int(length * SAMPLE_RATE)
+    sub = _loop_tone(41.25, length, ((1.0, 1.0), (2.0, 0.35), (3.0, 0.12)))
+    rub = _loop_tone(43.75, length, ((1.0, 0.5), (2.0, 0.15)))
+    pulse_env = np.zeros(n)
+    t = _t(0.5)
+    one = _env(t, 0.04, 0.22)
+    for beat in range(int(length / _beat())):
+        _place(pulse_env, one, beat * _beat(), 1.0 if beat % 4 == 0 else 0.75, wrap=True)
+    layer = np.tanh(1.6 * (sub + rub)) * (0.15 + pulse_env)
+    air = _circular_band(_noise(length, rng), 200.0, 900.0) * _loop_lfo(2, length, 0.8) * 0.08
+    layer = _circular_band(layer + air, 20.0, 1200.0)
+    layer = _reverb(layer, 2.0, 0.25, rng, circular=True)
+    return _norm(layer, PEAK_MUSIC)
+
+
+def make_chase(rng):
+    length = MUSIC_LOOP
+    n = int(length * SAMPLE_RATE)
+    out = np.zeros(n)
+    lub = _kick(95.0, 45.0, 0.12)
+    dub = _kick(80.0, 42.0, 0.1)
+    tom = _kick(140.0, 85.0, 0.18) * 0.5
+    for beat in range(int(length / _beat())):
+        at = beat * _beat()
+        _place(out, lub, at, 1.0, wrap=True)
+        _place(out, dub, at + 0.16, 0.6, wrap=True)
+        if beat % 4 in (1, 3):
+            _place(out, tom, at + _beat() * 0.5, 1.0, wrap=True)
+    hat = _filter(_noise(0.05, rng), "highpass", 4000.0) * _env(_t(0.05), 0.001, 0.012)
+    for step in range(int(length / (_beat() / 4))):
+        _place(out, hat, step * _beat() / 4, 0.05 if step % 2 else 0.09, wrap=True)
+    out = _circular_band(out, 25.0, 3500.0)
+    out = _reverb(out, 1.4, 0.2, rng, circular=True)
+    return _norm(out, PEAK_MUSIC)
+
+
+def make_intense(rng):
+    length = MUSIC_LOOP
+    n = int(length * SAMPLE_RATE)
+    out = np.zeros(n)
+    drive = np.tanh(3.0 * _osc(55.0, 0.25, ((1.0, 1.0), (2.0, 0.4)))) * _env(_t(0.25), 0.005, 0.09)
+    taiko = _kick(120.0, 48.0, 0.3, 0.8) + _filter(_noise(0.8, rng), "bandpass", [200.0, 1200.0]) * _env(_t(0.8), 0.001, 0.03) * 0.6
+    for eighth in range(int(length / (_beat() / 2))):
+        _place(out, drive, eighth * _beat() / 2, 0.8 if eighth % 2 == 0 else 0.55, wrap=True)
+    for beat in range(int(length / _beat())):
+        if beat % 2 == 0:
+            _place(out, taiko, beat * _beat(), 1.0, wrap=True)
+    drone = (_loop_tone(55.0, length, ((1.0, 1.0), (2.0, 0.3))) + _loop_tone(58.25, length, ((1.0, 0.8),))) \
+        * _loop_lfo(64, length, 0.6)
+    scrape = _circular_band(_noise(length, rng), 900.0, 3200.0) * (np.arange(n) % int(2.0 * SAMPLE_RATE) / (2.0 * SAMPLE_RATE)) ** 3
+    out = out + np.tanh(drone) * 0.35 + scrape * 0.12
+    out = _circular_band(out, 25.0, 5000.0)
+    out = _reverb(out, 1.8, 0.22, rng, circular=True)
+    return _norm(out, PEAK_MUSIC)
+
+
+def make_boss(rng):
+    length = BOSS_LOOP
+    n = int(length * SAMPLE_RATE)
+    out = np.zeros(n)
+    drum = _kick(110.0, 40.0, 0.35, 1.0) + _filter(_noise(1.0, rng), "lowpass", 900.0) * _env(_t(1.0), 0.002, 0.05) * 0.5
+    for bar in range(int(length / (_beat() * 4))):
+        start = bar * _beat() * 4
+        for offset, gain in ((0.0, 1.0), (1.5, 0.7), (2.0, 0.85), (3.5, 0.5)):
+            _place(out, drum, start + offset * _beat(), gain, wrap=True)
+    choir = np.zeros(n)
+    for i, note in enumerate([73.4375, 87.3125, 110.0, 146.875]):
+        saw = tuple((k, 1.0 / k) for k in range(1, 12))
+        voice = _loop_tone(note, length, saw) + _loop_tone(note * 1.004, length, saw)
+        choir += voice * _loop_lfo(1 + i % 2, length, 0.5, i)
+    choir = _circular_band(choir, 250.0, 950.0, 0.4)
+    bell = np.zeros(n)
+    strike = _osc(220.0, 4.0, ((1.0, 1.0), (2.76, 0.5), (5.4, 0.3), (8.9, 0.15))) * _env(_t(4.0), 0.002, 1.2)
+    _place(bell, strike, 0.0, 1.0, wrap=True)
+    growl = _loop_tone(36.75, length, ((1.0, 1.0), (2.0, 0.5))) * _loop_lfo(4, length, 0.5)
+    mix = out + choir / np.max(np.abs(choir)) * 0.45 + bell * 0.25 + np.tanh(growl) * 0.3
+    mix = _circular_band(mix, 25.0, 6000.0)
+    mix = _reverb(mix, 3.0, 0.4, rng, circular=True)
+    return _norm(mix, PEAK_MUSIC)
+
+
+# --- Stingers ---------------------------------------------------------------
+
+def _chord(notes, seconds: float, attack: float, decay: float, partials=((1.0, 1.0), (2.0, 0.3), (3.0, 0.1)), stagger: float = 0.0):
+    out = np.zeros(int((seconds + stagger * len(notes)) * SAMPLE_RATE))
+    for i, note in enumerate(notes):
+        t = _t(seconds)
+        _place(out, _osc(note, seconds, partials) * _env(t, attack, decay), i * stagger)
+    return out
+
+
+def make_sting_spotted(rng):
+    stab = _chord([311.1, 329.6, 466.2], 1.0, 0.004, 0.25, tuple((k, 1.0 / k) for k in range(1, 8)))
+    t = _t(len(stab) / SAMPLE_RATE)
+    stab *= 1.0 - 0.15 * np.clip(t / 0.4, 0, 1)
+    swell = _filter(_noise(len(t) / SAMPLE_RATE, rng), "bandpass", [600.0, 3000.0]) * _env(t, 0.06, 0.2) * 0.4
+    out = _filter(np.tanh(2.0 * stab) + swell, "lowpass", 4500.0)
+    return _norm(_trim_tail(_reverb(out, 1.6, 0.35, rng)), PEAK_STINGER)
+
+
+def make_sting_shard(rng):
+    out = _chord([880.0, 1108.7, 1318.5, 1760.0], 1.4, 0.003, 0.35, ((1.0, 1.0), (2.0, 0.25), (3.01, 0.1)), stagger=0.08)
+    return _norm(_trim_tail(_reverb(out, 2.5, 0.45, rng)), PEAK_STINGER)
+
+
+def make_sting_lockdown(rng):
+    brass = _chord([55.0, 82.5, 110.0, 164.8], 2.0, 0.02, 0.6, tuple((k, 1.0 / k) for k in range(1, 14)))
+    brass = _filter(brass, "lowpass", 900.0)
+    boom = np.zeros_like(brass)
+    _place(boom, _kick(90.0, 32.0, 0.6, 2.0), 0.0)
+    ring = np.zeros_like(brass)
+    _place(ring, _osc(440.0, 2.0, ((1.0, 1.0), (2.76, 0.5), (5.4, 0.25))) * _env(_t(2.0), 0.002, 0.5), 0.0)
+    out = np.tanh(1.5 * brass) + boom * 1.2 + ring * 0.15
+    return _norm(_trim_tail(_reverb(out, 2.5, 0.35, rng)), PEAK_STINGER)
+
+
+def make_sting_doors_open(rng):
+    out = _chord([220.0, 330.0, 440.0, 554.4, 659.3], 2.2, 0.25, 0.9, stagger=0.12)
+    return _norm(_trim_tail(_reverb(out, 2.5, 0.45, rng)), PEAK_STINGER)
+
+
+def make_sting_level_complete(rng):
+    warm = _chord([110.0, 220.0, 277.2, 329.6, 440.0], 3.5, 0.6, 1.6, tuple((k, 0.8 / k) for k in range(1, 6)))
+    warm = _filter(warm, "lowpass", 2500.0)
+    sparkle = _chord([1318.5, 1760.0, 2217.5, 2637.0], 1.5, 0.003, 0.4, ((1.0, 1.0), (2.0, 0.2)), stagger=0.15)
+    out = warm
+    _place(out, sparkle * 0.35, 0.5)
+    return _norm(_trim_tail(_reverb(out, 3.5, 0.5, rng)), PEAK_STINGER)
+
+
+def make_sting_downed(rng):
+    out = np.zeros(int(2.4 * SAMPLE_RATE))
+    for i, note in enumerate([440.0, 392.0, 329.6]):
+        tone = _osc(note * (1.0 - 0.02 * _t(0.7) / 0.7), partials=((1.0, 1.0), (2.0, 0.3))) * _env(_t(0.7), 0.03, 0.3)
+        _place(out, tone, i * 0.32, 1.0 - i * 0.15)
+    out = _filter(out, "lowpass", 1100.0)
+    return _norm(_trim_tail(_reverb(out, 2.2, 0.45, rng)), PEAK_STINGER)
+
+
+# --- 3. SFX -----------------------------------------------------------------
+
+def make_whoosh(rng, seconds: float, low: float, high: float, body: float):
+    t = _t(seconds)
+    k = t / seconds
+    noise = _noise(seconds, rng)
+    # Sweep a band up and back down: the blade cutting the water.
+    out = np.zeros_like(noise)
+    steps = 24
+    for i in range(steps):
+        a, b = int(i * len(t) / steps), int((i + 1) * len(t) / steps)
+        center = low + (high - low) * np.sin(np.pi * (i + 0.5) / steps)
+        out[a:b] = _filter(noise, "bandpass", [center * 0.6, center * 1.4])[a:b]
+    shape = np.sin(np.pi * k) ** 2
+    tone = _osc(90.0 + 60.0 * k, seconds) * shape * body
+    return _norm(_fade(out * shape + tone, 0.002, 0.03), PEAK_SFX * 0.8)
+
+
+def make_impact(rng, freq: float, decay: float, crunch: float, seconds: float):
+    t = _t(seconds)
+    thud = _kick(freq * 1.8, freq, decay, seconds)
+    click = _filter(_noise(seconds, rng), "highpass", 2500.0) * np.exp(-t / 0.004)
+    grit = _filter(_noise(seconds, rng), "bandpass", [300.0, 1800.0]) * np.exp(-t / (decay * 0.8)) * crunch
+    return _norm(_fade(thud + click * 0.6 + grit, 0.0, 0.05), PEAK_SFX)
+
+
+def make_finisher(rng):
+    seconds = 2.2
+    t = _t(seconds)
+    boom = _osc(60.0 * np.exp(-t / 0.6) + 32.0, partials=((1.0, 1.0), (2.0, 0.2))) * _env(t, 0.004, 0.55)
+    sub = _osc(30.0, seconds) * _env(t, 0.01, 0.8)
+    crack = _filter(_noise(seconds, rng), "highpass", 1800.0) * np.exp(-t / 0.015)
+    shimmer = _osc(1320.0, seconds, ((1.0, 1.0), (2.76, 0.6), (5.4, 0.35), (8.9, 0.2))) * _env(t, 0.01, 0.6) \
+        * (0.7 + 0.3 * np.sin(2 * np.pi * 9.0 * t))
+    out = boom * 1.0 + sub * 0.7 + crack * 0.8 + shimmer * 0.18
+    return _norm(_trim_tail(_reverb(out, 2.5, 0.3, rng)), PEAK_SFX)
+
+
+def make_sonar(rng, freq: float, echoes, cutoff: float, wobble: float, peak: float):
+    seconds = 0.6
+    t = _t(seconds)
+    f = freq * (1.0 - 0.03 * np.clip(t / 0.5, 0, 1)) * (1.0 + wobble * np.sin(2 * np.pi * 7.0 * t))
+    ping = _osc(f, partials=((1.0, 1.0), (2.0, 0.22), (2.76, 0.1))) * _env(t, 0.004, 0.3)
+    ping = _filter(ping, "lowpass", cutoff)
+    out = np.zeros(int(3.5 * SAMPLE_RATE))
+    _place(out, ping, 0.0)
+    for i, (delay, gain) in enumerate(echoes):
+        echo = _filter(ping, "lowpass", cutoff * (0.7 ** (i + 1)))
+        _place(out, echo, delay, gain)
+    return _norm(_trim_tail(_reverb(out, 3.0, 0.35, rng)), peak)
+
+
+def make_creature_clicks(rng, pitch: float):
+    out = np.zeros(int(0.6 * SAMPLE_RATE))
+    at = 0.0
+    for i in range(rng.integers(3, 7)):
+        t = _t(0.02)
+        click = np.sin(2 * np.pi * 2400.0 * pitch * rng.uniform(0.9, 1.1) * t) * np.exp(-t / 0.003)
+        _place(out, click, at, rng.uniform(0.5, 1.0))
+        at += rng.uniform(0.03, 0.08)
+    out = _filter(out, "lowpass", 5000.0 * pitch)
+    return _norm(_trim_tail(_reverb(out, 1.0, 0.25, rng)), PEAK_SOFT)
+
+
+def _rough(t, rate: float, depth: float):
+    return 1.0 - depth * (0.5 + 0.5 * np.sign(np.sin(2 * np.pi * rate * t)))
+
+
+def make_creature_growl(rng, pitch: float):
+    seconds = 0.9
+    t = _t(seconds)
+    f = 85.0 * pitch * (1.0 + 0.08 * np.sin(2 * np.pi * 1.3 * t))
+    voice = _osc(f, partials=tuple((k, 1.0 / k) for k in range(1, 16))) * _rough(t, 30.0 * pitch, 0.5)
+    voice = _filter(voice, "bandpass", [220.0 * pitch, 800.0 * pitch])
+    breath = _filter(_noise(seconds, rng), "bandpass", [300.0 * pitch, 1500.0 * pitch]) * 0.3
+    out = (voice + breath) * np.sin(np.pi * t / seconds) ** 0.7
+    return _norm(_trim_tail(_reverb(out, 1.2, 0.25, rng)), PEAK_SFX)
+
+
+def make_creature_screech(rng, pitch: float):
+    seconds = 0.7
+    t = _t(seconds)
+    rise = np.clip(t / 0.15, 0, 1)
+    f = (700.0 + 900.0 * rise - 500.0 * np.clip((t - 0.15) / 0.55, 0, 1)) * pitch
+    voice = _osc(f, partials=((1.0, 1.0), (2.0, 0.5), (3.0, 0.35), (4.1, 0.2))) * _rough(t, 55.0, 0.5)
+    hiss = _filter(_noise(seconds, rng), "highpass", 1500.0 * pitch) * 0.25
+    out = np.tanh(1.5 * (voice + hiss)) * _env(t, 0.01, 0.2)
+    out = _filter(out, "lowpass", 6000.0 * pitch)
+    return _norm(_trim_tail(_reverb(out, 1.4, 0.3, rng)), PEAK_SFX)
+
+
+def make_creature_hiss(rng, pitch: float):
+    seconds = 0.45
+    t = _t(seconds)
+    k = np.clip(t / 0.32, 0, 1)
+    growl = _osc((90.0 + 170.0 * k ** 2) * pitch, partials=((1.0, 1.0), (2.0, 0.6), (3.0, 0.3)))
+    hiss = _filter(_noise(seconds, rng), "bandpass", [1800.0 * pitch, 6000.0 * min(pitch * 1.2, 1.0) + 100.0])
+    env = np.where(t < 0.32, k ** 2, np.maximum(0.0, 1.0 - (t - 0.32) / 0.13))
+    return _norm(_fade((growl + hiss * 1.4) * env, 0.0, 0.02), PEAK_SFX)
+
+
+def make_creature_death(rng, pitch: float):
+    seconds = 1.5
+    t = _t(seconds)
+    f = (600.0 * np.exp(-t / 0.5) + 110.0) * pitch * (1.0 + 0.04 * np.sin(2 * np.pi * 6.0 * t))
+    wail = _osc(f, partials=((1.0, 1.0), (2.0, 0.4), (3.0, 0.2))) * _env(t, 0.02, 0.5)
+    out = wail
+    for i in range(10):
+        f0 = rng.uniform(200.0, 600.0) * pitch
+        bt = _t(0.06)
+        bubble = np.sin(2 * np.pi * np.cumsum(f0 * (1.0 + 1.5 * bt / 0.06)) / SAMPLE_RATE) * _env(bt, 0.002, 0.02)
+        _place(out, bubble, rng.uniform(0.3, 1.2), rng.uniform(0.2, 0.5))
+    closing = np.zeros_like(out)
+    steps = 12
+    for i in range(steps):
+        a, b = int(i * len(t) / steps), int((i + 1) * len(t) / steps)
+        closing[a:b] = _filter(out, "lowpass", 4000.0 * pitch * (1.0 - 0.8 * i / steps) + 200.0)[a:b]
+    return _norm(_trim_tail(_reverb(closing, 1.8, 0.35, rng)), PEAK_SFX)
+
+
+def make_swish(rng):
+    seconds = 0.35
+    t = _t(seconds)
+    out = _filter(_noise(seconds, rng), "bandpass", [180.0, rng.uniform(600.0, 950.0)]) * np.sin(np.pi * t / seconds) ** 2
+    return _norm(_fade(out), PEAK_SOFT * 0.7)
+
+
+def make_player_hurt(rng):
+    seconds = 0.5
+    t = _t(seconds)
+    thump = _kick(220.0, 120.0, 0.07, seconds)
+    tone = _osc(380.0 * (1.0 - 0.3 * t / seconds), seconds, ((1.0, 1.0), (2.0, 0.3))) * _env(t, 0.005, 0.12) * 0.5
+    out = thump + tone
+    for i in range(6):
+        bt = _t(0.05)
+        f0 = rng.uniform(500.0, 1200.0)
+        _place(out, np.sin(2 * np.pi * np.cumsum(f0 * (1.0 + 1.5 * bt / 0.05)) / SAMPLE_RATE) * _env(bt, 0.002, 0.015),
+               rng.uniform(0.03, 0.3), rng.uniform(0.15, 0.35))
+    return _norm(_fade(_filter(out, "lowpass", 2500.0)), PEAK_SFX * 0.8)
+
+
+def make_player_downed(rng):
+    seconds = 1.8
+    t = _t(seconds)
+    tone = _osc(520.0 * np.exp(-t / 0.9) + 140.0, partials=((1.0, 1.0), (2.0, 0.35), (3.0, 0.1))) * _env(t, 0.02, 0.6)
+    out = _filter(tone, "lowpass", 1400.0)
+    for i in range(14):
+        bt = _t(0.05)
+        f0 = rng.uniform(350.0, 900.0)
+        _place(out, np.sin(2 * np.pi * np.cumsum(f0 * (1.0 + 1.5 * bt / 0.05)) / SAMPLE_RATE) * _env(bt, 0.002, 0.015),
+               rng.uniform(0.2, 1.4), rng.uniform(0.1, 0.3))
+    return _norm(_trim_tail(_reverb(out, 2.0, 0.35, rng)), PEAK_SFX * 0.8)
+
+
+def make_player_revive(rng):
+    seconds = 1.4
+    t = _t(seconds)
+    rise = _osc(220.0 + 220.0 * np.clip(t / 0.8, 0, 1) ** 1.5, partials=((1.0, 1.0), (1.5, 0.4), (2.0, 0.3))) * _env(t, 0.3, 0.5)
+    chime = np.zeros_like(rise)
+    _place(chime, _osc(880.0, 1.0, ((1.0, 1.0), (1.5, 0.5))) * _env(_t(1.0), 0.003, 0.35), 0.75)
+    air = _filter(_noise(seconds, rng), "bandpass", [400.0, 2500.0]) * np.sin(np.pi * t / seconds) ** 2 * 0.25
+    out = _filter(rise, "lowpass", 2000.0) + chime * 0.5 + air
+    return _norm(_trim_tail(_reverb(out, 2.0, 0.35, rng)), PEAK_SFX * 0.8)
+
+
+def make_mending_hum(rng):
+    length = 4.0
+    hum = _loop_tone(220.0, length, ((1.0, 1.0), (2.0, 0.2))) + _loop_tone(330.0, length) * 0.6 + _loop_tone(440.25, length) * 0.4
+    hum *= _loop_lfo(2, length, 0.35)
+    hum = _circular_band(hum, 100.0, 1200.0)
+    return _norm(_reverb(hum, 1.5, 0.3, rng, circular=True), PEAK_SOFT)
+
+
+def make_low_oxygen(rng):
+    out = np.zeros(int(0.7 * SAMPLE_RATE))
+    for i, freq in enumerate((880.0, 660.0)):
+        beep = _osc(freq, 0.12, ((1.0, 1.0), (3.0, 0.2))) * _env(_t(0.12), 0.005, 0.08)
+        _place(out, beep, i * 0.18)
+    out = _filter(out, "lowpass", 1500.0)
+    return _norm(_fade(out, 0.0, 0.1), PEAK_SFX * 0.6)
+
+
+def make_low_health(rng):
+    out = np.zeros(int(0.75 * SAMPLE_RATE))
+    _place(out, _kick(70.0, 42.0, 0.08), 0.0)
+    _place(out, _kick(60.0, 38.0, 0.07), 0.2, 0.6)
+    return _norm(_fade(_filter(out, "lowpass", 400.0), 0.0, 0.1), PEAK_SFX * 0.7)
+
+
+def make_shard_hum(rng):
+    length = 4.0
+    glass = _loop_tone(1046.5, length) + _loop_tone(1047.0, length) * 0.8 + _loop_tone(1569.75, length) * 0.4 \
+        + _loop_tone(2093.0, length) * 0.2
+    glass *= _loop_lfo(3, length, 0.5)
+    return _norm(_reverb(glass, 1.5, 0.4, rng, circular=True), PEAK_SOFT * 0.6)
+
+
+def make_shard_pickup(rng):
+    out = _chord([1046.5, 1568.0, 2093.0, 2637.0], 1.0, 0.002, 0.3, ((1.0, 1.0), (2.0, 0.2)), stagger=0.05)
+    return _norm(_trim_tail(_reverb(out, 1.8, 0.35, rng)), PEAK_SFX * 0.75)
+
+
+def _grind(rng, seconds: float):
+    t = _t(seconds)
+    jitter = np.repeat(rng.uniform(0.3, 1.0, int(seconds * 40) + 1), SAMPLE_RATE // 40)[: len(t)]
+    return _filter(_noise(seconds, rng), "bandpass", [150.0, 900.0]) * jitter
+
+
+def make_barrier_close(rng):
+    out = np.zeros(int(1.6 * SAMPLE_RATE))
+    grind = _grind(rng, 0.5) * np.linspace(0.3, 1.0, int(0.5 * SAMPLE_RATE))
+    _place(out, grind, 0.0, 0.7)
+    _place(out, make_impact(rng, 48.0, 0.25, 0.6, 1.0), 0.45, 1.0)
+    return _norm(_trim_tail(_reverb(_filter(out, "lowpass", 3000.0), 1.5, 0.3, rng)), PEAK_SFX)
+
+
+def make_barrier_open(rng):
+    out = np.zeros(int(1.8 * SAMPLE_RATE))
+    grind = _grind(rng, 0.9) * np.linspace(1.0, 0.2, int(0.9 * SAMPLE_RATE))
+    _place(out, grind, 0.0, 0.7)
+    air_t = _t(0.9)
+    air = _filter(_noise(0.9, rng), "highpass", 1200.0) * np.sin(np.pi * air_t / 0.9) ** 2 * 0.4
+    _place(out, air, 0.5)
+    return _norm(_trim_tail(_reverb(_filter(out, "lowpass", 4000.0), 1.5, 0.3, rng)), PEAK_SFX * 0.85)
+
+
+def make_collapse_rumble(rng):
+    length = 6.0
+    n = int(length * SAMPLE_RATE)
+    rumble = _circular_band(_noise(length, rng), 20.0, 120.0, 0.6) * _loop_lfo(3, length, 0.4)
+    hits = np.zeros(n)
+    for i in range(7):
+        _place(hits, _kick(rng.uniform(60.0, 90.0), 35.0, rng.uniform(0.15, 0.3), 1.0), rng.uniform(0.0, length), rng.uniform(0.3, 0.8), wrap=True)
+    out = rumble / np.max(np.abs(rumble)) + hits * 0.6
+    return _norm(_reverb(out, 2.0, 0.3, rng, circular=True), PEAK_AMBIENCE)
+
+
+def make_rock_fall(rng):
+    out = np.zeros(int(1.6 * SAMPLE_RATE))
+    for i in range(rng.integers(8, 16)):
+        seconds = rng.uniform(0.03, 0.1)
+        t = _t(seconds)
+        low = rng.uniform(250.0, 900.0)
+        piece = _filter(_noise(seconds, rng), "bandpass", [low, low * 2.5]) * np.exp(-t / (seconds * 0.3))
+        _place(out, piece, rng.uniform(0.0, 0.9) ** 1.5, rng.uniform(0.2, 0.8))
+    for i in range(2):
+        _place(out, _kick(rng.uniform(80.0, 120.0), 50.0, 0.12), rng.uniform(0.0, 0.4), 0.7)
+    out = _filter(out, "lowpass", 3000.0)
+    return _norm(_trim_tail(_reverb(out, 1.2, 0.25, rng)), PEAK_SFX * 0.8)
+
+
+# --- The preview list ---------------------------------------------------------
+
+def write_preview() -> None:
+    if np is None:
+        raise SystemExit("The preview pass needs numpy and scipy: pip install numpy scipy")
+    rng = np.random.default_rng(PREVIEW_SEED)
+    out = PREVIEW_DIR
+
+    def w(name, sound, loop=False):
+        write_wav_np(out / f"{name}.wav", sound, loop)
+
+    # 1. Ambience
+    w("amb_ocean_bed", make_ocean_bed(rng), loop=True)
+    for i in range(4):
+        w(f"amb_bubbles_{i + 1}", make_bubbles(rng, i + 1))
+    w("amb_whale_1", make_whale(rng, 90.0, 150.0, 70.0, 4.0))
+    w("amb_whale_2", make_whale(rng, 70.0, 110.0, 55.0, 5.0))
+    w("amb_whale_3", make_whale(rng, 120.0, 190.0, 100.0, 3.2))
+    # 2. Music layers + stingers
+    w("music_tension", make_tension(rng), loop=True)
+    w("music_chase", make_chase(rng), loop=True)
+    w("music_intense", make_intense(rng), loop=True)
+    w("music_boss", make_boss(rng), loop=True)
+    w("sting_spotted", make_sting_spotted(rng))
+    w("sting_shard", make_sting_shard(rng))
+    w("sting_lockdown", make_sting_lockdown(rng))
+    w("sting_doors_open", make_sting_doors_open(rng))
+    w("sting_level_complete", make_sting_level_complete(rng))
+    w("sting_downed", make_sting_downed(rng))
+    # 3. SFX: sword
+    w("sword_whoosh_1", make_whoosh(rng, 0.2, 700.0, 2600.0, 0.15))
+    w("sword_whoosh_2", make_whoosh(rng, 0.22, 600.0, 2300.0, 0.2))
+    w("sword_whoosh_3", make_whoosh(rng, 0.32, 400.0, 1800.0, 0.45))
+    w("sword_impact", make_impact(rng, 110.0, 0.08, 0.35, 0.4))
+    w("sword_impact_heavy", make_impact(rng, 70.0, 0.18, 0.6, 0.8))
+    w("sword_finisher", make_finisher(rng))
+    # Pulse
+    w("pulse_ping", make_sonar(rng, 420.0, [(0.32, 0.5), (0.64, 0.3), (0.96, 0.18), (1.28, 0.1)], 4000.0, 0.0, PEAK_SFX))
+    w("pulse_distress", make_sonar(rng, 330.0, [(0.3, 0.35), (0.6, 0.15)], 900.0, 0.015, PEAK_SFX * 0.55))
+    # Creatures: normal, Sentinel (deeper), boss (deepest)
+    for prefix, pitch in (("creature", 1.0), ("sentinel", 0.72), ("boss", 0.5)):
+        for i in range(3 if prefix == "creature" else 1):
+            w(f"{prefix}_click_{i + 1}", make_creature_clicks(rng, pitch))
+        w(f"{prefix}_growl", make_creature_growl(rng, pitch))
+        w(f"{prefix}_screech", make_creature_screech(rng, pitch))
+        w(f"{prefix}_hiss", make_creature_hiss(rng, pitch))
+        w(f"{prefix}_death", make_creature_death(rng, pitch))
+    # Players
+    for i in range(3):
+        w(f"player_move_{i + 1}", make_swish(rng))
+    w("player_hurt", make_player_hurt(rng))
+    w("player_downed", make_player_downed(rng))
+    w("player_revive", make_player_revive(rng))
+    w("player_mending_hum", make_mending_hum(rng), loop=True)
+    w("player_low_oxygen", make_low_oxygen(rng))
+    w("player_low_health", make_low_health(rng))
+    # World
+    w("world_shard_hum", make_shard_hum(rng), loop=True)
+    w("world_shard_pickup", make_shard_pickup(rng))
+    w("world_barrier_close", make_barrier_close(rng))
+    w("world_barrier_open", make_barrier_open(rng))
+    w("world_collapse_rumble", make_collapse_rumble(rng), loop=True)
+    for i in range(3):
+        w(f"world_rock_fall_{i + 1}", make_rock_fall(rng))
+
+
 if __name__ == "__main__":
+    import sys
+    if "preview" in sys.argv[1:]:
+        write_preview()
+        raise SystemExit(0)
     write_wav(OUTPUT_DIR / "sonar_ping.wav", make_ping())
     write_wav(OUTPUT_DIR / "sonar_tick.wav", make_tick())
     write_wav(OUTPUT_DIR / "creature_heartbeat.wav", make_heartbeat())
