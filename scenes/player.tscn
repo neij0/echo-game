@@ -1,12 +1,13 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/player_health.gd" id="5_health"]
 [ext_resource type="Script" path="res://scripts/player_pressure.gd" id="6_pressure"]
-[ext_resource type="AudioStream" path="res://assets/audio/oxygen_alarm.wav" id="7_alarm"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/player_low_oxygen.wav" id="7_alarm"]
 [ext_resource type="Script" path="res://scripts/revive_helper.gd" id="8_revive"]
 [ext_resource type="Script" path="res://scripts/player_overlay.gd" id="9_overlay"]
 [ext_resource type="Script" path="res://scripts/player_light.gd" id="10_light"]
+[ext_resource type="Script" path="res://scripts/player_audio.gd" id="11_audio"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 14.0
@@ -45,3 +46,7 @@ follow_viewport_enabled = true
 [node name="Overlay" type="Node2D" parent="UnlitLayer" node_paths=PackedStringArray("player")]
 script = ExtResource("9_overlay")
 player = NodePath("../..")
+
+[node name="Audio" type="Node" parent="." node_paths=PackedStringArray("player")]
+script = ExtResource("11_audio")
+player = NodePath("..")

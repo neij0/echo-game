@@ -81,6 +81,11 @@ func _look_for_players(_delta: float) -> void:
 	_chase_left = chase_memory
 
 
+## Creeping towards the Echo in the dark (not rushing at her light).
+func is_stalking() -> bool:
+	return state == State.CHASE and _chased != _provoked_by and not is_echo_lit()
+
+
 func get_current_speed() -> float:
 	if state == State.CHASE and _chased and _chased != _provoked_by and not is_echo_lit():
 		return get_chase_speed() * dark_speed_ratio

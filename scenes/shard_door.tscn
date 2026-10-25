@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/shard_door.gd" id="1_script"]
-[ext_resource type="AudioStream" path="res://assets/audio/ancient_light.wav" id="2_sound"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/world_barrier_open.wav" id="2_sound"]
 
 [node name="ShardDoor" type="StaticBody2D"]
 script = ExtResource("1_script")

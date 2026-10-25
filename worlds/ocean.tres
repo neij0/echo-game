@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="WorldConfig" load_steps=35 format=3]
+[gd_resource type="Resource" script_class="WorldConfig" load_steps=36 format=3]
 
 [ext_resource type="Script" path="res://scripts/world_config.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/stage_definition.gd" id="2_stage"]
@@ -11,6 +11,7 @@
 [ext_resource type="PackedScene" path="res://scenes/sentinel.tscn" id="12_sentinel"]
 [ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="13_wave"]
 [ext_resource type="PackedScene" path="res://scenes/lockdown_room.tscn" id="14_lockdown"]
+[ext_resource type="AudioStream" path="res://assets/audio/ambience/amb_ocean_bed.wav" id="15_bed"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_1_1.tres" id="level_1_1"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_1_2.tres" id="level_1_2"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_1_3.tres" id="level_1_3"]
@@ -67,6 +68,7 @@ shard_door_scene = ExtResource("11_door")
 sentinel_scene = ExtResource("12_sentinel")
 lockdown_creature_scene = ExtResource("13_wave")
 lockdown_room_scene = ExtResource("14_lockdown")
+ambience_bed = ExtResource("15_bed")
 room_chunks = Array[PackedScene]([ExtResource("room_arena"), ExtResource("room_cavern"), ExtResource("room_crossroads"), ExtResource("room_dead_end_grotto"), ExtResource("room_kelp_maze"), ExtResource("room_ledge_cave"), ExtResource("room_pillars"), ExtResource("room_shard_alcove"), ExtResource("room_tunnel_bend"), ExtResource("room_tunnel_straight")])
 boss_arena_rooms = Array[PackedScene]([ExtResource("room_boss_arena")])
 surface_depth_m = 200.0

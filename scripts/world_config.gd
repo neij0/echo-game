@@ -112,6 +112,30 @@ extends Resource
 @export_range(0.0, 1.0) var pressure_level_refill: float = 0.4
 @export var pressure_color: Color = Color(0.35, 0.8, 1.0)
 
+@export_group("Audio")
+## The world's "air": a low-pass and a reverb on the SFX and Ambience buses
+## (AudioDirector). Underwater = muffled highs and a big soft space.
+@export var audio_lowpass_hz: float = 5200.0
+@export_range(0.0, 1.0) var audio_reverb_room_size: float = 0.75
+@export_range(0.0, 1.0) var audio_reverb_damping: float = 0.65
+@export_range(0.0, 1.0) var audio_reverb_wet: float = 0.22
+@export_range(0.0, 1.0) var audio_reverb_dry: float = 1.0
+## The ambience bed loop (AmbiencePlayer) and its random one-shots: sound names
+## of the AudioDirector's catalog (variants _1, _2... are picked at random).
+@export var ambience_bed: AudioStream
+@export var ambience_bed_volume_db: float = -6.0
+@export var ambience_small_one_shot: String = "amb_bubbles"
+@export var ambience_small_interval_min: float = 2.0
+@export var ambience_small_interval_max: float = 6.0
+@export var ambience_small_volume_min_db: float = -16.0
+@export var ambience_small_volume_max_db: float = -8.0
+## Rare, distant one-shot (whale groans in the Ocean).
+@export var ambience_rare_one_shot: String = "amb_whale"
+@export var ambience_rare_interval_min: float = 45.0
+@export var ambience_rare_interval_max: float = 100.0
+@export var ambience_rare_volume_min_db: float = -10.0
+@export var ambience_rare_volume_max_db: float = -4.0
+
 @export_group("Pulse")
 ## Echo pulse in this world.
 @export var pulse_radius: float = 650.0

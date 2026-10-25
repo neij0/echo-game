@@ -52,6 +52,7 @@ func _make_player(stream: AudioStream, polyphony: int) -> AudioStreamPlayer:
 	var audio := AudioStreamPlayer.new()
 	audio.stream = stream
 	audio.max_polyphony = polyphony
+	audio.bus = &"SFX"
 	add_child(audio)
 	return audio
 

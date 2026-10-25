@@ -1,0 +1,74 @@
+[gd_resource type="AudioBusLayout" load_steps=8 format=3]
+
+[sub_resource type="AudioEffectAmplify" id="MusicDuck"]
+resource_name = "Duck"
+
+[sub_resource type="AudioEffectAmplify" id="SfxGate"]
+resource_name = "Gate"
+
+[sub_resource type="AudioEffectLowPassFilter" id="SfxLowPass"]
+resource_name = "Underwater"
+cutoff_hz = 5200.0
+
+[sub_resource type="AudioEffectReverb" id="SfxReverb"]
+resource_name = "Reverb"
+room_size = 0.7
+damping = 0.6
+spread = 0.8
+dry = 1.0
+wet = 0.2
+
+[sub_resource type="AudioEffectAmplify" id="AmbienceGate"]
+resource_name = "Gate"
+
+[sub_resource type="AudioEffectLowPassFilter" id="AmbienceLowPass"]
+resource_name = "Underwater"
+cutoff_hz = 5200.0
+
+[sub_resource type="AudioEffectReverb" id="AmbienceReverb"]
+resource_name = "Reverb"
+room_size = 0.7
+damping = 0.6
+spread = 0.8
+dry = 1.0
+wet = 0.2
+
+[resource]
+bus/1/name = &"Music"
+bus/1/solo = false
+bus/1/mute = false
+bus/1/bypass_fx = false
+bus/1/volume_db = 0.0
+bus/1/send = &"Master"
+bus/1/effect/0/effect = SubResource("MusicDuck")
+bus/1/effect/0/enabled = true
+bus/2/name = &"SFX"
+bus/2/solo = false
+bus/2/mute = false
+bus/2/bypass_fx = false
+bus/2/volume_db = 0.0
+bus/2/send = &"Master"
+bus/2/effect/0/effect = SubResource("SfxGate")
+bus/2/effect/0/enabled = true
+bus/2/effect/1/effect = SubResource("SfxLowPass")
+bus/2/effect/1/enabled = true
+bus/2/effect/2/effect = SubResource("SfxReverb")
+bus/2/effect/2/enabled = true
+bus/3/name = &"Ambience"
+bus/3/solo = false
+bus/3/mute = false
+bus/3/bypass_fx = false
+bus/3/volume_db = 0.0
+bus/3/send = &"Master"
+bus/3/effect/0/effect = SubResource("AmbienceGate")
+bus/3/effect/0/enabled = true
+bus/3/effect/1/effect = SubResource("AmbienceLowPass")
+bus/3/effect/1/enabled = true
+bus/3/effect/2/effect = SubResource("AmbienceReverb")
+bus/3/effect/2/enabled = true
+bus/4/name = &"UI"
+bus/4/solo = false
+bus/4/mute = false
+bus/4/bypass_fx = false
+bus/4/volume_db = 0.0
+bus/4/send = &"Master"

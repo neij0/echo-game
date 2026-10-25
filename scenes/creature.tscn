@@ -5,9 +5,8 @@
 [ext_resource type="Script" path="res://scripts/creature_eyes.gd" id="3_eyes"]
 [ext_resource type="Script" path="res://scripts/creature_heartbeat.gd" id="4_heart"]
 [ext_resource type="AudioStream" path="res://assets/audio/creature_heartbeat.wav" id="5_heart_sound"]
-[ext_resource type="AudioStream" path="res://assets/audio/creature_alert.wav" id="6_alert"]
 [ext_resource type="Script" path="res://scripts/exposed_mark.gd" id="7_mark"]
-[ext_resource type="AudioStream" path="res://assets/audio/creature_lunge.wav" id="8_lunge"]
+[ext_resource type="Script" path="res://scripts/creature_voice.gd" id="8_voice"]
 [ext_resource type="Script" path="res://scripts/creature_stuck_watch.gd" id="9_stuck"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
@@ -45,16 +44,9 @@ creature = NodePath("../..")
 [node name="Heartbeat" type="AudioStreamPlayer2D" parent="." node_paths=PackedStringArray("creature")]
 stream = ExtResource("5_heart_sound")
 max_polyphony = 2
+bus = &"SFX"
 script = ExtResource("4_heart")
 creature = NodePath("..")
-
-[node name="AlertSound" type="AudioStreamPlayer2D" parent="."]
-stream = ExtResource("6_alert")
-max_distance = 1400.0
-
-[node name="LungeSound" type="AudioStreamPlayer2D" parent="."]
-stream = ExtResource("8_lunge")
-max_distance = 900.0
 
 [node name="ExposedMark" type="Node2D" parent="EchoLayer" node_paths=PackedStringArray("creature")]
 script = ExtResource("7_mark")
@@ -62,4 +54,8 @@ creature = NodePath("../..")
 
 [node name="StuckWatch" type="Node" parent="." node_paths=PackedStringArray("creature")]
 script = ExtResource("9_stuck")
+creature = NodePath("..")
+
+[node name="Voice" type="Node" parent="." node_paths=PackedStringArray("creature")]
+script = ExtResource("8_voice")
 creature = NodePath("..")

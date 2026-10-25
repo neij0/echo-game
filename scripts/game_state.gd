@@ -1,7 +1,8 @@
 class_name GameState
 extends Node
 ## Autoload "Game" (scenes/game_state.tscn): the progress (SaveData), the
-## settings (language, preferred mode, brightness) and the moves between screens:
+## settings (language, preferred mode, brightness, the volume of each audio
+## bus) and the moves between screens:
 ## main menu -> stage (game.tscn) -> ... -> story screen -> World Map.
 ## Structure: World (5) -> Stage (3 per world) -> Level (3 per stage).
 
@@ -38,11 +39,19 @@ signal language_changed
 @export var min_brightness: float = 0.7
 @export var max_brightness: float = 1.3
 
+@export_group("Volume")
+## The audio buses with an Options slider (default_bus_layout.tres), and their
+## default volume (0-1, linear).
+@export var volume_buses: PackedStringArray = PackedStringArray(["Master", "Music", "SFX", "Ambience", "UI"])
+@export_range(0.0, 1.0) var default_volume: float = 0.8
+
 ## Current progress. Always set; has_save() tells if it is on disk.
 var save: SaveData
 var language: String = "en"
 ## See default_brightness.
 var brightness: float = 1.0
+## Bus name -> volume (0-1, linear). See volume_buses.
+var volumes: Dictionary = {}
 ## Mode picked in the main menu (used by New Game, copied into the save).
 var preferred_mode: SaveData.Mode = SaveData.Mode.CALM
 ## True when the stage was started from the menus. False when game.tscn is run
@@ -58,7 +67,10 @@ func _ready() -> void:
 	language = default_language
 	preferred_mode = default_mode
 	brightness = default_brightness
+	for bus: String in volume_buses:
+		volumes[bus] = default_volume
 	_load_settings()
+	apply_volumes()
 	save = SaveData.read(save_path)
 	if save == null:
 		save = _fresh_save()
@@ -90,6 +102,30 @@ func toggle_language() -> void:
 func set_brightness(value: float) -> void:
 	brightness = clampf(value, min_brightness, max_brightness)
 	_save_settings()
+
+
+## Called by the Options sliders; saved with the other settings.
+func set_volume(bus: String, value: float) -> void:
+	if not bus in volume_buses:
+		return
+	volumes[bus] = clampf(value, 0.0, 1.0)
+	apply_volumes()
+	_save_settings()
+
+
+func get_volume(bus: String) -> float:
+	return float(volumes.get(bus, default_volume))
+
+
+## Sets every bus's volume on the AudioServer (0 = muted).
+func apply_volumes() -> void:
+	for bus: String in volume_buses:
+		var index: int = AudioServer.get_bus_index(bus)
+		if index < 0:
+			continue
+		var value: float = get_volume(bus)
+		AudioServer.set_bus_mute(index, value <= 0.001)
+		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(value, 0.001)))
 
 
 func world_display_name(world_id: String) -> String:
@@ -262,6 +298,11 @@ func _load_settings() -> void:
 		language = saved_language
 	preferred_mode = SaveData.Mode.CHALLENGE if str(data.get("mode", "calm")) == "challenge" else SaveData.Mode.CALM
 	brightness = clampf(float(data.get("brightness", brightness)), min_brightness, max_brightness)
+	var saved_volumes: Variant = data.get("volumes", {})
+	if saved_volumes is Dictionary:
+		for bus: String in volume_buses:
+			if (saved_volumes as Dictionary).has(bus):
+				volumes[bus] = clampf(float(saved_volumes[bus]), 0.0, 1.0)
 
 
 func _save_settings() -> void:
@@ -272,5 +313,6 @@ func _save_settings() -> void:
 		"language": language,
 		"mode": "challenge" if preferred_mode == SaveData.Mode.CHALLENGE else "calm",
 		"brightness": brightness,
+		"volumes": volumes,
 	}
 	file.store_string(JSON.stringify(data, "\t"))

@@ -76,8 +76,12 @@ func _run() -> void:
 	await _test_pathing()
 
 	print("RESULT: %s" % ("ALL CREATURE CHECKS PASSED" if _failures == 0 else "%d CHECK(S) FAILED" % _failures))
+	# Free the game a moment before quitting (the audio server releases freed
+	# players' playbacks on its own thread; still playing at exit = "leaked").
 	_game.queue_free()
-	await get_tree().process_frame
+	for i: int in 10:
+		await get_tree().process_frame
+		OS.delay_msec(30)
 	get_tree().quit(0 if _failures == 0 else 1)
 
 
@@ -539,6 +543,10 @@ func _test_lunge() -> void:
 	var phase_start: float = 0.0
 	var flare_at_burst: float = 0.0
 	var sound_played: bool = false
+	var heard: Array[String] = []
+	var audio: AudioDirector = AudioDirector.find(get_tree())
+	var listen := func(sound_name: String, _at: Vector2) -> void: heard.append(sound_name)
+	audio.sound_played.connect(listen)
 	var max_speed: float = 0.0
 	var completed: bool = false
 	for i: int in int(5.0 * PHYSICS_FPS):
@@ -551,7 +559,8 @@ func _test_lunge() -> void:
 			if creature.lunge_phase == Creature.Lunge.BURST:
 				flare_at_burst = eyes._flare
 			if creature.lunge_phase == Creature.Lunge.WIND_UP:
-				sound_played = creature._lunge_sound.playing
+				# lunge_started is emitted in the same frame (CreatureVoice plays at once).
+				sound_played = "creature_hiss" in heard
 			if phase == Creature.Lunge.RECOVER:
 				completed = true
 				break
@@ -564,7 +573,8 @@ func _test_lunge() -> void:
 	_check(completed, "lunge runs WIND_UP -> BURST -> RECOVER -> done")
 	_check(timeline.size() >= 1 and absf(float(timeline[0].split(" ")[1].trim_suffix("s")) - creature.lunge_wind_up) < 0.05, "wind-up lasts lunge_wind_up")
 	_check(flare_at_burst > 0.9, "eyes flare during the wind-up")
-	_check(sound_played, "lunge sound plays at the wind-up")
+	_check(sound_played, "lunge hiss plays at the wind-up")
+	audio.sound_played.disconnect(listen)
 	creature.queue_free()
 
 

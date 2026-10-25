@@ -22,3 +22,9 @@ color = Color(0.65, 0.6, 1, 1)
 color = Color(0.8, 0.85, 1, 1)
 eye_spacing = 12.0
 eye_radius = 3.0
+
+[node name="Voice" parent="."]
+voice_prefix = "sentinel"
+investigate_sounds = PackedStringArray("sentinel_investigate_creak")
+idle_interval_min = 6.0
+idle_interval_max = 14.0

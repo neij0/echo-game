@@ -24,8 +24,13 @@ signal timed_out
 @export var shake_interval_max: float = 3.0
 
 @export_group("Sound")
+## A rolling rumble loop, and falling rocks (AudioDirector) around the camera.
 @export var rumble_stream: AudioStream
 @export var rumble_volume_db: float = -4.0
+@export var rock_fall_sound: String = "world_rock_fall"
+@export var rock_fall_interval_min: float = 0.4
+@export var rock_fall_interval_max: float = 1.4
+@export var rock_fall_radius: float = 650.0
 
 @export_group("Falling Rock")
 @export var debris_amount: int = 70
@@ -45,6 +50,7 @@ var is_active: bool = false
 var time_left: float = 0.0
 var total_time: float = 0.0
 var _shake_left: float = 0.0
+var _rock_left: float = 0.0
 var _rumble: AudioStreamPlayer
 var _debris: CPUParticles2D
 var _dust: CPUParticles2D
@@ -54,6 +60,7 @@ func _ready() -> void:
 	_rumble = AudioStreamPlayer.new()
 	_rumble.stream = rumble_stream
 	_rumble.volume_db = rumble_volume_db
+	_rumble.bus = &"SFX"
 	_rumble.finished.connect(_on_rumble_finished)
 	add_child(_rumble)
 	_debris = _make_particles(debris_amount, debris_lifetime, debris_color, null)
@@ -132,6 +139,10 @@ func _process(delta: float) -> void:
 	if _shake_left <= 0.0:
 		_shake_left = randf_range(shake_interval_min, shake_interval_max)
 		_shake(shake_strength, shake_time)
+	_rock_left -= delta
+	if _rock_left <= 0.0:
+		_rock_left = randf_range(rock_fall_interval_min, rock_fall_interval_max)
+		_play_rock_fall()
 	if time_left <= 0.0:
 		_time_out()
 
@@ -151,6 +162,15 @@ func _follow_camera() -> void:
 	for particles: CPUParticles2D in [_debris, _dust]:
 		particles.global_position = camera.get_screen_center_position()
 		particles.emission_rect_extents = half
+
+
+func _play_rock_fall() -> void:
+	var audio: AudioDirector = AudioDirector.find(get_tree())
+	var camera: Camera2D = get_viewport().get_camera_2d()
+	if audio == null or camera == null:
+		return
+	var at: Vector2 = camera.get_screen_center_position() + Vector2.from_angle(randf() * TAU) * randf_range(0.2, 1.0) * rock_fall_radius
+	audio.play(rock_fall_sound, at)
 
 
 func _on_rumble_finished() -> void:

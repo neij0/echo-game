@@ -26,6 +26,10 @@ enum Look { ROUND, SPIKY, ARROW }
 ## Emitted when the creature spots a player and starts chasing.
 signal spotted(player: Player)
 signal killed
+## Emitted (in the next physics frame) whenever its state changes (CreatureVoice).
+signal state_changed(old_state: State, new_state: State)
+## Emitted when a lunge wind-up starts (the telegraph: CreatureVoice hisses).
+signal lunge_started
 
 ## Optional: if empty, the first node in the "depth_awareness" group is used.
 @export var awareness: DepthAwareness
@@ -46,6 +50,9 @@ signal killed
 ## Near a lit coral's zone (this much beyond its edge) the creature steers
 ## around it instead of into it, so the push and the path never fight.
 @export var safe_zone_steer_margin: float = 40.0
+## Sliding around lit zones this long (not chasing, e.g. two zones block the
+## way) = it gives up on that point and picks another.
+@export var safe_zone_give_up_time: float = 1.0
 ## Spots a player this close if nothing blocks the line of sight.
 @export var spot_distance: float = 220.0
 ## Spots a player who pulses this close (no line of sight needed).
@@ -74,7 +81,6 @@ signal killed
 ## After a search ends, seconds before it can spot a player by sight again
 ## (a nearby pulse still gives the player away).
 @export var respot_cooldown: float = 1.0
-@export var alert_volume_db: float = 0.0
 
 @export_group("Search")
 ## After losing sight: goes to the last seen position plus the player's
@@ -106,7 +112,6 @@ signal killed
 @export var lunge_cooldown: float = 1.2
 ## Eye brightness multiplier at the peak of the flare (1 = no flare).
 @export var lunge_eye_flare: float = 3.0
-@export var lunge_volume_db: float = 0.0
 
 @export_group("Pathing")
 ## Follow the level's navigation mesh (doorways, corners). Off = straight line.
@@ -265,12 +270,11 @@ var _last_wall_normal: Vector2 = Vector2.ZERO
 ## Which way it slides around a lit coral's zone (+1 / -1); flips on a wall.
 var _zone_side: float = 0.0
 var _steering_around_zone: bool = false
+var _zone_time: float = 0.0
 ## Where the creature points (last movement direction).
 var _facing: Vector2 = Vector2.RIGHT
 
 @onready var _hitbox: Area2D = $Hitbox
-@onready var _alert: AudioStreamPlayer2D = $AlertSound
-@onready var _lunge_sound: AudioStreamPlayer2D = get_node_or_null("LungeSound") as AudioStreamPlayer2D
 @onready var _echo: CreatureEcho = $EchoLayer/Echo
 
 
@@ -280,9 +284,6 @@ func _ready() -> void:
 	_hitbox.body_entered.connect(_on_hitbox_body_entered)
 	add_to_group("sonar_targets")
 	add_to_group("creatures")
-	_alert.volume_db = alert_volume_db
-	if _lunge_sound:
-		_lunge_sound.volume_db = lunge_volume_db
 	health = max_health
 
 
@@ -400,6 +401,12 @@ func _on_damaged(_attacker: Player) -> void:
 	pass
 
 
+## Hook for subclasses: true while it is closing in quietly instead of
+## openly chasing (CreatureVoice then uses its investigate voice, not a screech).
+func is_stalking() -> bool:
+	return false
+
+
 ## Hook for subclasses: can touching this player hurt them?
 func _can_hurt(_player: Player) -> bool:
 	return true
@@ -438,7 +445,6 @@ func _spot(player: Player) -> void:
 	_reset_detour()
 	_reset_path()
 	if not was_chasing:
-		_alert.play()
 		spotted.emit(player)
 		get_tree().call_group("creatures", "hear_alert", self)
 
@@ -566,8 +572,7 @@ func _update_lunge(delta: float) -> bool:
 		lunge_phase = Lunge.WIND_UP
 		lunges_started += 1
 		_lunge_left = lunge_wind_up
-		if _lunge_sound:
-			_lunge_sound.play()
+		lunge_started.emit()
 	_lunge_left -= delta
 	match lunge_phase:
 		Lunge.WIND_UP:
@@ -686,8 +691,10 @@ func get_current_speed() -> float:
 func _physics_process(delta: float) -> void:
 	_update_reveal(delta)
 	if state != _last_state:
+		var old_state: State = _last_state
 		_last_state = state
 		state_changes += 1
+		state_changed.emit(old_state, state)
 	if _stagger_left > 0.0:
 		# Staggered: no steering, just slide out the knockback.
 		_stagger_left -= delta
@@ -712,6 +719,10 @@ func _physics_process(delta: float) -> void:
 		desired = _steer_direction(delta) * get_current_speed()
 
 	desired = _steer_around_safe_zones(desired) + _safe_zone_push()
+	_zone_time = _zone_time + delta if _steering_around_zone else 0.0
+	if _zone_time >= safe_zone_give_up_time and state != State.CHASE:
+		_zone_time = 0.0
+		_on_target_reached()
 	velocity = velocity.lerp(desired, 1.0 - exp(-steering * delta))
 	move_and_slide()
 

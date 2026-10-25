@@ -88,6 +88,12 @@ func _test_world_progress() -> void:
 	_expect(is_equal_approx(game.brightness, 1.2), "the brightness setting is saved and loaded")
 	game.set_brightness(99.0)
 	_expect(is_equal_approx(game.brightness, game.max_brightness), "the brightness is clamped to its range")
+	game.set_volume("Music", 0.35)
+	game.volumes["Music"] = game.default_volume
+	game._load_settings()
+	_expect(is_equal_approx(game.get_volume("Music"), 0.35), "a bus volume is saved and loaded")
+	game.set_volume("SFX", 7.0)
+	_expect(is_equal_approx(game.get_volume("SFX"), 1.0), "a bus volume is clamped to 0-1")
 	game.free()
 
 

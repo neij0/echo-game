@@ -2,8 +2,8 @@
 
 [ext_resource type="Script" path="res://scripts/lockdown_room.gd" id="1_script"]
 [ext_resource type="AudioStream" path="res://assets/audio/rumble.wav" id="2_rumble"]
-[ext_resource type="AudioStream" path="res://assets/audio/rock_slam.wav" id="3_slam"]
-[ext_resource type="AudioStream" path="res://assets/audio/lockdown_clear.wav" id="4_clear"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/world_barrier_close.wav" id="3_slam"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/world_barrier_open.wav" id="4_clear"]
 [ext_resource type="AudioStream" path="res://assets/audio/station_refill.wav" id="5_refill"]
 
 [node name="LockdownRoom" type="Node2D"]

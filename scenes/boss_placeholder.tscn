@@ -21,3 +21,8 @@ shape = SubResource("CircleShape2D_boss_body")
 
 [node name="CollisionShape2D" parent="Hitbox" index="0"]
 shape = SubResource("CircleShape2D_boss_hitbox")
+
+[node name="Voice" parent="."]
+voice_prefix = "boss"
+investigate_sounds = PackedStringArray("boss_investigate_chitter", "boss_investigate_creak", "boss_investigate_call")
+idle_max_distance = 1800.0

@@ -13,3 +13,6 @@ eye_color = Color(1, 1, 0.85, 1)
 
 [node name="Echo" parent="EchoLayer" index="0"]
 color = Color(1, 0.35, 0.8, 1)
+
+[node name="Voice" parent="."]
+investigate_sounds = PackedStringArray("creature_investigate_call")

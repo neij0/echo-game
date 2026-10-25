@@ -43,6 +43,10 @@ signal collected(shard: EchoShard)
 @export var light_radius: float = 110.0
 @export var light_energy: float = 0.7
 
+@export_group("Hum")
+## A faint glassy hum (AudioDirector loop) heard only close by.
+@export var hum_sound: String = "world_shard_hum"
+
 @export_group("Pickup")
 @export var pickup_stream: AudioStream
 @export var pickup_volume_db: float = -2.0
@@ -61,6 +65,7 @@ var _burst_left: float = 0.0
 var _light: PointLight2D
 var _visual: Node2D
 var _audio: AudioStreamPlayer2D
+var _hum: AudioStreamPlayer2D
 
 
 func _ready() -> void:
@@ -83,7 +88,26 @@ func _ready() -> void:
 	_audio = AudioStreamPlayer2D.new()
 	_audio.stream = pickup_stream
 	_audio.volume_db = pickup_volume_db
+	_audio.bus = &"SFX"
 	add_child(_audio)
+	_start_hum.call_deferred()
+
+
+func _start_hum() -> void:
+	var audio: AudioDirector = AudioDirector.find(get_tree())
+	if audio and not is_collected:
+		_hum = audio.make_loop_player(hum_sound, self) as AudioStreamPlayer2D
+		if _hum:
+			_hum.play()
+
+
+func _exit_tree() -> void:
+	if _hum:
+		_hum.stop()
+
+
+func is_humming() -> bool:
+	return _hum != null and _hum.playing
 
 
 func _physics_process(delta: float) -> void:
@@ -152,6 +176,8 @@ func _collect() -> void:
 	remove_from_group("echo_shards")
 	remove_from_group("sonar_targets")
 	_burst_left = burst_time
+	if _hum:
+		_hum.stop()
 	if pickup_stream:
 		_audio.play()
 	collected.emit(self)

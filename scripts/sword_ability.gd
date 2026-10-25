@@ -50,8 +50,6 @@ signal exposed_kill(creature_position: Vector2)
 @export var hit_stop_duration: float = 0.08
 ## Engine time scale during the hit-stop (0 = full freeze).
 @export_range(0.0, 1.0) var hit_stop_time_scale: float = 0.02
-@export var exposed_kill_stream: AudioStream
-@export var exposed_kill_volume_db: float = 0.0
 @export var burst_color: Color = Color(1.0, 0.8, 0.3)
 @export var burst_energy: float = 4.0
 @export var burst_radius: float = 95.0
@@ -72,10 +70,15 @@ signal exposed_kill(creature_position: Vector2)
 @export var noise_radius: float = 450.0
 
 @export_group("Sound")
-@export var swing_stream: AudioStream
-@export var hit_stream: AudioStream
-@export var swing_volume_db: float = -6.0
-@export var hit_volume_db: float = -2.0
+## AudioDirector sound names: a whoosh per combo hit (the third is heavier),
+## the impact (heavier on the finisher), and the Exposed kill, which plays
+## after a short silence (the hit-stop).
+@export var whoosh_sounds: PackedStringArray = PackedStringArray(["sword_whoosh_1", "sword_whoosh_2", "sword_whoosh_3"])
+@export var impact_sound: String = "sword_impact"
+@export var heavy_impact_sound: String = "sword_impact_heavy"
+@export var finisher_sound: String = "sword_finisher"
+## Real seconds of silence before the finisher boom.
+@export var finisher_silence: float = 0.12
 
 @export_group("Look")
 @export var sword_length: float = 34.0
@@ -129,9 +132,6 @@ var _buffered: bool = false
 var _applied: bool = false
 var _swing_dir: Vector2 = Vector2.DOWN
 var _awareness: DepthAwareness
-var _swing_audio: AudioStreamPlayer2D
-var _hit_audio: AudioStreamPlayer2D
-var _kill_audio: AudioStreamPlayer2D
 ## 1 = facing right, -1 = facing left (rest pose only).
 var facing_sign: float = 1.0
 var _pose_angle: float = 0.0
@@ -150,9 +150,6 @@ func _ready() -> void:
 	_pose_angle = _rest_angle(facing_sign)
 	_pose_to = _pose_angle
 	_drawn_angle = _pose_angle
-	_swing_audio = _make_audio(swing_stream, swing_volume_db)
-	_hit_audio = _make_audio(hit_stream, hit_volume_db)
-	_kill_audio = _make_audio(exposed_kill_stream, exposed_kill_volume_db)
 
 
 func _process(delta: float) -> void:
@@ -249,9 +246,8 @@ func _start_hit(index: int) -> void:
 	_applied = false
 	_window_left = 0.0
 	_swing_dir = player.facing
-	if swing_stream:
-		_swing_audio.pitch_scale = 0.8 if index == 2 else 1.0 + 0.08 * index
-		_swing_audio.play()
+	if not whoosh_sounds.is_empty():
+		_play(whoosh_sounds[mini(index, whoosh_sounds.size() - 1)], player.global_position)
 	_make_noise()
 	swung.emit(index)
 
@@ -300,17 +296,17 @@ func _apply_damage() -> void:
 			finisher_knockback if is_finisher else quick_knockback, is_finisher)
 		if killed_exposed:
 			_on_exposed_kill(creature_position)
-		elif hit_stream:
-			_hit_audio.play()
+		else:
+			_play(heavy_impact_sound if is_finisher else impact_sound, creature_position)
 		hit_landed.emit(creature, damage)
 
 
 func _on_exposed_kill(creature_position: Vector2) -> void:
 	_burst_positions.append(creature_position)
 	_burst_ages.append(0.0)
-	if exposed_kill_stream:
-		_kill_audio.global_position = creature_position
-		_kill_audio.play()
+	var audio: AudioDirector = AudioDirector.find(get_tree())
+	if audio:
+		audio.play_after_silence(finisher_sound, creature_position, finisher_silence)
 	var camera := get_viewport().get_camera_2d() as SharedCamera
 	if camera:
 		camera.shake_with(kill_shake_strength, kill_shake_duration)
@@ -346,12 +342,10 @@ func _windup(index: int) -> float:
 	return finisher_windup if index == 2 else 0.0
 
 
-func _make_audio(stream: AudioStream, volume_db: float) -> AudioStreamPlayer2D:
-	var audio := AudioStreamPlayer2D.new()
-	audio.stream = stream
-	audio.volume_db = volume_db
-	add_child(audio)
-	return audio
+func _play(sound_name: String, at: Vector2) -> void:
+	var audio: AudioDirector = AudioDirector.find(get_tree())
+	if audio:
+		audio.play(sound_name, at)
 
 
 static func _hdr(color: Color, energy: float, alpha: float) -> Color:

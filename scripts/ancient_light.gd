@@ -91,6 +91,7 @@ func _ready() -> void:
 
 	_audio = AudioStreamPlayer.new()
 	_audio.stream = activation_stream
+	_audio.bus = &"SFX"
 	_audio.volume_db = activation_volume_db
 	add_child(_audio)
 

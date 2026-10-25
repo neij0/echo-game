@@ -5,7 +5,8 @@ extends Node2D
 ## health back (one segment per seconds_per_segment, per mode). A soft glowing
 ## link is drawn between them while it mends. Must live on a CanvasLayer with
 ## follow_viewport_enabled at the origin, so it draws in world coordinates and
-## the darkness does not dim it.
+## the darkness does not dim it. A soft hum loops while it mends, fading with
+## the link.
 
 ## Emitted when mending starts / stops (for sounds or effects later).
 signal mending_changed(is_mending: bool)
@@ -16,6 +17,11 @@ signal mending_changed(is_mending: bool)
 ## Seconds to mend one full segment (Calm / Challenge).
 @export var calm_seconds_per_segment: float = 6.0
 @export var challenge_seconds_per_segment: float = 10.0
+
+@export_group("Hum")
+## AudioDirector sound name of the hum (a loop) and its level at full strength.
+@export var hum_sound: String = "player_mending_hum"
+@export var hum_volume_db: float = -14.0
 
 @export_group("Link")
 @export var link_color: Color = Color(0.55, 1.0, 0.8)
@@ -43,6 +49,7 @@ var _strength: float = 0.0
 var _time: float = 0.0
 var _a: Player
 var _b: Player
+var _hum: AudioStreamPlayer
 
 
 func _process(delta: float) -> void:
@@ -58,7 +65,32 @@ func _process(delta: float) -> void:
 		_b.health.heal(rate * delta)
 	var fade_step: float = delta / maxf(fade_time, 0.01)
 	_strength = move_toward(_strength, 1.0 if is_mending else 0.0, fade_step)
+	_update_hum()
 	queue_redraw()
+
+
+func _update_hum() -> void:
+	if _hum == null:
+		var audio: AudioDirector = AudioDirector.find(get_tree())
+		if audio == null:
+			return
+		# A plain Node parent: the hum is not positional (it is between the two).
+		var holder := Node.new()
+		add_child(holder)
+		_hum = audio.make_loop_player(hum_sound, holder) as AudioStreamPlayer
+		if _hum == null:
+			return
+	if _strength <= 0.0:
+		if _hum.playing:
+			_hum.stop()
+		return
+	_hum.volume_db = hum_volume_db + linear_to_db(_strength)
+	if not _hum.playing:
+		_hum.play()
+
+
+func is_humming() -> bool:
+	return _hum != null and _hum.playing
 
 
 func _seconds_per_segment() -> float:

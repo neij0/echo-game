@@ -22,6 +22,8 @@ extends Node
 @export var challenge_noise_radius: float = 200.0
 
 @export_group("Look")
+## AudioDirector sound name (a weaker, muffled ping).
+@export var sound: String = "pulse_distress"
 @export var expand_time: float = 0.45
 ## The ring's own faint light (kept lower than a normal pulse).
 @export var light_energy: float = 0.1
@@ -68,6 +70,9 @@ func emit_pulse() -> void:
 		ring.light_energy = light_energy
 		ring.position = player.position
 		player.get_parent().add_child(ring)
+	var audio: AudioDirector = AudioDirector.find(get_tree())
+	if audio:
+		audio.play(sound, player.global_position)
 	var noise: float = challenge_noise_radius if challenge_mode else calm_noise_radius
 	if noise > 0.0:
 		get_tree().call_group("creatures", "hear_noise", player.global_position, noise)

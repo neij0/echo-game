@@ -41,6 +41,7 @@ func _ready() -> void:
 	_heartbeat.stream = heartbeat_stream
 	_heartbeat.volume_db = heartbeat_volume_db
 	_heartbeat.pitch_scale = heartbeat_pitch
+	_heartbeat.bus = &"SFX"
 	add_child(_heartbeat)
 	if stage_manager:
 		stage_manager.player_registered.connect(_on_player_registered)

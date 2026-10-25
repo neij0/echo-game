@@ -1,6 +1,6 @@
 extends Control
 ## Sound Test (dev tool, run tools/sound_test.tscn with F6): a button for every
-## .wav in preview_dir, grouped by name prefix (amb_, music_, sting_, sword_,
+## .wav in sound_dirs, grouped by name prefix (amb_, music_, sting_, sword_,
 ## pulse_, creature_, sentinel_, boss_, player_, world_). One-shots play with a
 ## random pitch / volume (like they will in the game, can be switched off);
 ## loops (files with a WAV loop chunk) toggle on and off. The music section
@@ -9,7 +9,8 @@ extends Control
 ## with random bubbles and whale groans. Files are found by name, so a better
 ## recording with the same name replaces a sound without code changes.
 
-@export_dir var preview_dir: String = "res://assets/audio/preview"
+@export var sound_dirs: PackedStringArray = PackedStringArray([
+	"res://assets/audio/sfx", "res://assets/audio/music", "res://assets/audio/ambience"])
 
 @export_group("Variation")
 ## One-shots: random pitch within +- this share, volume within +- these dB.
@@ -88,12 +89,13 @@ func _ready() -> void:
 
 
 func _load_streams() -> void:
-	for file: String in DirAccess.get_files_at(preview_dir):
-		if file.get_extension() != "wav":
-			continue
-		var stream := load(preview_dir.path_join(file)) as AudioStream
-		if stream:
-			_streams[file.get_basename()] = stream
+	for folder: String in sound_dirs:
+		for file: String in DirAccess.get_files_at(folder):
+			if file.get_extension() != "wav":
+				continue
+			var stream := load(folder.path_join(file)) as AudioStream
+			if stream:
+				_streams[file.get_basename()] = stream
 	print("Sound Test: %d sounds, %d loops" % [_streams.size(), _streams.keys().filter(_is_loop).size()])
 
 
@@ -123,7 +125,7 @@ func _build_ui() -> void:
 	scroll.add_child(column)
 
 	var title := Label.new()
-	title.text = "Sound Test — %d sounds from %s" % [_streams.size(), preview_dir]
+	title.text = "Sound Test — %d sounds" % _streams.size()
 	title.add_theme_font_size_override("font_size", section_font_size + 4)
 	column.add_child(title)
 	var top := HFlowContainer.new()

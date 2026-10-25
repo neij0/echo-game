@@ -46,6 +46,7 @@ func _ready() -> void:
 	_alarm_player = AudioStreamPlayer.new()
 	_alarm_player.stream = alarm_stream
 	_alarm_player.volume_db = alarm_volume_db
+	_alarm_player.bus = &"SFX"
 	add_child(_alarm_player)
 	if player:
 		player.pulse_emitted.connect(_on_pulse_emitted)

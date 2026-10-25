@@ -1,4 +1,4 @@
-[gd_scene load_steps=25 format=3]
+[gd_scene load_steps=32 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_builder.gd" id="1_level"]
 [ext_resource type="Resource" path="res://worlds/ocean.tres" id="2_world"]
@@ -10,7 +10,7 @@
 [ext_resource type="Script" path="res://scripts/sonar_overlay.gd" id="8_sonar"]
 [ext_resource type="Script" path="res://scripts/glow_environment.gd" id="9_glow"]
 [ext_resource type="Script" path="res://scripts/sonar_audio.gd" id="10_audio"]
-[ext_resource type="AudioStream" path="res://assets/audio/sonar_ping.wav" id="11_ping"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/pulse_ping.wav" id="11_ping"]
 [ext_resource type="AudioStream" path="res://assets/audio/sonar_tick.wav" id="12_tick"]
 [ext_resource type="Script" path="res://scripts/darkness.gd" id="13_darkness"]
 [ext_resource type="Script" path="res://scripts/hurt_vignette.gd" id="14_vignette"]
@@ -19,10 +19,17 @@
 [ext_resource type="Script" path="res://scripts/marine_snow.gd" id="18_snow"]
 [ext_resource type="Script" path="res://scripts/light_shafts.gd" id="19_shafts"]
 [ext_resource type="Script" path="res://scripts/partner_mending.gd" id="20_mending"]
-[ext_resource type="AudioStream" path="res://assets/audio/creature_heartbeat.wav" id="21_heartbeat"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/player_low_health.wav" id="21_heartbeat"]
 [ext_resource type="Script" path="res://scripts/escape_event.gd" id="22_escape"]
-[ext_resource type="AudioStream" path="res://assets/audio/rumble.wav" id="23_rumble"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/world_collapse_rumble.wav" id="23_rumble"]
 [ext_resource type="Script" path="res://scripts/nav_debug_draw.gd" id="24_navdebug"]
+[ext_resource type="Script" path="res://scripts/audio_director.gd" id="25_audio"]
+[ext_resource type="Script" path="res://scripts/ambience_player.gd" id="26_ambience"]
+[ext_resource type="Script" path="res://scripts/music_director.gd" id="27_music"]
+[ext_resource type="AudioStream" path="res://assets/audio/music/music_tension.wav" id="28_tension"]
+[ext_resource type="AudioStream" path="res://assets/audio/music/music_chase.wav" id="29_chase"]
+[ext_resource type="AudioStream" path="res://assets/audio/music/music_intense.wav" id="30_intense"]
+[ext_resource type="AudioStream" path="res://assets/audio/music/music_boss.wav" id="31_boss"]
 
 [node name="Game" type="Node2D"]
 
@@ -140,6 +147,25 @@ offset_left = 20.0
 offset_top = 250.0
 offset_right = 420.0
 offset_bottom = 370.0
+
+[node name="AudioDirector" type="Node" parent="."]
+script = ExtResource("25_audio")
+
+[node name="AmbiencePlayer" type="Node" parent="." node_paths=PackedStringArray("audio_director")]
+script = ExtResource("26_ambience")
+audio_director = NodePath("../AudioDirector")
+
+[node name="MusicDirector" type="Node" parent="." node_paths=PackedStringArray("audio_director", "ambience", "stage_manager", "level_builder", "escape_event")]
+script = ExtResource("27_music")
+audio_director = NodePath("../AudioDirector")
+ambience = NodePath("../AmbiencePlayer")
+stage_manager = NodePath("../StageManager")
+level_builder = NodePath("../LevelBuilder")
+escape_event = NodePath("../EnvironmentLayer/EscapeEvent")
+tension_stream = ExtResource("28_tension")
+chase_stream = ExtResource("29_chase")
+intense_stream = ExtResource("30_intense")
+boss_stream = ExtResource("31_boss")
 
 [node name="EndScreen" type="CanvasLayer" parent="."]
 layer = 3

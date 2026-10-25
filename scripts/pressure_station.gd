@@ -55,6 +55,7 @@ func _ready() -> void:
 
 	_audio = AudioStreamPlayer2D.new()
 	_audio.stream = refill_stream
+	_audio.bus = &"SFX"
 	_audio.volume_db = refill_volume_db
 	add_child(_audio)
 

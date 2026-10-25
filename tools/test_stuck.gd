@@ -79,8 +79,12 @@ func _run() -> void:
 	failures += await _normal_play_pass(rng)
 	failures += await _safety_net_check()
 	print("RESULT: %s" % ("NO STUCK CREATURES" if failures == 0 else "%d STUCK RUN(S)" % failures))
+	# Free the game a moment before quitting (the audio server releases freed
+	# players' playbacks on its own thread; still playing at exit = "leaked").
 	_game.queue_free()
-	await get_tree().process_frame
+	for i: int in 10:
+		await get_tree().process_frame
+		OS.delay_msec(30)
 	get_tree().quit(0 if failures == 0 else 1)
 
 

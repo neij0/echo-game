@@ -29,6 +29,9 @@ signal between_levels(next_level_index: int)
 signal stage_completed(stage_index: int)
 ## Emitted when a level starts and whenever an Echo Shard is collected.
 signal shards_changed(collected: int, total: int)
+## Emitted the moment a level is won (the ancient light wakes or the boss
+## falls), before the level-cleared screen (music stinger).
+signal level_won
 
 ## Used when game.tscn runs on its own (F6). Started from the menus, the Game
 ## autoload's current world and stage are used instead.
@@ -274,6 +277,7 @@ func _on_ancient_light_activated() -> void:
 	_is_changing_level = true
 	if escape_event:
 		escape_event.stop()
+	level_won.emit()
 	await get_tree().create_timer(victory_delay).timeout
 	if level_index + 1 >= get_level_count():
 		# A stage without a boss level ends on its last ancient light.
@@ -298,6 +302,7 @@ func _on_boss_killed() -> void:
 	if is_over or _is_changing_level:
 		return
 	_is_changing_level = true
+	level_won.emit()
 	await get_tree().create_timer(victory_delay).timeout
 	_complete_stage(true)
 

@@ -31,6 +31,12 @@ const STRINGS: Dictionary = {
 		"ar": "يجعل الماء وأضواءكما أفتح أو أعتم قليلاً. النبضة لا تتأثر، والمناطق البعيدة تبقى مظلمة.",
 	},
 	"back": {"en": "Back", "ar": "رجوع"},
+	# Volume sliders (Options): one per audio bus.
+	"volume_Master": {"en": "Master volume: %d%%", "ar": "الصوت العام: %d%%"},
+	"volume_Music": {"en": "Music: %d%%", "ar": "الموسيقى: %d%%"},
+	"volume_SFX": {"en": "Sound effects: %d%%", "ar": "المؤثرات الصوتية: %d%%"},
+	"volume_Ambience": {"en": "Ambience: %d%%", "ar": "أصوات البيئة: %d%%"},
+	"volume_UI": {"en": "Menu sounds: %d%%", "ar": "أصوات القوائم: %d%%"},
 	"confirm_new_game": {
 		"en": "Start a new game? Your saved progress will be lost.",
 		"ar": "بدء لعبة جديدة؟ سيُحذف تقدّمك المحفوظ.",

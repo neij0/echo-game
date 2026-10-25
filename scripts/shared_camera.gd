@@ -4,7 +4,8 @@ extends Camera2D
 ## so both stay on screen, down to min_zoom (the players' leash keeps them
 ## within that). Also does the small shake on every Echo pulse. Other systems
 ## shake it through the "shared_camera" group (call_group "shake_with"), so
-## they do not depend on this script.
+## they do not depend on this script. Its AudioListener2D hears every
+## positional sound (AudioStreamPlayer2D).
 
 @export var stage_manager: StageManager
 ## How fast the camera catches up with the midpoint (higher = snappier).
@@ -31,6 +32,9 @@ var _snapped: bool = false
 
 func _ready() -> void:
 	add_to_group("shared_camera")
+	var listener := AudioListener2D.new()
+	add_child(listener)
+	listener.make_current()
 	if stage_manager:
 		stage_manager.player_registered.connect(_on_player_registered)
 

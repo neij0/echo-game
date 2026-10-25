@@ -1,8 +1,8 @@
 class_name MainMenu
 extends Control
 ## The main menu: Continue (only if a save exists), New Game, Mode
-## (Calm / Challenge), Language (English / Arabic), Options (Brightness slider),
-## Quit. Builds its UI in code
+## (Calm / Challenge), Language (English / Arabic), Options (Brightness and
+## one volume slider per audio bus), Quit. Builds its UI in code
 ## (grey-box) and rebuilds the text when the language changes. Arabic lays the
 ## menu out right-to-left.
 
@@ -16,6 +16,8 @@ extends Control
 @export var spacing: int = 14
 ## Step of the Brightness slider (the range comes from the Game autoload).
 @export var brightness_step: float = 0.05
+## Step of the volume sliders (0-1).
+@export var volume_step: float = 0.05
 
 var _column: VBoxContainer
 var _title: Label
@@ -32,6 +34,8 @@ var _brightness_label: Label
 var _brightness_slider: HSlider
 var _brightness_info: Label
 var _back_button: Button
+## Bus name -> its volume Label (the sliders are built from Game.volume_buses).
+var _volume_labels: Dictionary = {}
 var _confirm: ConfirmationDialog
 
 
@@ -94,6 +98,8 @@ func _refresh() -> void:
 	_quit_button.text = Game.text("quit")
 	_brightness_label.text = Game.text("brightness") % roundi(Game.brightness * 100.0)
 	_brightness_info.text = Game.text("brightness_desc")
+	for bus: String in _volume_labels:
+		_update_volume_label(bus)
 	_back_button.text = Game.text("back")
 	_confirm.dialog_text = Game.text("confirm_new_game")
 	_confirm.ok_button_text = Game.text("yes")
@@ -120,6 +126,18 @@ func _build_options(parent: Control) -> void:
 	_brightness_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_brightness_info.custom_minimum_size.x = button_width
 	_options_column.add_child(_brightness_info)
+	for bus: String in Game.volume_buses:
+		var label: Label = _make_label(info_font_size + 4, text_color)
+		_options_column.add_child(label)
+		_volume_labels[bus] = label
+		var slider := HSlider.new()
+		slider.custom_minimum_size.x = button_width
+		slider.min_value = 0.0
+		slider.max_value = 1.0
+		slider.step = volume_step
+		slider.value = Game.get_volume(bus)
+		slider.value_changed.connect(_on_volume_changed.bind(bus))
+		_options_column.add_child(slider)
 	_back_button = Button.new()
 	_back_button.custom_minimum_size.x = button_width
 	_back_button.add_theme_font_size_override("font_size", button_font_size)
@@ -139,6 +157,15 @@ func _show_options(open: bool) -> void:
 func _on_brightness_changed(value: float) -> void:
 	Game.set_brightness(value)
 	_brightness_label.text = Game.text("brightness") % roundi(Game.brightness * 100.0)
+
+
+func _on_volume_changed(value: float, bus: String) -> void:
+	Game.set_volume(bus, value)
+	_update_volume_label(bus)
+
+
+func _update_volume_label(bus: String) -> void:
+	(_volume_labels[bus] as Label).text = Game.text("volume_" + bus) % roundi(Game.get_volume(bus) * 100.0)
 
 
 func _on_new_game_pressed() -> void:

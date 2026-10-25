@@ -277,6 +277,7 @@ func _make_player(stream: AudioStream, volume_db: float) -> AudioStreamPlayer:
 	var player := AudioStreamPlayer.new()
 	player.stream = stream
 	player.volume_db = volume_db
+	player.bus = &"SFX"
 	add_child(player)
 	return player
 
