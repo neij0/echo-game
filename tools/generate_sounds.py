@@ -5,6 +5,9 @@ Run from the project root:
     python tools/generate_sounds.py preview    (the audio pass preview, in
                                                 assets/audio/preview/; needs
                                                 numpy + scipy)
+    python tools/generate_sounds.py preview amb_whale investigate
+                                               (only sounds whose name
+                                                contains one of the words)
 
 Writes 16-bit mono .wav files to assets/audio/. Tweak the constants below and
 run it again; Godot re-imports the files automatically.
@@ -745,19 +748,35 @@ def make_bubbles(rng, count: int):
     return _norm(_trim_tail(out), PEAK_SOFT)
 
 
-def make_whale(rng, f_start: float, f_peak: float, f_end: float, seconds: float):
+# Whale-like groans: felt more than heard. A deep fundamental (20-60 Hz) with a
+# few soft harmonics, gliding very slowly between a handful of pitches (smooth
+# cosine steps of several seconds, no wobble), heavily low-passed, then pushed
+# far away by a long dark reverb.
+WHALE_HARMONICS = ((1.0, 1.0), (2.0, 0.55), (3.0, 0.3), (4.0, 0.16), (5.0, 0.08))
+WHALE_LOWPASS = 260.0       # Hz
+WHALE_REVERB = 9.0          # seconds of tail
+WHALE_REVERB_MIX = 0.8
+WHALE_PEAK = 0.22           # quiet: it is far away
+
+
+def make_whale(rng, pitches, glide_seconds: float):
+    """pitches: the Hz it glides through (one glide_seconds step each)."""
+    steps = len(pitches) - 1
+    seconds = steps * glide_seconds
     t = _t(seconds)
-    k = t / seconds
-    # Glide up to the peak in the first 40 %, then sink.
-    freq = np.where(k < 0.4, f_start + (f_peak - f_start) * np.sin(k / 0.4 * np.pi / 2),
-                    f_peak + (f_end - f_peak) * (k - 0.4) / 0.6)
-    freq = freq * (1.0 + 0.012 * np.sin(2 * np.pi * 4.5 * t))
-    voice = _osc(freq, partials=((1.0, 1.0), (2.0, 0.6), (3.0, 0.45), (4.0, 0.25), (5.0, 0.15)))
-    voice = _filter(voice, "bandpass", [180.0, 900.0])
-    voice *= np.sin(np.pi * k) ** 1.5
-    voice = _filter(voice, "lowpass", 700.0)
-    out = _reverb(voice, 5.0, 0.75, rng)
-    return _norm(_trim_tail(out), PEAK_SOFT)
+    step = np.minimum((t / glide_seconds).astype(int), steps - 1)
+    k = (t - step * glide_seconds) / glide_seconds
+    ease = 0.5 - 0.5 * np.cos(np.pi * k)
+    a = np.array(pitches[:-1])[step]
+    b = np.array(pitches[1:])[step]
+    freq = a + (b - a) * ease
+    voice = _osc(freq, partials=WHALE_HARMONICS)
+    # Slow swell in and out over the whole call.
+    voice *= np.sin(np.pi * t / seconds) ** 2
+    voice = _filter(voice, "lowpass", WHALE_LOWPASS, 4)
+    out = _reverb(voice, WHALE_REVERB, WHALE_REVERB_MIX, rng)
+    out = _filter(out, "lowpass", WHALE_LOWPASS * 1.3, 2)
+    return _norm(_trim_tail(out, 0.002), WHALE_PEAK)
 
 
 # --- 2. Music layers (all at MUSIC_BPM) ---------------------------------------
@@ -981,15 +1000,82 @@ def _rough(t, rate: float, depth: float):
     return 1.0 - depth * (0.5 + 0.5 * np.sign(np.sin(2 * np.pi * rate * t)))
 
 
-def make_creature_growl(rng, pitch: float):
-    seconds = 0.9
+# "Investigate" sounds (instead of a growl): deep-sea style, no low noise.
+# pitch < 1 = deeper, stretch > 1 = slower (the Sentinel); the boss layers two
+# pitches with a tonal sub rumble under them.
+
+def make_chitter(rng, pitch: float, stretch: float = 1.0):
+    """Wet clicks / chitters in short bursts."""
+    out = np.zeros(int(1.4 * stretch * SAMPLE_RATE))
+    at = 0.0
+    for burst in range(rng.integers(2, 4)):
+        for i in range(rng.integers(5, 11)):
+            seconds = 0.018
+            t = _t(seconds)
+            freq = 1700.0 * pitch * rng.uniform(0.85, 1.15)
+            # A resonant tick that drops in pitch a little: the "wet" part.
+            tick = np.sin(2 * np.pi * np.cumsum(freq * (1.0 - 0.25 * t / seconds)) / SAMPLE_RATE) * np.exp(-t / 0.0035)
+            _place(out, tick, at, rng.uniform(0.45, 1.0))
+            at += rng.uniform(0.016, 0.03) * stretch
+        at += rng.uniform(0.12, 0.25) * stretch
+    out = _filter(out, "bandpass", [500.0 * pitch, 5000.0 * min(pitch, 1.0) + 200.0])
+    return _norm(_trim_tail(_reverb(out, 1.0, 0.3, rng)), PEAK_SFX * 0.8)
+
+
+def make_creak(rng, pitch: float, stretch: float = 1.0):
+    """A resonant metallic creak: irregular stick-slip pulses ringing a few
+    inharmonic modes (like an old hull bending)."""
+    seconds = 1.1 * stretch
+    n = int(seconds * SAMPLE_RATE)
+    pulses = np.zeros(n)
+    at = 0.0
+    while at < seconds * 0.85:
+        k = at / seconds
+        rate = (70.0 + 50.0 * np.sin(np.pi * k)) * pitch * rng.uniform(0.85, 1.15)
+        pulses[int(at * SAMPLE_RATE)] = rng.uniform(0.5, 1.0)
+        at += 1.0 / rate
+    out = np.zeros(n)
+    for mode, gain, ring in ((410.0, 1.0, 0.05), (1130.0, 0.6, 0.03), (2210.0, 0.35, 0.02), (3370.0, 0.2, 0.015)):
+        freq = mode * pitch
+        r = np.exp(-1.0 / (ring * SAMPLE_RATE))
+        b = [1.0 - r]
+        a = [1.0, -2.0 * r * np.cos(2 * np.pi * freq / SAMPLE_RATE), r * r]
+        out += signal.lfilter(b, a, pulses) * gain
+    out *= np.sin(np.pi * _t(seconds) / seconds) ** 0.5
+    return _norm(_trim_tail(_reverb(out, 1.6, 0.35, rng)), PEAK_SFX * 0.8)
+
+
+def make_call(rng, pitch: float, stretch: float = 1.0):
+    """An eerie tonal call: inharmonic partials, a slow glide, a vowel-like
+    formant that opens and closes."""
+    seconds = 1.6 * stretch
     t = _t(seconds)
-    f = 85.0 * pitch * (1.0 + 0.08 * np.sin(2 * np.pi * 1.3 * t))
-    voice = _osc(f, partials=tuple((k, 1.0 / k) for k in range(1, 16))) * _rough(t, 30.0 * pitch, 0.5)
-    voice = _filter(voice, "bandpass", [220.0 * pitch, 800.0 * pitch])
-    breath = _filter(_noise(seconds, rng), "bandpass", [300.0 * pitch, 1500.0 * pitch]) * 0.3
-    out = (voice + breath) * np.sin(np.pi * t / seconds) ** 0.7
-    return _norm(_trim_tail(_reverb(out, 1.2, 0.25, rng)), PEAK_SFX)
+    k = t / seconds
+    base = 230.0 * pitch * (1.0 + 0.18 * np.sin(np.pi * k) - 0.12 * k)
+    voice = _osc(base, partials=((1.0, 1.0), (2.32, 0.6), (3.87, 0.4), (5.1, 0.25), (6.7, 0.12)))
+    out = np.zeros_like(voice)
+    steps = 16
+    for i in range(steps):
+        a, b = int(i * len(t) / steps), int((i + 1) * len(t) / steps)
+        center = (500.0 + 700.0 * np.sin(np.pi * (i + 0.5) / steps)) * pitch
+        out[a:b] = _filter(voice, "bandpass", [center * 0.6, center * 1.5])[a:b]
+    out *= np.sin(np.pi * k) ** 1.2
+    return _norm(_trim_tail(_reverb(out, 2.5, 0.45, rng)), PEAK_SFX * 0.75)
+
+
+def make_boss_layered(rng, maker, sub_hz: float = 34.0):
+    """The boss: the same sound at two depths, with a tonal sub rumble under it."""
+    deep = maker(rng, 0.5, 1.3)
+    mid = maker(rng, 0.75, 1.3)
+    seconds = max(len(deep), len(mid)) / SAMPLE_RATE
+    t = _t(seconds)
+    sub = _osc(sub_hz, seconds, ((1.0, 1.0), (2.0, 0.3))) * (0.6 + 0.4 * np.sin(2 * np.pi * 3.0 * t)) \
+        * np.sin(np.pi * t / seconds) ** 1.5
+    out = np.zeros(len(t))
+    _place(out, deep, 0.0, 1.0)
+    _place(out, mid, 0.05, 0.6)
+    out += sub * 0.5
+    return _norm(_fade(out, 0.005, 0.2), PEAK_SFX * 0.85)
 
 
 def make_creature_screech(rng, pitch: float):
@@ -1166,74 +1252,91 @@ def make_rock_fall(rng):
 
 # --- The preview list ---------------------------------------------------------
 
-def write_preview() -> None:
+def _preview_list():
+    """(file name, maker(rng), loop) for every preview sound."""
+    sounds = [
+        ("amb_ocean_bed", make_ocean_bed, True),
+    ]
+    for i in range(4):
+        sounds.append((f"amb_bubbles_{i + 1}", lambda rng, c=i + 1: make_bubbles(rng, c), False))
+    sounds += [
+        ("amb_whale_1", lambda rng: make_whale(rng, [32.0, 44.0, 36.0, 28.0], 4.5), False),
+        ("amb_whale_2", lambda rng: make_whale(rng, [24.0, 30.0, 22.0], 6.0), False),
+        ("amb_whale_3", lambda rng: make_whale(rng, [46.0, 58.0, 50.0, 40.0], 3.5), False),
+        ("music_tension", make_tension, True),
+        ("music_chase", make_chase, True),
+        ("music_intense", make_intense, True),
+        ("music_boss", make_boss, True),
+        ("sting_spotted", make_sting_spotted, False),
+        ("sting_shard", make_sting_shard, False),
+        ("sting_lockdown", make_sting_lockdown, False),
+        ("sting_doors_open", make_sting_doors_open, False),
+        ("sting_level_complete", make_sting_level_complete, False),
+        ("sting_downed", make_sting_downed, False),
+        ("sword_whoosh_1", lambda rng: make_whoosh(rng, 0.2, 700.0, 2600.0, 0.15), False),
+        ("sword_whoosh_2", lambda rng: make_whoosh(rng, 0.22, 600.0, 2300.0, 0.2), False),
+        ("sword_whoosh_3", lambda rng: make_whoosh(rng, 0.32, 400.0, 1800.0, 0.45), False),
+        ("sword_impact", lambda rng: make_impact(rng, 110.0, 0.08, 0.35, 0.4), False),
+        ("sword_impact_heavy", lambda rng: make_impact(rng, 70.0, 0.18, 0.6, 0.8), False),
+        ("sword_finisher", make_finisher, False),
+        ("pulse_ping", lambda rng: make_sonar(rng, 420.0, [(0.32, 0.5), (0.64, 0.3), (0.96, 0.18), (1.28, 0.1)], 4000.0, 0.0, PEAK_SFX), False),
+        ("pulse_distress", lambda rng: make_sonar(rng, 330.0, [(0.3, 0.35), (0.6, 0.15)], 900.0, 0.015, PEAK_SFX * 0.55), False),
+    ]
+    # Creatures: normal, Sentinel (deeper and slower), boss (layered + sub).
+    for prefix, pitch, stretch in (("creature", 1.0, 1.0), ("sentinel", 0.72, 1.5), ("boss", 0.5, 1.3)):
+        for i in range(3 if prefix == "creature" else 1):
+            sounds.append((f"{prefix}_click_{i + 1}", lambda rng, p=pitch: make_creature_clicks(rng, p), False))
+        for kind, maker in (("chitter", make_chitter), ("creak", make_creak), ("call", make_call)):
+            if prefix == "boss":
+                sounds.append((f"boss_investigate_{kind}", lambda rng, m=maker: make_boss_layered(rng, m), False))
+            else:
+                sounds.append((f"{prefix}_investigate_{kind}", lambda rng, m=maker, p=pitch, st=stretch: m(rng, p, st), False))
+        sounds += [
+            (f"{prefix}_screech", lambda rng, p=pitch: make_creature_screech(rng, p), False),
+            (f"{prefix}_hiss", lambda rng, p=pitch: make_creature_hiss(rng, p), False),
+            (f"{prefix}_death", lambda rng, p=pitch: make_creature_death(rng, p), False),
+        ]
+    for i in range(3):
+        sounds.append((f"player_move_{i + 1}", make_swish, False))
+    sounds += [
+        ("player_hurt", make_player_hurt, False),
+        ("player_downed", make_player_downed, False),
+        ("player_revive", make_player_revive, False),
+        ("player_mending_hum", make_mending_hum, True),
+        ("player_low_oxygen", make_low_oxygen, False),
+        ("player_low_health", make_low_health, False),
+        ("world_shard_hum", make_shard_hum, True),
+        ("world_shard_pickup", make_shard_pickup, False),
+        ("world_barrier_close", make_barrier_close, False),
+        ("world_barrier_open", make_barrier_open, False),
+        ("world_collapse_rumble", make_collapse_rumble, True),
+    ]
+    for i in range(3):
+        sounds.append((f"world_rock_fall_{i + 1}", make_rock_fall, False))
+    return sounds
+
+
+def write_preview(filters=()) -> None:
+    """Writes every preview sound, or only those whose name contains one of
+    the filters (e.g. "amb_whale" "investigate"). Each sound has its own seed
+    (from its name), so regenerating some never changes the others."""
     if np is None:
         raise SystemExit("The preview pass needs numpy and scipy: pip install numpy scipy")
-    rng = np.random.default_rng(PREVIEW_SEED)
-    out = PREVIEW_DIR
-
-    def w(name, sound, loop=False):
-        write_wav_np(out / f"{name}.wav", sound, loop)
-
-    # 1. Ambience
-    w("amb_ocean_bed", make_ocean_bed(rng), loop=True)
-    for i in range(4):
-        w(f"amb_bubbles_{i + 1}", make_bubbles(rng, i + 1))
-    w("amb_whale_1", make_whale(rng, 90.0, 150.0, 70.0, 4.0))
-    w("amb_whale_2", make_whale(rng, 70.0, 110.0, 55.0, 5.0))
-    w("amb_whale_3", make_whale(rng, 120.0, 190.0, 100.0, 3.2))
-    # 2. Music layers + stingers
-    w("music_tension", make_tension(rng), loop=True)
-    w("music_chase", make_chase(rng), loop=True)
-    w("music_intense", make_intense(rng), loop=True)
-    w("music_boss", make_boss(rng), loop=True)
-    w("sting_spotted", make_sting_spotted(rng))
-    w("sting_shard", make_sting_shard(rng))
-    w("sting_lockdown", make_sting_lockdown(rng))
-    w("sting_doors_open", make_sting_doors_open(rng))
-    w("sting_level_complete", make_sting_level_complete(rng))
-    w("sting_downed", make_sting_downed(rng))
-    # 3. SFX: sword
-    w("sword_whoosh_1", make_whoosh(rng, 0.2, 700.0, 2600.0, 0.15))
-    w("sword_whoosh_2", make_whoosh(rng, 0.22, 600.0, 2300.0, 0.2))
-    w("sword_whoosh_3", make_whoosh(rng, 0.32, 400.0, 1800.0, 0.45))
-    w("sword_impact", make_impact(rng, 110.0, 0.08, 0.35, 0.4))
-    w("sword_impact_heavy", make_impact(rng, 70.0, 0.18, 0.6, 0.8))
-    w("sword_finisher", make_finisher(rng))
-    # Pulse
-    w("pulse_ping", make_sonar(rng, 420.0, [(0.32, 0.5), (0.64, 0.3), (0.96, 0.18), (1.28, 0.1)], 4000.0, 0.0, PEAK_SFX))
-    w("pulse_distress", make_sonar(rng, 330.0, [(0.3, 0.35), (0.6, 0.15)], 900.0, 0.015, PEAK_SFX * 0.55))
-    # Creatures: normal, Sentinel (deeper), boss (deepest)
-    for prefix, pitch in (("creature", 1.0), ("sentinel", 0.72), ("boss", 0.5)):
-        for i in range(3 if prefix == "creature" else 1):
-            w(f"{prefix}_click_{i + 1}", make_creature_clicks(rng, pitch))
-        w(f"{prefix}_growl", make_creature_growl(rng, pitch))
-        w(f"{prefix}_screech", make_creature_screech(rng, pitch))
-        w(f"{prefix}_hiss", make_creature_hiss(rng, pitch))
-        w(f"{prefix}_death", make_creature_death(rng, pitch))
-    # Players
-    for i in range(3):
-        w(f"player_move_{i + 1}", make_swish(rng))
-    w("player_hurt", make_player_hurt(rng))
-    w("player_downed", make_player_downed(rng))
-    w("player_revive", make_player_revive(rng))
-    w("player_mending_hum", make_mending_hum(rng), loop=True)
-    w("player_low_oxygen", make_low_oxygen(rng))
-    w("player_low_health", make_low_health(rng))
-    # World
-    w("world_shard_hum", make_shard_hum(rng), loop=True)
-    w("world_shard_pickup", make_shard_pickup(rng))
-    w("world_barrier_close", make_barrier_close(rng))
-    w("world_barrier_open", make_barrier_open(rng))
-    w("world_collapse_rumble", make_collapse_rumble(rng), loop=True)
-    for i in range(3):
-        w(f"world_rock_fall_{i + 1}", make_rock_fall(rng))
-
+    import zlib
+    written = 0
+    for name, maker, loop in _preview_list():
+        if filters and not any(f in name for f in filters):
+            continue
+        rng = np.random.default_rng([PREVIEW_SEED, zlib.crc32(name.encode())])
+        write_wav_np(PREVIEW_DIR / f"{name}.wav", maker(rng), loop)
+        written += 1
+    print(f"{written} preview sound(s) written")
 
 if __name__ == "__main__":
     import sys
     if "preview" in sys.argv[1:]:
-        write_preview()
+        # Anything after "preview" filters by name, e.g.: preview amb_whale investigate
+        write_preview(sys.argv[sys.argv.index("preview") + 1:])
         raise SystemExit(0)
     write_wav(OUTPUT_DIR / "sonar_ping.wav", make_ping())
     write_wav(OUTPUT_DIR / "sonar_tick.wav", make_tick())
