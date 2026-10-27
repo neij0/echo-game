@@ -228,35 +228,6 @@ def normalize(samples: list[float], peak: float) -> list[float]:
     return [s / loudest * peak for s in samples]
 
 
-def make_ping() -> list[float]:
-    count = int(PING_LENGTH * SAMPLE_RATE)
-    # Direct ping with a slight downward pitch glide.
-    dry = []
-    phase = 0.0
-    for n in range(count):
-        t = n / SAMPLE_RATE
-        freq = PING_FREQ * (1.0 - PING_GLIDE * min(t / 0.5, 1.0))
-        phase += 2.0 * math.pi * freq / SAMPLE_RATE
-        tone = sum(gain * math.sin(phase * ratio) for ratio, gain in PING_PARTIALS)
-        dry.append(tone * envelope(t, PING_ATTACK, PING_DECAY))
-
-    # Long echo tail: repeating, darkening echoes.
-    echoes = comb(dry, ECHO_DELAY, ECHO_FEEDBACK, ECHO_DAMPING)
-
-    # Diffuse reverb (small Schroeder reverb) so the tail feels like open water.
-    reverb_in = [d + e for d, e in zip(dry, echoes)]
-    combs = [comb(reverb_in, d, 0.78, 0.4) for d in (0.0297, 0.0371, 0.0411, 0.0437)]
-    reverb = [sum(values) * 0.25 for values in zip(*combs)]
-    reverb = allpass(allpass(reverb, 0.005, 0.7), 0.0017, 0.7)
-
-    mixed = [d + e * 0.8 + r * REVERB_MIX for d, e, r in zip(dry, echoes, reverb)]
-
-    fade_count = int(PING_FADE_OUT * SAMPLE_RATE)
-    for k in range(fade_count):
-        mixed[count - fade_count + k] *= 1.0 - k / fade_count
-    return normalize(mixed, PING_PEAK)
-
-
 def make_tick() -> list[float]:
     rng = random.Random(RANDOM_SEED)
     count = int(TICK_LENGTH * SAMPLE_RATE)
@@ -306,22 +277,6 @@ def make_heartbeat() -> list[float]:
     return normalize(samples, HEART_PEAK)
 
 
-def make_alarm() -> list[float]:
-    samples = []
-    for index, freq in enumerate(ALARM_FREQS):
-        count = int(ALARM_BEEP * SAMPLE_RATE)
-        for n in range(count):
-            t = n / SAMPLE_RATE
-            # Short fades at both ends of each beep so it does not click.
-            edge = min(t / 0.008, (ALARM_BEEP - t) / 0.008, 1.0)
-            tone = math.sin(2.0 * math.pi * freq * t) + 0.3 * math.sin(2.0 * math.pi * freq * 2.0 * t)
-            samples.append(tone * edge)
-        if index < len(ALARM_FREQS) - 1:
-            samples.extend([0.0] * int(ALARM_GAP * SAMPLE_RATE))
-    samples = one_pole_lowpass(samples, ALARM_SOFTNESS)
-    return normalize(samples, ALARM_PEAK)
-
-
 def make_refill() -> list[float]:
     rng = random.Random(RANDOM_SEED + 2)
     count = int(REFILL_LENGTH * SAMPLE_RATE)
@@ -362,113 +317,6 @@ def make_ancient() -> list[float]:
     return normalize(samples, ANCIENT_PEAK)
 
 
-def make_alert() -> list[float]:
-    rng = random.Random(RANDOM_SEED + 3)
-    count = int(ALERT_LENGTH * SAMPLE_RATE)
-    samples = []
-    phase = 0.0
-    for n in range(count):
-        t = n / SAMPLE_RATE
-        if t < ALERT_PEAK_TIME:
-            freq = ALERT_FREQ_START + (ALERT_FREQ_PEAK - ALERT_FREQ_START) * (t / ALERT_PEAK_TIME)
-        else:
-            k = min((t - ALERT_PEAK_TIME) / (ALERT_LENGTH - ALERT_PEAK_TIME), 1.0)
-            freq = ALERT_FREQ_PEAK + (ALERT_FREQ_END - ALERT_FREQ_PEAK) * k
-        phase += 2.0 * math.pi * freq / SAMPLE_RATE
-        tone = sum(gain * math.sin(phase * ratio) for ratio, gain in ALERT_HARMONICS)
-        rough = 1.0 - ALERT_ROUGHNESS * (0.5 + 0.5 * math.sin(2.0 * math.pi * ALERT_ROUGH_RATE * t))
-        noise = rng.uniform(-1.0, 1.0) * ALERT_NOISE
-        samples.append((tone * rough + noise) * envelope(t, ALERT_ATTACK, ALERT_DECAY))
-    fade_count = int(0.03 * SAMPLE_RATE)
-    for k in range(fade_count):
-        samples[count - fade_count + k] *= 1.0 - k / fade_count
-    return normalize(samples, ALERT_PEAK)
-
-
-def make_swing() -> list[float]:
-    rng = random.Random(RANDOM_SEED + 4)
-    count = int(SWING_LENGTH * SAMPLE_RATE)
-    samples = []
-    filtered = 0.0
-    for n in range(count):
-        t = n / SAMPLE_RATE
-        # The filter opens towards the peak and closes again: a "whoosh".
-        closeness = max(0.0, 1.0 - abs(t - SWING_PEAK_TIME) / SWING_PEAK_TIME)
-        amount = SWING_SMOOTH_START + (SWING_SMOOTH_PEAK - SWING_SMOOTH_START) * closeness
-        filtered = filtered + (1.0 - amount) * (rng.uniform(-1.0, 1.0) - filtered)
-        if t < SWING_PEAK_TIME:
-            env = t / SWING_PEAK_TIME
-        else:
-            env = max(0.0, 1.0 - (t - SWING_PEAK_TIME) / (SWING_LENGTH - SWING_PEAK_TIME)) ** 2
-        samples.append(filtered * env)
-    return normalize(samples, SWING_PEAK)
-
-
-def make_hit() -> list[float]:
-    rng = random.Random(RANDOM_SEED + 5)
-    count = int(HIT_LENGTH * SAMPLE_RATE)
-    samples = []
-    for n in range(count):
-        t = n / SAMPLE_RATE
-        thud = math.sin(2.0 * math.pi * HIT_FREQ * t * (1.0 - 0.4 * min(t / HIT_LENGTH, 1.0))) * envelope(t, 0.002, HIT_DECAY)
-        click = rng.uniform(-1.0, 1.0) * HIT_CLICK * math.exp(-t / HIT_CLICK_DECAY)
-        samples.append(thud + click)
-    return normalize(samples, HIT_PEAK)
-
-
-def make_exposed_kill() -> list[float]:
-    rng = random.Random(RANDOM_SEED + 6)
-    count = int(KILL_LENGTH * SAMPLE_RATE)
-    samples = []
-    for n in range(count):
-        t = n / SAMPLE_RATE
-        boom = math.sin(2.0 * math.pi * KILL_BOOM_FREQ * t * (1.0 - 0.3 * min(t / 0.3, 1.0))) * envelope(t, 0.003, KILL_BOOM_DECAY)
-        crack = rng.uniform(-1.0, 1.0) * KILL_CRACK * math.exp(-t / KILL_CRACK_DECAY)
-        ring = sum(gain * math.sin(2.0 * math.pi * KILL_RING_ROOT * ratio * t) * math.exp(-t * ratio / (KILL_RING_DECAY * 2.0))
-                   for ratio, gain in KILL_RING_PARTIALS)
-        samples.append(boom + crack + ring * KILL_RING_GAIN * envelope(t, 0.002, KILL_RING_DECAY * 3.0))
-    fade_count = int(0.1 * SAMPLE_RATE)
-    for k in range(fade_count):
-        samples[count - fade_count + k] *= 1.0 - k / fade_count
-    return normalize(samples, KILL_PEAK)
-
-
-def make_lunge() -> list[float]:
-    rng = random.Random(RANDOM_SEED + 7)
-    count = int(LUNGE_LENGTH * SAMPLE_RATE)
-    samples = []
-    phase = 0.0
-    hiss = 0.0
-    for n in range(count):
-        t = n / SAMPLE_RATE
-        k = min(t / LUNGE_SWELL, 1.0)
-        freq = LUNGE_FREQ_START + (LUNGE_FREQ_END - LUNGE_FREQ_START) * k * k
-        phase += 2.0 * math.pi * freq / SAMPLE_RATE
-        tone = sum(gain * math.sin(phase * ratio) for ratio, gain in LUNGE_HARMONICS)
-        hiss = hiss + (1.0 - LUNGE_HISS_SMOOTH) * (rng.uniform(-1.0, 1.0) - hiss)
-        # Swells while coiling, then cuts off fast (the burst itself is silent).
-        env = k * k if t < LUNGE_SWELL else max(0.0, 1.0 - (t - LUNGE_SWELL) / (LUNGE_LENGTH - LUNGE_SWELL))
-        samples.append((tone + hiss * LUNGE_HISS * 3.0 * k) * env)
-    return normalize(samples, LUNGE_PEAK)
-
-
-def make_shard() -> list[float]:
-    count = int(SHARD_LENGTH * SAMPLE_RATE)
-    samples = []
-    for n in range(count):
-        t = n / SAMPLE_RATE
-        value = 0.0
-        for i, (ratio, gain) in enumerate(SHARD_PARTIALS):
-            start = i * SHARD_ARPEGGIO
-            if t >= start:
-                value += gain * math.sin(2.0 * math.pi * SHARD_ROOT * ratio * (t - start)) * envelope(t - start, 0.003, SHARD_DECAY)
-        samples.append(value)
-    fade_count = int(0.1 * SAMPLE_RATE)
-    for k in range(fade_count):
-        samples[count - fade_count + k] *= 1.0 - k / fade_count
-    return normalize(samples, SHARD_PEAK)
-
-
 def make_rumble() -> list[float]:
     rng = random.Random(RANDOM_SEED + 11)
     count = int(RUMBLE_LENGTH * SAMPLE_RATE)
@@ -485,39 +333,6 @@ def make_rumble() -> list[float]:
         env = min(t / RUMBLE_SWELL, 1.0) * min((RUMBLE_LENGTH - t) / RUMBLE_FADE_OUT, 1.0)
         samples.append((lower * 40.0 + tone) * wobble * env)
     return normalize(samples, RUMBLE_PEAK)
-
-
-def make_slam() -> list[float]:
-    rng = random.Random(RANDOM_SEED + 12)
-    count = int(SLAM_LENGTH * SAMPLE_RATE)
-    samples = []
-    grit = 0.0
-    for n in range(count):
-        t = n / SAMPLE_RATE
-        thud = math.sin(2.0 * math.pi * SLAM_FREQ * t * (1.0 - 0.3 * min(t / 0.2, 1.0))) * envelope(t, 0.003, SLAM_DECAY)
-        crack = rng.uniform(-1.0, 1.0) * SLAM_CRACK * math.exp(-t / SLAM_CRACK_DECAY)
-        grit = grit + 0.4 * (rng.uniform(-1.0, 1.0) - grit)
-        samples.append(thud + crack + grit * SLAM_GRIT * math.exp(-t / SLAM_GRIT_DECAY))
-    return normalize(one_pole_lowpass(samples, 0.3), SLAM_PEAK)
-
-
-def make_clear() -> list[float]:
-    count = int(CLEAR_LENGTH * SAMPLE_RATE)
-    samples = []
-    for n in range(count):
-        t = n / SAMPLE_RATE
-        value = 0.0
-        for i, (ratio, gain) in enumerate(CLEAR_NOTES):
-            start = i * CLEAR_ARPEGGIO
-            if t >= start:
-                local = t - start
-                note = math.sin(2.0 * math.pi * CLEAR_ROOT * ratio * local) + 0.3 * math.sin(4.0 * math.pi * CLEAR_ROOT * ratio * local)
-                value += gain * note * envelope(local, 0.02, CLEAR_DECAY)
-        samples.append(value)
-    fade_count = int(0.2 * SAMPLE_RATE)
-    for k in range(fade_count):
-        samples[count - fade_count + k] *= 1.0 - k / fade_count
-    return normalize(samples, CLEAR_PEAK)
 
 
 def write_wav(path: Path, samples: list[float]) -> None:
@@ -1338,18 +1153,8 @@ if __name__ == "__main__":
         # Anything after "preview" filters by name, e.g.: preview amb_whale investigate
         write_preview(sys.argv[sys.argv.index("preview") + 1:])
         raise SystemExit(0)
-    write_wav(OUTPUT_DIR / "sonar_ping.wav", make_ping())
     write_wav(OUTPUT_DIR / "sonar_tick.wav", make_tick())
     write_wav(OUTPUT_DIR / "creature_heartbeat.wav", make_heartbeat())
-    write_wav(OUTPUT_DIR / "oxygen_alarm.wav", make_alarm())
     write_wav(OUTPUT_DIR / "station_refill.wav", make_refill())
     write_wav(OUTPUT_DIR / "ancient_light.wav", make_ancient())
-    write_wav(OUTPUT_DIR / "creature_alert.wav", make_alert())
-    write_wav(OUTPUT_DIR / "sword_swing.wav", make_swing())
-    write_wav(OUTPUT_DIR / "sword_hit.wav", make_hit())
-    write_wav(OUTPUT_DIR / "exposed_kill.wav", make_exposed_kill())
-    write_wav(OUTPUT_DIR / "creature_lunge.wav", make_lunge())
-    write_wav(OUTPUT_DIR / "shard_collect.wav", make_shard())
     write_wav(OUTPUT_DIR / "rumble.wav", make_rumble())
-    write_wav(OUTPUT_DIR / "rock_slam.wav", make_slam())
-    write_wav(OUTPUT_DIR / "lockdown_clear.wav", make_clear())
