@@ -36,6 +36,9 @@ signal level_built(level_index: int)
 ## so outside the playable area looks like rock fading into darkness instead
 ## of a hard black edge. Not a wall: no collision, no shadow, no sonar edge.
 @export var outer_rock_margin: float = 3000.0
+## Draw order of the floors and the outer rock: under everything (flat rocks
+## are at RockWall.flat_z_index, players, creatures and rock faces at 0, y-sorted).
+@export var floor_z_index: int = -4
 
 @export_group("Navigation")
 ## Creature clearance used when baking the navigation mesh (about the radius
@@ -76,6 +79,8 @@ class Layout:
 	var links: Dictionary = {}
 	## Rock polygons that close unused openings (this node's space).
 	var seals: Array[PackedVector2Array] = []
+	## The cell of each seal (same order as seals).
+	var seal_cells: Array[Vector2i] = []
 	var player_spawns: Array[Vector2] = []
 	## The ancient light (normal level) or the boss (boss level).
 	var goal: Vector2
@@ -243,6 +248,7 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 				neighbours.append(cell + RoomGrid.direction(side))
 			else:
 				layout.seals.append(seal_polygon(cell, side))
+				layout.seal_cells.append(cell)
 		layout.links[cell] = neighbours
 
 	# Start, exit (ancient light or boss) and lockdown room.
@@ -425,6 +431,9 @@ static func _nearest(points: Array[Vector2], to: Vector2) -> Vector2:
 func _instantiate(layout: Layout) -> void:
 	_level = Node2D.new()
 	_level.name = "Level"
+	# Players (siblings of the LevelBuilder), creatures, shards and the faces of
+	# tall rocks are drawn in y order.
+	_level.y_sort_enabled = true
 	add_child(_level)
 	level_height = layout.height
 	var progress: float = (level_index + 0.5) / maxf(level_count, 1.0)
@@ -435,12 +444,14 @@ func _instantiate(layout: Layout) -> void:
 	# Floors first (all chunks), so pocket floors never cover a neighbour's walls.
 	for chunk: LevelChunk in layout.chunks:
 		_level.add_child(chunk)
-	for polygon: PackedVector2Array in layout.seals:
+	for i: int in layout.seals.size():
 		var seal := RockWall.new()
 		seal.name = "Seal"
-		seal.polygon = polygon
+		seal.polygon = layout.seals[i]
 		seal.color = floor_color.lightened(world.rock_fill_lift)
+		seal.height = (layout.rooms[layout.seal_cells[i]] as LevelChunk).rock_height
 		_level.add_child(seal)
+	_build_rock_faces(layout)
 	_player_spawns = layout.player_spawns
 	shard_spots = layout.shards
 
@@ -492,6 +503,7 @@ func _add_outer_rock(layout: Layout, rock_color: Color) -> void:
 	rock.name = "OuterRock"
 	rock.color = rock_color
 	rock.polygon = PackedVector2Array([bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end, Vector2(bounds.position.x, bounds.end.y)])
+	rock.z_index = floor_z_index
 	# First child = drawn under every chunk.
 	_level.add_child(rock)
 
@@ -509,6 +521,8 @@ func _add_lockdown(layout: Layout, rock_color: Color) -> void:
 	_lockdown.wave_calm = _definition.lockdown_wave_calm if _definition else 0
 	_lockdown.wave_challenge = _definition.lockdown_wave_challenge if _definition else 0
 	_lockdown.navigation_changed.connect(_rebake_navigation_soon)
+	# Its wave creatures join the level's y-sort.
+	_lockdown.y_sort_enabled = true
 	_level.add_child(_lockdown)
 
 
@@ -629,12 +643,40 @@ func _spawn(scene: PackedScene, at: Vector2) -> Node2D:
 	return node
 
 
+## Colours, rock height and draw order of a chunk (before it enters the tree).
 func _apply_palette(chunk: LevelChunk, floor_color: Color) -> void:
+	# Its tall rocks' faces join the level's y-sort through the chunk.
+	chunk.y_sort_enabled = true
 	for node: Node in chunk.find_children("*", "", true, false):
 		if node is RockWall:
-			(node as RockWall).color = floor_color.lightened(world.rock_fill_lift)
+			var wall := node as RockWall
+			wall.color = floor_color.lightened(world.rock_fill_lift)
+			wall.height = chunk.rock_height
 		elif node is Polygon2D:
-			(node as Polygon2D).color = floor_color
+			var floor_shape := node as Polygon2D
+			floor_shape.color = floor_color
+			floor_shape.z_index = floor_z_index
+
+
+## Front faces of the tall rocks (rooms with a rock_height), cut where other
+## rock of the level covers them.
+func _build_rock_faces(layout: Layout) -> void:
+	var walls: Array[RockWall] = []
+	for node: Node in _level.find_children("*", "", true, false):
+		var wall := node as RockWall
+		if wall and wall.height > 0.0:
+			walls.append(wall)
+	if walls.is_empty():
+		return
+	# Every footprint of the level, in global coordinates.
+	var clippers: Array[PackedVector2Array] = []
+	for chunk: LevelChunk in layout.chunks:
+		for polygon: PackedVector2Array in chunk.get_wall_polygons():
+			clippers.append(global_transform * polygon)
+	for polygon: PackedVector2Array in layout.seals:
+		clippers.append(global_transform * polygon)
+	for wall: RockWall in walls:
+		wall.build_faces(clippers)
 
 
 func _marker_positions(chunk: LevelChunk, prefix: String) -> Array[Vector2]:

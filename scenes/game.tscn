@@ -32,6 +32,7 @@
 [ext_resource type="AudioStream" path="res://assets/audio/music/music_boss.wav" id="31_boss"]
 
 [node name="Game" type="Node2D"]
+y_sort_enabled = true
 
 [node name="Darkness" type="CanvasModulate" parent="." node_paths=PackedStringArray("level_builder")]
 color = Color(0.06, 0.08, 0.14, 1)
@@ -39,6 +40,7 @@ script = ExtResource("13_darkness")
 level_builder = NodePath("../LevelBuilder")
 
 [node name="LevelBuilder" type="Node2D" parent="."]
+y_sort_enabled = true
 script = ExtResource("1_level")
 world = ExtResource("2_world")
 

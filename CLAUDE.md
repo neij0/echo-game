@@ -204,6 +204,25 @@ Note: 2D renders in HDR (linear). Screenshots taken with `get_viewport().get_tex
 linear float data and look much darker than the screen; convert each pixel with
 `Color.linear_to_srgb()` before saving (8-bit linear PNGs lose the dark detail).
 
+## 3/4 view (prototype: only `room_cavern`, the start room of level 1-1)
+The world is tilted to match the characters, still 2D:
+- **Rock height**: `LevelChunk.rock_height` > 0 gives its rocks (and the seals in its cell) a
+  `RockWall.height`. The polygon stays the footprint (collision, occluders, navigation, sonar);
+  `build_faces` (called by the `LevelBuilder`) adds a darker `RockFace` under every
+  south-facing edge (cut into pieces, clipped where other rock covers it) with a rim light on
+  the top edge. The sonar also lights each face's sides and bottom (`get_face_lines`).
+- **Draw order**: `Game`, `LevelBuilder`, `Level` and the chunks are y-sorted. z: floors /
+  outer rock -4, `RoomDepthLayers` background -3, `DropShadow` -2, flat rocks / rock tops -1,
+  players, creatures, shards, corals and rock faces 0 (y-sorted). A `RockFace` sits at its
+  bottom line: a character inside the face band is behind the rock. Glow layers are drawn
+  above the world, so the Echo's / Guardian's glow and creature eyes fade there
+  (`RockFace.is_covered`, `behind_rock_hide`; the lunge flare always shows).
+- **Depth layers** (`RoomDepthLayers` in the room): dim parallax ridges on the floor (lit like
+  the floor, `background_drift`) and dark swaying kelp / coral tips at its `Kelp*` / `Coral*`
+  markers on an unlit CanvasLayer, bigger and faster than the world (`foreground_scale`).
+- **Drop shadows** (`DropShadow` on every player and creature, all rooms): a soft ellipse a
+  little below the body; a creature's follows `get_body_visibility()`.
+
 ## Rules
 - **Godot 4 + GDScript only.** No C#, no GDExtension, no third-party addons unless agreed first.
 - **Typed GDScript everywhere**: typed variables, parameters and return types

@@ -197,17 +197,10 @@ func _build_samples() -> void:
 		var wall := node as RockWall
 		if wall == null:
 			continue
-		var outline: PackedVector2Array = wall.get_global_outline()
-		var first: int = _points.size()
-		for e: int in outline.size():
-			var a: Vector2 = outline[e]
-			var b: Vector2 = outline[(e + 1) % outline.size()]
-			var steps: int = maxi(1, ceili(a.distance_to(b) / sample_spacing))
-			for k: int in steps:
-				_points.append(a.lerp(b, float(k) / steps))
-		var count: int = _points.size() - first
-		for k: int in count:
-			_next.append(first + (k + 1) % count)
+		_add_samples(wall.get_global_outline(), true)
+		# Tall rocks (3/4 view): the sides and bottom edges of the front faces.
+		for line: PackedVector2Array in wall.get_face_lines():
+			_add_samples(line, false)
 
 	var total: int = _points.size()
 	_lit_at.resize(total)
@@ -224,6 +217,24 @@ func _build_samples() -> void:
 	_pending_dir.fill(Vector2.ZERO)
 	_is_active.resize(total)
 	_is_active.fill(0)
+
+
+## Sample points along an outline (closed = a loop, else an open line whose
+## last point links to itself, so no segment joins its two ends).
+func _add_samples(outline: PackedVector2Array, closed: bool) -> void:
+	var first: int = _points.size()
+	var edge_count: int = outline.size() if closed else outline.size() - 1
+	for e: int in edge_count:
+		var a: Vector2 = outline[e]
+		var b: Vector2 = outline[(e + 1) % outline.size()]
+		var steps: int = maxi(1, ceili(a.distance_to(b) / sample_spacing))
+		for k: int in steps:
+			_points.append(a.lerp(b, float(k) / steps))
+	if not closed:
+		_points.append(outline[outline.size() - 1])
+	var count: int = _points.size() - first
+	for k: int in count:
+		_next.append(first + (k + 1) % count if closed or k < count - 1 else first + k)
 
 
 func _scan_wave(space: PhysicsDirectSpaceState2D, wave: Wave) -> void:

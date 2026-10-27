@@ -74,12 +74,20 @@ extends Node2D
 ## Share of the eye brightness left while downed.
 @export_range(0.0, 1.0) var downed_eye_share: float = 0.2
 
+@export_group("Behind Rocks")
+## Share of the glow hidden while he is behind a tall rock's front face (the
+## glow is drawn above the world, so the rock cannot cover it by itself).
+@export_range(0.0, 1.0) var behind_rock_hide: float = 0.85
+## How fast the glow fades out / back in there (per second).
+@export var behind_rock_fade_speed: float = 6.0
+
 var _player: Player
 var _time: float = 0.0
 var _down_amount: float = 0.0
 var _transform: Transform2D = Transform2D.IDENTITY
 var _hem: Array[SpringPoint] = []
 var _glow: Node2D
+var _behind_rock: float = 0.0
 
 
 func _ready() -> void:
@@ -112,6 +120,8 @@ func _process(delta: float) -> void:
 		var weight: float = 0.5 + 0.5 * sin(PI * float(i) / maxf(hem_points - 1, 1))
 		_hem[i].step(_hem_rest(i) + trail * weight + sway, cloak_stiffness, cloak_damping, delta)
 	_glow.global_position = global_position
+	_behind_rock = move_toward(_behind_rock, 1.0 if RockFace.is_covered(get_tree(), global_position) else 0.0, behind_rock_fade_speed * delta)
+	_glow.modulate.a = 1.0 - _behind_rock * behind_rock_hide
 	queue_redraw()
 	_glow.queue_redraw()
 

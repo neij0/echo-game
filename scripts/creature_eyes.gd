@@ -45,6 +45,9 @@ extends Node2D
 @export var flare_energy: float = 3.0
 @export var flare_size: float = 1.6
 @export var flare_color: Color = Color(1.0, 0.45, 0.25)
+## Share of the eyes hidden while the creature is behind a tall rock's front
+## face (3/4 view). The lunge flare always shows.
+@export_range(0.0, 1.0) var behind_rock_hide: float = 0.85
 
 var _alpha: float = 0.0
 var _visible_target: float = 0.0
@@ -68,6 +71,8 @@ func _physics_process(_delta: float) -> void:
 			_visible_target = 0.0
 	_visible_target = maxf(_visible_target, creature.silhouette_ratio * silhouette_eye_share)
 	_visible_target = maxf(_visible_target, creature.sense_ratio * sensed_eye_share)
+	if _visible_target > 0.0 and RockFace.is_covered(get_tree(), creature.global_position):
+		_visible_target *= 1.0 - behind_rock_hide
 
 
 func _process(delta: float) -> void:

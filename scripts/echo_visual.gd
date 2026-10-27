@@ -104,6 +104,13 @@ extends Node2D
 ## How far the antennae droop while downed (pixels).
 @export var downed_droop: float = 10.0
 
+@export_group("Behind Rocks")
+## Share of the glow hidden while she is behind a tall rock's front face (the
+## glow is drawn above the world, so the rock cannot cover it by itself).
+@export_range(0.0, 1.0) var behind_rock_hide: float = 0.85
+## How fast the glow fades out / back in there (per second).
+@export var behind_rock_fade_speed: float = 6.0
+
 var squash: Vector2 = Vector2.ONE
 var _player: Player
 var _time: float = 0.0
@@ -117,6 +124,7 @@ var _tail_line: Line2D
 var _glow: Node2D
 var _trail: CPUParticles2D
 var _transform: Transform2D = Transform2D.IDENTITY
+var _behind_rock: float = 0.0
 
 
 func _ready() -> void:
@@ -158,6 +166,9 @@ func _process(delta: float) -> void:
 	var body_scale: Vector2 = squash * Vector2.ONE.lerp(downed_scale, _down_amount)
 	_transform = Transform2D(lean * (1.0 - _down_amount), body_scale, 0.0, Vector2(0.0, bob + downed_sink * _down_amount))
 
+	# The lines are children of the body (not top_level), so they are y-sorted
+	# with it (behind tall rocks); their points are worked out globally.
+	var to_body: Transform2D = global_transform.affine_inverse()
 	for i: int in _tips.size():
 		var side: float = -1.0 if i == 0 else 1.0
 		var base: Vector2 = global_position + _transform * Vector2(antenna_base.x * side, antenna_base.y)
@@ -168,15 +179,17 @@ func _process(delta: float) -> void:
 		var tip: Vector2 = global_position + _tips[i].position
 		# The lower half stays stiff (rest direction); only the tip sways.
 		var mid: Vector2 = base + Vector2.UP.rotated(deg_to_rad(antenna_angle_degrees) * side) * antenna_length * 0.5
-		_antennae[i].points = PackedVector2Array([base, mid.lerp(tip, 0.25), tip])
+		_antennae[i].points = to_body * PackedVector2Array([base, mid.lerp(tip, 0.25), tip])
 
 	var sway := Vector2(sin(_time * TAU * tail_sway_speed) * tail_sway_force, tail_rest_force)
 	_tail.step(global_position + _transform * tail_anchor, sway, delta)
-	_tail_line.points = _tail.points
+	_tail_line.points = to_body * _tail.points
 
 	_trail.global_position = _tail.points[_tail.points.size() - 1]
 	_trail.emitting = velocity.length() > trail_min_speed and not downed
 	_glow.global_position = global_position
+	_behind_rock = move_toward(_behind_rock, 1.0 if RockFace.is_covered(get_tree(), global_position) else 0.0, behind_rock_fade_speed * delta)
+	_glow.modulate.a = 1.0 - _behind_rock * behind_rock_hide
 	queue_redraw()
 	_glow.queue_redraw()
 
@@ -257,7 +270,6 @@ func _draw_glow() -> void:
 
 func _make_line(width: float, color: Color) -> Line2D:
 	var line := Line2D.new()
-	line.top_level = true
 	line.width = width
 	line.default_color = color
 	line.joint_mode = Line2D.LINE_JOINT_ROUND

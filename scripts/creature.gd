@@ -341,6 +341,14 @@ func is_revealed() -> bool:
 	return _revealed_left > 0.0 or is_in_echo_light() or sense_ratio >= 1.0
 
 
+## How much of the body is drawn (1 = full, the silhouette share outside the
+## Echo's light, 0 = hidden). Used by its DropShadow.
+func get_body_visibility() -> float:
+	if not hidden_until_pinged or _was_in_light:
+		return 1.0
+	return silhouette_ratio * silhouette_max_alpha
+
+
 func is_in_echo_light() -> bool:
 	for player: Player in Players.all(get_tree()):
 		if player.light_reveal_radius <= 0.0 or player.health.is_downed:
