@@ -105,7 +105,7 @@ extends Node2D
 @export var downed_droop: float = 10.0
 
 @export_group("Behind Rocks")
-## Share of the glow hidden while she is behind a tall rock's front face (the
+## Share of the glow hidden while she stands behind (north of) a tall rock (the
 ## glow is drawn above the world, so the rock cannot cover it by itself).
 @export_range(0.0, 1.0) var behind_rock_hide: float = 0.85
 ## How fast the glow fades out / back in there (per second).
@@ -188,7 +188,7 @@ func _process(delta: float) -> void:
 	_trail.global_position = _tail.points[_tail.points.size() - 1]
 	_trail.emitting = velocity.length() > trail_min_speed and not downed
 	_glow.global_position = global_position
-	_behind_rock = move_toward(_behind_rock, 1.0 if RockFace.is_covered(get_tree(), global_position) else 0.0, behind_rock_fade_speed * delta)
+	_behind_rock = move_toward(_behind_rock, 1.0 if RockFace.is_covered(get_tree(), global_position, global_position.y) else 0.0, behind_rock_fade_speed * delta)
 	_glow.modulate.a = 1.0 - _behind_rock * behind_rock_hide
 	queue_redraw()
 	_glow.queue_redraw()
@@ -214,15 +214,51 @@ func _on_pulse_emitted(_origin: Vector2) -> void:
 # --- Dark silhouette (world, lit by lights) ----------------------------------
 
 func _draw() -> void:
+	for shape: PackedVector2Array in _body_shapes():
+		draw_colored_polygon(shape, body_color)
+
+
+## Ears, torso and head, in drawing order (this node's space).
+func _body_shapes() -> Array[PackedVector2Array]:
+	var shapes: Array[PackedVector2Array] = []
 	var velocity_x: float = _player.velocity.x if _player else 0.0
 	var ear_extra: float = deg_to_rad(ear_sway_degrees) * velocity_x / 100.0
 	for side: float in [-1.0, 1.0]:
 		# Negative angle = outward on that side (Vector2.DOWN rotated).
 		var angle: float = -deg_to_rad(ear_angle_degrees) * side - ear_extra
 		var attach := Vector2(head_radius * 0.75 * side, head_offset.y + 1.0)
-		draw_colored_polygon(_xf(_leaf(attach, Vector2.DOWN.rotated(angle), ear_length, ear_width)), body_color)
-	draw_colored_polygon(_xf(_ellipse(torso_offset, torso_radii, 20)), body_color)
-	draw_colored_polygon(_xf(_ellipse(head_offset, Vector2(head_radius, head_radius * 0.95), 20)), body_color)
+		shapes.append(_xf(_leaf(attach, Vector2.DOWN.rotated(angle), ear_length, ear_width)))
+	shapes.append(_xf(_ellipse(torso_offset, torso_radii, 20)))
+	shapes.append(_xf(_ellipse(head_offset, Vector2(head_radius, head_radius * 0.95), 20)))
+	return shapes
+
+
+## Her silhouette as polylines in this node's space (OccludedOutline): the
+## merged body outline, the antennae and the tail.
+func get_outline_lines() -> Array[PackedVector2Array]:
+	var shapes: Array[PackedVector2Array] = _body_shapes()
+	var merged: Array[PackedVector2Array] = [shapes[0]]
+	for i: int in range(1, shapes.size()):
+		var next: Array[PackedVector2Array] = []
+		var joined: PackedVector2Array = shapes[i]
+		for shape: PackedVector2Array in merged:
+			var union: Array[PackedVector2Array] = Geometry2D.merge_polygons(joined, shape)
+			# Separate shapes stay separate; touching ones become one outline.
+			if union.size() == 1:
+				joined = union[0]
+			else:
+				next.append(shape)
+		next.append(joined)
+		merged = next
+	var lines: Array[PackedVector2Array] = []
+	for shape: PackedVector2Array in merged:
+		var closed: PackedVector2Array = shape.duplicate()
+		closed.append(shape[0])
+		lines.append(closed)
+	for antenna: Line2D in _antennae:
+		lines.append(antenna.points)
+	lines.append(_tail_line.points)
+	return lines
 
 
 func _xf(points: PackedVector2Array) -> PackedVector2Array:

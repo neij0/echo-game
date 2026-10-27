@@ -75,7 +75,7 @@ extends Node2D
 @export_range(0.0, 1.0) var downed_eye_share: float = 0.2
 
 @export_group("Behind Rocks")
-## Share of the glow hidden while he is behind a tall rock's front face (the
+## Share of the glow hidden while he stands behind (north of) a tall rock (the
 ## glow is drawn above the world, so the rock cannot cover it by itself).
 @export_range(0.0, 1.0) var behind_rock_hide: float = 0.85
 ## How fast the glow fades out / back in there (per second).
@@ -120,7 +120,7 @@ func _process(delta: float) -> void:
 		var weight: float = 0.5 + 0.5 * sin(PI * float(i) / maxf(hem_points - 1, 1))
 		_hem[i].step(_hem_rest(i) + trail * weight + sway, cloak_stiffness, cloak_damping, delta)
 	_glow.global_position = global_position
-	_behind_rock = move_toward(_behind_rock, 1.0 if RockFace.is_covered(get_tree(), global_position) else 0.0, behind_rock_fade_speed * delta)
+	_behind_rock = move_toward(_behind_rock, 1.0 if RockFace.is_covered(get_tree(), global_position, global_position.y) else 0.0, behind_rock_fade_speed * delta)
 	_glow.modulate.a = 1.0 - _behind_rock * behind_rock_hide
 	queue_redraw()
 	_glow.queue_redraw()
@@ -172,6 +172,24 @@ func _draw() -> void:
 	for side: float in [-1.0, 1.0]:
 		for line: PackedVector2Array in _antler_lines(side):
 			draw_polyline(line, body_color, antler_width, true)
+
+
+## His silhouette as polylines in this node's space (OccludedOutline): the
+## cloak, the hood and the antlers.
+func get_outline_lines() -> Array[PackedVector2Array]:
+	var lines: Array[PackedVector2Array] = []
+	var cloak: PackedVector2Array = _cloak_points()
+	cloak.append(cloak[0])
+	lines.append(cloak)
+	var hood := PackedVector2Array()
+	var center: Vector2 = _transform * hood_offset
+	var radius: float = hood_radius * _transform.get_scale().x
+	for i: int in 17:
+		hood.append(center + Vector2.from_angle(TAU * i / 16.0) * radius)
+	lines.append(hood)
+	for side: float in [-1.0, 1.0]:
+		lines.append_array(_antler_lines(side))
+	return lines
 
 
 # --- Rim and eyes (unlit layer) ----------------------------------------------

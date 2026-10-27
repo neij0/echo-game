@@ -658,8 +658,10 @@ func _apply_palette(chunk: LevelChunk, floor_color: Color) -> void:
 			floor_shape.z_index = floor_z_index
 
 
-## Front faces of the tall rocks (rooms with a rock_height), cut where other
-## rock of the level covers them.
+## Top surfaces and front faces of the tall rocks (rooms with a rock_height).
+## Overlapping rocks need no cutting: every piece sorts by its own base, so
+## the rock in front covers the one behind. Every base of the level is passed
+## on, so touching rocks cast no shadow on each other.
 func _build_rock_faces(layout: Layout) -> void:
 	var walls: Array[RockWall] = []
 	for node: Node in _level.find_children("*", "", true, false):
@@ -668,15 +670,14 @@ func _build_rock_faces(layout: Layout) -> void:
 			walls.append(wall)
 	if walls.is_empty():
 		return
-	# Every footprint of the level, in global coordinates.
-	var clippers: Array[PackedVector2Array] = []
+	var bases: Array[PackedVector2Array] = []
 	for chunk: LevelChunk in layout.chunks:
 		for polygon: PackedVector2Array in chunk.get_wall_polygons():
-			clippers.append(global_transform * polygon)
+			bases.append(global_transform * polygon)
 	for polygon: PackedVector2Array in layout.seals:
-		clippers.append(global_transform * polygon)
+		bases.append(global_transform * polygon)
 	for wall: RockWall in walls:
-		wall.build_faces(clippers)
+		wall.build_faces(bases)
 
 
 func _marker_positions(chunk: LevelChunk, prefix: String) -> Array[Vector2]:

@@ -206,17 +206,31 @@ linear float data and look much darker than the screen; convert each pixel with
 
 ## 3/4 view (prototype: only `room_cavern`, the start room of level 1-1)
 The world is tilted to match the characters, still 2D:
-- **Rock height**: `LevelChunk.rock_height` > 0 gives its rocks (and the seals in its cell) a
-  `RockWall.height`. The polygon stays the footprint (collision, occluders, navigation, sonar);
-  `build_faces` (called by the `LevelBuilder`) adds a darker `RockFace` under every
-  south-facing edge (cut into pieces, clipped where other rock covers it) with a rim light on
-  the top edge. The sonar also lights each face's sides and bottom (`get_face_lines`).
+- **Rock height** (classic 3/4): `LevelChunk.rock_height` > 0 gives its rocks (and the seals
+  in its cell) a `RockWall.height`. The polygon is the rock's **base**: collision, navigation,
+  sonar and the occluder stay there, so players stop at the foot of the rock like at a wall.
+  `build_faces` (called by the `LevelBuilder`, in global space so turned rooms stand upright)
+  draws the rock standing on it as `RockFace` pieces: the top (the base shifted up by
+  `height`, lighter: `top_lift`, cut into vertical strips) and a front face over every
+  south-facing base edge (darker towards the base, colour patches, broken strata, a few
+  cracks, an irregular bottom edge, a rim light on top and a contact shadow on the floor).
+  The base polygon itself is not drawn.
+- **Occluder of a tall rock**: culled (`tall_occluder_culled`) so only the far edges cast a
+  shadow and a light in front of the rock lights its top and face; open lines that skip base
+  edges touching another rock (`occluder_join_margin`), so a seal and a wall light as one.
+- **Sonar**: the base outline plus each face's sides and top edge (`get_face_lines`); a face
+  sample is visible when the base right below it is.
 - **Draw order**: `Game`, `LevelBuilder`, `Level` and the chunks are y-sorted. z: floors /
-  outer rock -4, `RoomDepthLayers` background -3, `DropShadow` -2, flat rocks / rock tops -1,
-  players, creatures, shards, corals and rock faces 0 (y-sorted). A `RockFace` sits at its
-  bottom line: a character inside the face band is behind the rock. Glow layers are drawn
+  outer rock -4, `RoomDepthLayers` background -3, `DropShadow` -2, flat rocks -1, players,
+  creatures, shards, corals and the `RockFace` pieces 0 (y-sorted). Each piece sits on the base
+  under it, so whatever stands north of (behind) the rock is covered. Glow layers are drawn
   above the world, so the Echo's / Guardian's glow and creature eyes fade there
-  (`RockFace.is_covered`, `behind_rock_hide`; the lunge flare always shows).
+  (`RockFace.is_covered(point, sort_y)`, `behind_rock_hide`; the lunge flare always shows).
+- **Occluded players** (`OccludedOutline` under each player's visual, players only): the
+  parts of the outline a rock covers are drawn through it, soft and semi-transparent (Echo
+  cyan, Guardian gold), from the visual's `get_outline_lines()`.
+- **Rock outlines**: rounded boulders and smooth walls (few points, no spikes); room-edge and
+  doorway points stay where they are.
 - **Depth layers** (`RoomDepthLayers` in the room): dim parallax ridges on the floor (lit like
   the floor, `background_drift`) and dark swaying kelp / coral tips at its `Kelp*` / `Coral*`
   markers on an unlit CanvasLayer, bigger and faster than the world (`foreground_scale`).

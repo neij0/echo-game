@@ -38,6 +38,9 @@ signal edge_hit(point: Vector2, distance_ratio: float)
 ## Brightness multiplier of the band. Kept at 1.0 (no bloom) so it stays soft;
 ## in HDR even low alpha with a high energy looks very bright.
 @export var trail_energy: float = 1.0
+## Pieces of the band narrower than this (pixels) are skipped: right after a
+## pulse they are too thin to triangulate.
+@export var min_trail_span: float = 0.5
 
 @export_group("Edges")
 ## Distance between outline sample points in pixels. Lower = smoother reveal, more raycasts.
@@ -105,6 +108,8 @@ var _sparks: Array[Spark] = []
 
 # One entry per outline sample point (all rocks flattened into one list).
 var _points: PackedVector2Array = PackedVector2Array()
+## Where the line of sight to each point is checked (the base under a face).
+var _sight_points: PackedVector2Array = PackedVector2Array()
 ## Index of the next point on the same rock outline (closes the loop).
 var _next: PackedInt32Array = PackedInt32Array()
 var _lit_at: PackedFloat32Array = PackedFloat32Array()
@@ -134,6 +139,7 @@ func apply_world(world: WorldConfig) -> void:
 ## the old rock outlines and sample the new ones.
 func rebuild_samples() -> void:
 	_points.clear()
+	_sight_points.clear()
 	_next.clear()
 	_active.clear()
 	_waves.clear()
@@ -198,9 +204,11 @@ func _build_samples() -> void:
 		if wall == null:
 			continue
 		_add_samples(wall.get_global_outline(), true)
-		# Tall rocks (3/4 view): the sides and bottom edges of the front faces.
+		# Tall rocks (3/4 view): the sides and top edges of the front faces.
+		# They stand above the base, inside the rock's collision: a face is
+		# visible when its base (straight below) is.
 		for line: PackedVector2Array in wall.get_face_lines():
-			_add_samples(line, false)
+			_add_samples(line, false, Vector2(0.0, wall.height))
 
 	var total: int = _points.size()
 	_lit_at.resize(total)
@@ -221,7 +229,8 @@ func _build_samples() -> void:
 
 ## Sample points along an outline (closed = a loop, else an open line whose
 ## last point links to itself, so no segment joins its two ends).
-func _add_samples(outline: PackedVector2Array, closed: bool) -> void:
+## sight_offset: the line of sight is checked to the point moved by this.
+func _add_samples(outline: PackedVector2Array, closed: bool, sight_offset: Vector2 = Vector2.ZERO) -> void:
 	var first: int = _points.size()
 	var edge_count: int = outline.size() if closed else outline.size() - 1
 	for e: int in edge_count:
@@ -230,8 +239,10 @@ func _add_samples(outline: PackedVector2Array, closed: bool) -> void:
 		var steps: int = maxi(1, ceili(a.distance_to(b) / sample_spacing))
 		for k: int in steps:
 			_points.append(a.lerp(b, float(k) / steps))
+			_sight_points.append(a.lerp(b, float(k) / steps) + sight_offset)
 	if not closed:
 		_points.append(outline[outline.size() - 1])
+		_sight_points.append(outline[outline.size() - 1] + sight_offset)
 	var count: int = _points.size() - first
 	for k: int in count:
 		_next.append(first + (k + 1) % count if closed or k < count - 1 else first + k)
@@ -248,7 +259,7 @@ func _scan_wave(space: PhysicsDirectSpaceState2D, wave: Wave) -> void:
 	for i: int in _points.size():
 		var point: Vector2 = _points[i]
 		var distance: float = wave.origin.distance_to(point)
-		if distance > wave.max_radius or not _in_line_of_sight(space, wave.origin, point):
+		if distance > wave.max_radius or not _in_line_of_sight(space, wave.origin, _sight_points[i]):
 			continue
 		var ratio: float = distance / wave.max_radius
 		_pending_at[i] = wave.start_time + ratio * wave.expand_time
@@ -367,13 +378,16 @@ func _draw_trail(wave: Wave, radius: float, color: Color) -> void:
 			continue
 		var dir_a: Vector2 = Vector2.from_angle(TAU * i / count)
 		var dir_b: Vector2 = Vector2.from_angle(TAU * j / count)
-		var quad := PackedVector2Array([
-			wave.origin + dir_a * radius,
-			wave.origin + dir_b * radius,
-			wave.origin + dir_b * inner,
-			wave.origin + dir_a * inner,
-		])
-		draw_polygon(quad, colors)
+		var outer_a: Vector2 = wave.origin + dir_a * radius
+		var outer_b: Vector2 = wave.origin + dir_b * radius
+		# Too thin to fill (a degenerate polygon cannot be triangulated).
+		if outer_a.distance_squared_to(outer_b) < min_trail_span * min_trail_span:
+			continue
+		if inner < min_trail_span:
+			# The trail reaches the origin: a triangle, not a quad with two equal points.
+			draw_polygon(PackedVector2Array([outer_a, outer_b, wave.origin]), PackedColorArray([color, color, clear]))
+		else:
+			draw_polygon(PackedVector2Array([outer_a, outer_b, wave.origin + dir_b * inner, wave.origin + dir_a * inner]), colors)
 
 
 func _draw_sparks() -> void:
