@@ -112,7 +112,8 @@ var _points: PackedVector2Array = PackedVector2Array()
 var _sight_points: PackedVector2Array = PackedVector2Array()
 ## A rock the line of sight may pass through, per point (the top of a tall
 ## rock is seen from above); an empty RID for none.
-var _sight_exclude: Array[RID] = []
+## Per sample: the rocks its line of sight may pass through (shared arrays).
+var _sight_exclude: Array[Array] = []
 ## Index of the next point on the same rock outline (closes the loop).
 var _next: PackedInt32Array = PackedInt32Array()
 var _lit_at: PackedFloat32Array = PackedFloat32Array()
@@ -217,7 +218,14 @@ func _build_samples() -> void:
 		var sights: Array[PackedVector2Array] = wall.get_sonar_sights()
 		var through_self: Array[bool] = wall.get_sonar_through_self()
 		for i: int in lines.size():
-			_add_samples(lines[i], false, sights[i], wall.get_rid() if through_self[i] else RID())
+			_add_samples(lines[i], false, sights[i], [wall.get_rid()] if through_self[i] else [])
+	# Landmarks: their parts beyond the solid footprints (ribs, masts, an
+	# arch...), each with the floor point its line of sight is checked to.
+	for node: Node in get_tree().get_nodes_in_group("sonar_shapes"):
+		var shape_lines: Array[PackedVector2Array] = node.call("get_sonar_shape_lines")
+		var shape_sights: Array[PackedVector2Array] = node.call("get_sonar_shape_sights")
+		for i: int in shape_lines.size():
+			_add_samples(shape_lines[i], false, shape_sights[i], node.call("get_sonar_exclude"))
 
 	var total: int = _points.size()
 	_lit_at.resize(total)
@@ -239,8 +247,8 @@ func _build_samples() -> void:
 ## Sample points along an outline (closed = a loop, else an open line whose
 ## last point links to itself, so no segment joins its two ends).
 ## sights: per outline point, where the line of sight is checked (empty =
-## the point itself); sight_exclude: a rock that check may pass through.
-func _add_samples(outline: PackedVector2Array, closed: bool, sights: PackedVector2Array = PackedVector2Array(), sight_exclude: RID = RID()) -> void:
+## the point itself); sight_exclude: the rocks that check may pass through.
+func _add_samples(outline: PackedVector2Array, closed: bool, sights: PackedVector2Array = PackedVector2Array(), sight_exclude: Array = []) -> void:
 	if sights.is_empty():
 		sights = outline
 	var first: int = _points.size()
@@ -308,11 +316,11 @@ func _ray_distance(space: PhysicsDirectSpaceState2D, from: Vector2, to: Vector2)
 	return from.distance_to(hit["position"])
 
 
-func _in_line_of_sight(space: PhysicsDirectSpaceState2D, from: Vector2, point: Vector2, exclude: RID = RID()) -> bool:
+func _in_line_of_sight(space: PhysicsDirectSpaceState2D, from: Vector2, point: Vector2, exclude: Array = []) -> bool:
 	var target: Vector2 = point - from.direction_to(point) * los_tolerance
 	var query := PhysicsRayQueryParameters2D.create(from, target, wall_mask)
-	if exclude.is_valid():
-		query.exclude = [exclude]
+	if not exclude.is_empty():
+		query.exclude = exclude
 	return space.intersect_ray(query).is_empty()
 
 

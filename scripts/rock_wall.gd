@@ -382,6 +382,8 @@ func _add_top(top: PackedVector2Array) -> void:
 			var piece: RockFace = _new_piece(base_y)
 			piece.global_bounds = part_bounds
 			piece.light_mask = 1 | (1 << (top_light_layer - 1))
+			# Lighter than the floor only near a light (TopLightFalloff).
+			piece.material = TopLightFalloff.material()
 			var y: float = floorf(part_bounds.position.y / top_cell_size) * top_cell_size
 			while y < part_bounds.end.y:
 				for cell: PackedVector2Array in Geometry2D.intersect_polygons(part, _rect_polygon(Rect2(x, y, size, top_cell_size))):
@@ -526,8 +528,10 @@ func _add_face(a: Vector2, b: Vector2, at: Vector2, bt: Vector2, facing: float) 
 	var clear := Color(0.0, 0.0, 0.0, 0.0)
 	var lift := Vector2(0.0, -edge_jitter)
 	var drop := Vector2(0.0, contact_shadow_size)
-	piece.shadows.append(_moved(PackedVector2Array([a + lift, b + lift, b + drop, a + drop]), -origin))
-	piece.shadow_colors.append(PackedColorArray([shade, shade, clear, clear]))
+	var contact: PackedVector2Array = _moved(PackedVector2Array([a + lift, b + lift, b + drop, a + drop]), -origin)
+	if _drawable(contact):
+		piece.shadows.append(contact)
+		piece.shadow_colors.append(PackedColorArray([shade, shade, clear, clear]))
 
 	# Horizontal bands: vertical gradient (darker to the base) and colour patches.
 	for row: int in face_rows:
@@ -638,15 +642,16 @@ func _add_ground_shadow(base: PackedVector2Array, touch_cutters: Array[PackedVec
 		for part: PackedVector2Array in _clipped(PackedVector2Array([base[i], base[(i + 1) % count]]), touch_cutters, touch_bounds):
 			var first: Vector2 = part[0]
 			var last: Vector2 = part[part.size() - 1]
-			if first.distance_squared_to(last) < 1.0:
+			var band := PackedVector2Array([first, last, last + out, first + out])
+			if first.distance_squared_to(last) < 1.0 or not _drawable(band):
 				continue
-			piece.shadows.append(PackedVector2Array([first, last, last + out, first + out]))
+			piece.shadows.append(band)
 			piece.shadow_colors.append(PackedColorArray([shades[i], shades[i], clear, clear]))
 		# Outer corner: fill the wedge between this edge's band and the previous one's.
 		var previous: int = (i - 1 + count) % count
 		var p: Vector2 = base[i]
 		var fan := PackedVector2Array([p, p + normals[previous] * sizes[previous], p + out])
-		if absf(_doubled_area(fan)) < 1.0 or _inside_any(p, touch_cutters, touch_bounds) or Geometry2D.is_point_in_polygon((fan[1] + fan[2]) * 0.5, base):
+		if not _drawable(fan) or _inside_any(p, touch_cutters, touch_bounds) or Geometry2D.is_point_in_polygon((fan[1] + fan[2]) * 0.5, base):
 			continue
 		piece.shadows.append(fan)
 		piece.shadow_colors.append(PackedColorArray([shades[i], clear, clear]))

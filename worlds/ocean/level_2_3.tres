@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelDefinition" load_steps=28 format=3]
+[gd_resource type="Resource" script_class="LevelDefinition" load_steps=33 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_definition.gd" id="1_level"]
 [ext_resource type="Script" path="res://scripts/creature_spawn.gd" id="2_spawn"]
@@ -15,6 +15,9 @@
 [ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_0"]
 [ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_1"]
 [ext_resource type="PackedScene" path="res://scenes/boss_placeholder.tscn" id="boss"]
+[ext_resource type="Script" path="res://scripts/landmark_placement.gd" id="lm_script"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_arch.tscn" id="lm_arch"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_clam.tscn" id="lm_clam"]
 
 [sub_resource type="Resource" id="Spawn_0"]
 script = ExtResource("2_spawn")
@@ -86,12 +89,25 @@ cell = Vector2i(3, 2)
 room = ExtResource("room_boss_arena")
 quarter_turns = 0
 
+[sub_resource type="Resource" id="Landmark_0"]
+script = ExtResource("lm_script")
+cell = Vector2i(1, 2)
+scene = ExtResource("lm_arch")
+offset = Vector2(560, 800)
+
+[sub_resource type="Resource" id="Landmark_1"]
+script = ExtResource("lm_script")
+cell = Vector2i(0, 0)
+scene = ExtResource("lm_clam")
+offset = Vector2(1120, 760)
+
 [resource]
 script = ExtResource("1_level")
 rooms = Array[ExtResource("3_room")]([SubResource("Room_0"), SubResource("Room_1"), SubResource("Room_2"), SubResource("Room_3"), SubResource("Room_4"), SubResource("Room_5"), SubResource("Room_6"), SubResource("Room_7"), SubResource("Room_8"), SubResource("Room_9")])
 start_cell = Vector2i(0, 0)
 exit_cell = Vector2i(3, 2)
 lockdown_cell = Vector2i(3, 1)
+landmarks = Array[ExtResource("lm_script")]([SubResource("Landmark_0"), SubResource("Landmark_1")])
 lockdown_wave_calm = 2
 lockdown_wave_challenge = 4
 shard_count = 2

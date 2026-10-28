@@ -25,6 +25,10 @@ extends Resource
 @export var lockdown_wave_calm: int = 2
 @export var lockdown_wave_challenge: int = 3
 
+## Hand-placed set-pieces (Landmark), 1-3 per level, each level its own mix,
+## so every level has an identity and the players can find their way.
+@export var landmarks: Array[LandmarkPlacement] = []
+
 @export_group("Shards")
 ## Echo Shards to collect before the exit opens, each in a different room
 ## (never the start or exit room), spread over the branches.

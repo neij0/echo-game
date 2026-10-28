@@ -72,6 +72,7 @@ func _ready() -> void:
 	add_to_group("echo_shards")
 	add_to_group("sonar_targets")
 	_light = PointLight2D.new()
+	_light.add_to_group("falloff_lights")
 	_light.texture = LightTextures.radial(128, 0.0)
 	_light.texture_scale = LightTextures.scale_for_radius(_light.texture, light_radius)
 	_light.color = color

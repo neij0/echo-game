@@ -9,8 +9,11 @@ extends Node2D
 ## rooms, spread as far apart as possible. Every planned level is checked with
 ## the LayoutValidator (BFS) before it is built; if the spawns fail the check,
 ## the next spawn seed is tried.
-## Built levels get: the Echo Shards on the planned spots, Sentinels next to
-## some of them, the LockdownRoom in the lockdown cell, a ShardDoor on the boss
+## Built levels get: the level's landmarks (LevelDefinition.landmarks, always
+## on the same spot; their footprints are rock for the validation and the
+## navigation), harmless life on open floor (WorldConfig.ambient_life, with
+## the seed), a muted colour accent per room (AreaAccent), the Echo Shards on
+## the planned spots, Sentinels next to some of them, the LockdownRoom in the lockdown cell, a ShardDoor on the boss
 ## arena's doorway (boss levels), and a navigation mesh baked from every rock,
 ## so creatures can path through doorways and around corners. When a door or a
 ## lockdown barrier changes, the mesh is rebaked one frame later, while the
@@ -95,6 +98,14 @@ signal level_built(level_index: int)
 ## Depth of the doorway corridor on each side of the shared room edge.
 @export var doorway_clear_depth: float = 200.0
 
+@export_group("Ambient Life")
+## Random spots tried per creature of ambient life before giving up on it.
+@export var life_spot_tries: int = 24
+## Ambient life of one room keeps at least this far apart (pixels).
+@export var life_spacing: float = 110.0
+## near_rock life: rock must be within this many pixels of the spot.
+@export var life_rock_distance: float = 50.0
+
 @export_group("Validation")
 @export var validator_cell_size: float = 20.0
 ## Free space a player needs (player radius + margin).
@@ -127,6 +138,14 @@ class Layout:
 	## Echo Shard spots (one per room) and the rooms they are in.
 	var shards: Array[Vector2] = []
 	var shard_cells: Array[Vector2i] = []
+	## Landmarks (not in the tree yet), the cell of each, and their solid
+	## footprints (this node's space).
+	var landmarks: Array[Landmark] = []
+	var landmark_cells: Array[Vector2i] = []
+	var landmark_polygons: Array[PackedVector2Array] = []
+	## Harmless life: scene and spot of each.
+	var life_scenes: Array[PackedScene] = []
+	var life_positions: Array[Vector2] = []
 	## Boss levels: the rock that seals the arena's doorway until all shards
 	## are collected (this node's space).
 	var door_polygon: PackedVector2Array = PackedVector2Array()
@@ -150,6 +169,10 @@ class Layout:
 				chunk.free()
 		chunks.clear()
 		rooms.clear()
+		for landmark: Landmark in landmarks:
+			if is_instance_valid(landmark) and not landmark.is_inside_tree():
+				landmark.free()
+		landmarks.clear()
 
 
 ## Level inside the current stage (0-based) and how many the stage has.
@@ -172,6 +195,7 @@ var _creatures: Array[Creature] = []
 ## Where this level's creatures were spawned (global positions).
 var creature_spots: Array[Vector2] = []
 var _shards: Array[EchoShard] = []
+var _landmarks: Array[Landmark] = []
 var _door: ShardDoor
 var _lockdown: LockdownRoom
 var _navigation: NavigationRegion2D
@@ -185,6 +209,9 @@ var _nav_bounds := Rect2()
 
 func _ready() -> void:
 	add_to_group("level")
+	var falloff := TopLightFalloff.new()
+	falloff.name = "TopLightFalloff"
+	add_child(falloff)
 	_large_map = NavigationServer2D.map_create()
 	var default_map: RID = get_world_2d().navigation_map
 	NavigationServer2D.map_set_cell_size(_large_map, NavigationServer2D.map_get_cell_size(default_map))
@@ -286,6 +313,17 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 				layout.seal_cells.append(cell)
 		layout.links[cell] = neighbours
 
+	# Landmarks: the same spot on every attempt.
+	for placement: LandmarkPlacement in definition.landmarks:
+		if placement.scene == null or not layout.rooms.has(placement.cell):
+			layout.problem = "landmark outside the grid at %s" % placement.cell
+			return layout
+		var landmark := placement.scene.instantiate() as Landmark
+		landmark.position = Vector2(placement.cell) * size + placement.offset
+		layout.landmarks.append(landmark)
+		layout.landmark_cells.append(placement.cell)
+		layout.landmark_polygons.append_array(landmark.get_placed_footprints())
+
 	# Start, exit (ancient light or boss) and lockdown room.
 	var start := layout.rooms.get(definition.start_cell) as LevelChunk
 	var exit_room := layout.rooms.get(definition.exit_cell) as LevelChunk
@@ -350,6 +388,8 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 	_pick_sentinels(layout, definition, rng)
 
 	_validate(layout)
+	if layout.valid:
+		_pick_life(layout, rng)
 	return layout
 
 
@@ -453,6 +493,7 @@ func _validate(layout: Layout) -> void:
 	for chunk: LevelChunk in layout.chunks:
 		polygons.append_array(chunk.get_wall_polygons())
 	polygons.append_array(layout.seals)
+	polygons.append_array(layout.landmark_polygons)
 	var validator := LayoutValidator.new()
 	validator.cell_size = validator_cell_size
 	validator.clearance = validator_clearance
@@ -478,6 +519,31 @@ func _validate(layout: Layout) -> void:
 		if not validator.is_reachable(layout.sentinel_posts[i]):
 			layout.sentinel_posts[i] = _nearest(layout.shards, layout.sentinel_posts[i])
 	layout.valid = true
+
+
+## Harmless life on open floor of every room (WorldConfig.ambient_life),
+## from the validator's flood: never inside rock, a landmark or the void.
+func _pick_life(layout: Layout, rng: RandomNumberGenerator) -> void:
+	var size: float = world.room_size
+	for cell: Vector2i in layout.rooms:
+		var room := Rect2(Vector2(cell) * size, Vector2.ONE * size).grow(-world.room_wall_band * 0.5)
+		var taken: Array[Vector2] = []
+		for spawn: AmbientLifeSpawn in world.ambient_life:
+			if spawn.scene == null:
+				continue
+			for i: int in rng.randi_range(spawn.per_room_min, spawn.per_room_max):
+				for attempt: int in life_spot_tries:
+					var spot := Vector2(rng.randf_range(room.position.x, room.end.x), rng.randf_range(room.position.y, room.end.y))
+					if not layout.validator.is_open(spot, spawn.free_radius):
+						continue
+					if spawn.near_rock and not layout.validator.is_near_blocked(spot, life_rock_distance):
+						continue
+					if taken.any(func(other: Vector2) -> bool: return other.distance_to(spot) < life_spacing):
+						continue
+					taken.append(spot)
+					layout.life_scenes.append(spawn.scene)
+					layout.life_positions.append(spot)
+					break
 
 
 static func _nearest(points: Array[Vector2], to: Vector2) -> Vector2:
@@ -515,6 +581,13 @@ func _instantiate(layout: Layout) -> void:
 		seal.height = lerpf(seal_room.rock_height_min, seal_room.rock_height_max, 0.5)
 		seal.height_spread = (seal_room.rock_height_max - seal_room.rock_height_min) * rock_height_spread
 		_level.add_child(seal)
+	_add_glow_layer()
+	_landmarks.clear()
+	for landmark: Landmark in layout.landmarks:
+		landmark.rock_color = floor_color.lightened(world.rock_fill_lift)
+		_level.add_child(landmark)
+		_landmarks.append(landmark)
+	_add_accents(layout)
 	_build_rock_faces(layout)
 	_player_spawns = layout.player_spawns
 	shard_spots = layout.shards
@@ -535,6 +608,8 @@ func _instantiate(layout: Layout) -> void:
 		var creature := _spawn(layout.creature_scenes[i], layout.creature_positions[i]) as Creature
 		if creature:
 			_creatures.append(creature)
+	for i: int in layout.life_scenes.size():
+		_spawn(layout.life_scenes[i], layout.life_positions[i])
 	for post: Vector2 in layout.sentinel_posts:
 		creature_spots.append(to_global(post))
 		var sentinel := _spawn(world.sentinel_scene, post) as Creature
@@ -554,6 +629,39 @@ func _instantiate(layout: Layout) -> void:
 	get_tree().call_group("sonar_overlay", "rebuild_samples")
 
 
+## One shared unlit layer for the small glows of landmarks and harmless life.
+func _add_glow_layer() -> void:
+	var glow := GlowLayer.new()
+	glow.name = "GlowLayer"
+	_level.add_child(glow)
+
+
+## A muted colour accent per room (WorldConfig.area_accents, picked by the
+## cell and the level), or the accent of a landmark standing in the room.
+func _add_accents(layout: Layout) -> void:
+	var size: float = world.room_size
+	for cell: Vector2i in layout.rooms:
+		var accent := AreaAccent.new()
+		accent.name = "AreaAccent"
+		var landmark_index: int = -1
+		for i: int in layout.landmarks.size():
+			if layout.landmark_cells[i] == cell and layout.landmarks[i].accent_color.a > 0.0:
+				landmark_index = i
+		if landmark_index >= 0:
+			var landmark: Landmark = layout.landmarks[landmark_index]
+			accent.accent = landmark.accent_color
+			accent.radius = landmark.accent_radius
+			accent.position = landmark.position
+		elif not world.area_accents.is_empty():
+			var pick: int = absi(hash([cell, global_level_index])) % world.area_accents.size()
+			accent.accent = world.area_accents[pick]
+			accent.radius = world.area_accent_radius
+			accent.position = (Vector2(cell) + Vector2(0.5, 0.5)) * size
+		else:
+			continue
+		_level.add_child(accent)
+
+
 func _add_outer_rock(layout: Layout, rock_color: Color) -> void:
 	var bounds := Rect2()
 	var first: bool = true
@@ -568,6 +676,8 @@ func _add_outer_rock(layout: Layout, rock_color: Color) -> void:
 	rock.color = rock_color
 	rock.polygon = PackedVector2Array([bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end, Vector2(bounds.position.x, bounds.end.y)])
 	rock.z_index = floor_z_index
+	# Lighter than the floor only near a light, like the rock tops.
+	rock.material = TopLightFalloff.material()
 	# First child = drawn under every chunk.
 	_level.add_child(rock)
 
@@ -607,6 +717,7 @@ func _add_navigation(layout: Layout) -> void:
 	for chunk: LevelChunk in layout.chunks:
 		_nav_obstacles.append_array(chunk.get_wall_polygons())
 	_nav_obstacles.append_array(layout.seals)
+	_nav_obstacles.append_array(layout.landmark_polygons)
 	_nav_bounds = Rect2()
 	for chunk: LevelChunk in layout.chunks:
 		var room := Rect2(chunk.position, Vector2.ONE * world.room_size)
@@ -755,6 +866,8 @@ func _build_rock_faces(layout: Layout) -> void:
 			bases.append(global_transform * polygon)
 	for polygon: PackedVector2Array in layout.seals:
 		bases.append(global_transform * polygon)
+	for polygon: PackedVector2Array in layout.landmark_polygons:
+		bases.append(global_transform * polygon)
 	var rooms: Array[Rect2] = []
 	for chunk: LevelChunk in layout.chunks:
 		rooms.append(global_transform * Rect2(chunk.position, Vector2.ONE * world.room_size))
@@ -883,6 +996,11 @@ func get_exit_door() -> ShardDoor:
 ## The Echo Shards of the current level (collected ones are freed).
 func get_shards() -> Array[EchoShard]:
 	return _shards
+
+
+## The landmarks of the current level.
+func get_landmarks() -> Array[Landmark]:
+	return _landmarks
 
 
 func get_creatures() -> Array[Creature]:

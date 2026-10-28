@@ -47,6 +47,7 @@ func _ready() -> void:
 	area.body_entered.connect(_on_body_entered)
 
 	_beacon = PointLight2D.new()
+	_beacon.add_to_group("falloff_lights")
 	_beacon.texture = LightTextures.radial(128, 0.0)
 	_beacon.texture_scale = LightTextures.scale_for_radius(_beacon.texture, beacon_radius)
 	_beacon.color = beacon_color

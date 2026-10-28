@@ -77,6 +77,31 @@ func is_reachable(point: Vector2) -> bool:
 	return false
 
 
+## True if every cell within radius of point was reached (open floor the
+## players can get to, beyond the clearance). Needs flood() first.
+func is_open(point: Vector2, radius: float) -> bool:
+	var reach: int = ceili(radius / cell_size)
+	var cx: int = int((point.x - _origin.x) / cell_size)
+	var cy: int = int((point.y - _origin.y) / cell_size)
+	for y: int in range(cy - reach, cy + reach + 1):
+		for x: int in range(cx - reach, cx + reach + 1):
+			if x < 0 or y < 0 or x >= _columns or y >= _rows or _reached[y * _columns + x] == 0:
+				return false
+	return true
+
+
+## True if a blocked cell (rock or its clearance) lies within distance of point.
+func is_near_blocked(point: Vector2, distance: float) -> bool:
+	var reach: int = ceili(distance / cell_size)
+	var cx: int = int((point.x - _origin.x) / cell_size)
+	var cy: int = int((point.y - _origin.y) / cell_size)
+	for y: int in range(cy - reach, cy + reach + 1):
+		for x: int in range(cx - reach, cx + reach + 1):
+			if x >= 0 and y >= 0 and x < _columns and y < _rows and _blocked[y * _columns + x] == 1:
+				return true
+	return false
+
+
 func _index_at(point: Vector2) -> int:
 	var x: int = int((point.x - _origin.x) / cell_size)
 	var y: int = int((point.y - _origin.y) / cell_size)

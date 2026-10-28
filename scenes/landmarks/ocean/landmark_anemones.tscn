@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/landmark_anemones.gd" id="1_script"]
+
+[node name="LandmarkAnemones" type="Node2D"]
+script = ExtResource("1_script")
+accent_color = Color(0.26, 0.2, 0.38, 0.35)
+glow_color = Color(0.8, 0.6, 1, 1)
+glow_energy = 1.2

@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelDefinition" load_steps=33 format=3]
+[gd_resource type="Resource" script_class="LevelDefinition" load_steps=38 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_definition.gd" id="1_level"]
 [ext_resource type="Script" path="res://scripts/creature_spawn.gd" id="2_spawn"]
@@ -13,6 +13,9 @@
 [ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_0"]
 [ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_1"]
 [ext_resource type="PackedScene" path="res://scenes/creature_unkillable.tscn" id="creature_2"]
+[ext_resource type="Script" path="res://scripts/landmark_placement.gd" id="lm_script"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_clam.tscn" id="lm_clam"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_statue.tscn" id="lm_statue"]
 
 [sub_resource type="Resource" id="Spawn_0"]
 script = ExtResource("2_spawn")
@@ -125,12 +128,25 @@ cell = Vector2i(3, 3)
 room = ExtResource("room_tunnel_bend")
 quarter_turns = 3
 
+[sub_resource type="Resource" id="Landmark_0"]
+script = ExtResource("lm_script")
+cell = Vector2i(3, 1)
+scene = ExtResource("lm_statue")
+offset = Vector2(480, 840)
+
+[sub_resource type="Resource" id="Landmark_1"]
+script = ExtResource("lm_script")
+cell = Vector2i(2, 2)
+scene = ExtResource("lm_clam")
+offset = Vector2(1000, 840)
+
 [resource]
 script = ExtResource("1_level")
 rooms = Array[ExtResource("3_room")]([SubResource("Room_0"), SubResource("Room_1"), SubResource("Room_2"), SubResource("Room_3"), SubResource("Room_4"), SubResource("Room_5"), SubResource("Room_6"), SubResource("Room_7"), SubResource("Room_8"), SubResource("Room_9"), SubResource("Room_10"), SubResource("Room_11"), SubResource("Room_12"), SubResource("Room_13"), SubResource("Room_14"), SubResource("Room_15")])
 start_cell = Vector2i(1, 1)
 exit_cell = Vector2i(2, 2)
 lockdown_cell = Vector2i(1, 0)
+landmarks = Array[ExtResource("lm_script")]([SubResource("Landmark_0"), SubResource("Landmark_1")])
 lockdown_wave_calm = 3
 lockdown_wave_challenge = 5
 shard_count = 3

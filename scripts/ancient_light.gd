@@ -76,6 +76,7 @@ func _ready() -> void:
 	add_to_group("level_exit")
 	add_to_group("light_sources")
 	_light = PointLight2D.new()
+	_light.add_to_group("falloff_lights")
 	_light.texture = LightTextures.radial(256, 0.0)
 	_light.texture_scale = LightTextures.scale_for_radius(_light.texture, idle_light_radius)
 	_light.color = core_color

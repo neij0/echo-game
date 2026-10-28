@@ -1,0 +1,17 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/sea_plant.gd" id="1_script"]
+
+[node name="AnemoneClump" type="Node2D"]
+script = ExtResource("1_script")
+kind = 1
+stems_min = 2
+stems_max = 4
+height_min = 8.0
+height_max = 18.0
+spread = 12.0
+stem_width = 6.0
+sway_amount = 2.0
+plant_color = Color(0.36, 0.28, 0.42, 1)
+shrunk_share = 0.3
+redraw_rate = 30.0

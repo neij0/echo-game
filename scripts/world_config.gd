@@ -63,6 +63,17 @@ extends Resource
 @export var ring_color: Color = Color(0.4, 0.9, 1.0, 0.9)
 @export var edge_color: Color = Color(0.45, 0.95, 1.0)
 
+## Muted colour accents on the floor, one per room (AreaAccent; picked by the
+## room's cell, alpha = strength), so rooms feel different while the palette
+## stays dark. A landmark's own accent (e.g. amber near a vent) wins.
+@export var area_accents: Array[Color] = []
+@export var area_accent_radius: float = 760.0
+
+@export_group("Ambient Life")
+## Harmless life scattered over every level (fish schools, jellyfish, crabs,
+## sea plants). Never creature-like; creatures and the music ignore it.
+@export var ambient_life: Array[AmbientLifeSpawn] = []
+
 @export_group("Marine Snow")
 ## Tiny glowing particles drifting across the whole level (around the camera).
 @export var snow_count: int = 140

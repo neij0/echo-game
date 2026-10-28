@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelDefinition" load_steps=22 format=3]
+[gd_resource type="Resource" script_class="LevelDefinition" load_steps=27 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_definition.gd" id="1_level"]
 [ext_resource type="Script" path="res://scripts/creature_spawn.gd" id="2_spawn"]
@@ -11,6 +11,9 @@
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_shard_alcove.tscn" id="room_shard_alcove"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_tunnel_bend.tscn" id="room_tunnel_bend"]
 [ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_0"]
+[ext_resource type="Script" path="res://scripts/landmark_placement.gd" id="lm_script"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_anemones.tscn" id="lm_anemones"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_wreck.tscn" id="lm_wreck"]
 
 [sub_resource type="Resource" id="Spawn_0"]
 script = ExtResource("2_spawn")
@@ -71,12 +74,25 @@ cell = Vector2i(2, 2)
 room = ExtResource("room_tunnel_bend")
 quarter_turns = 3
 
+[sub_resource type="Resource" id="Landmark_0"]
+script = ExtResource("lm_script")
+cell = Vector2i(2, 0)
+scene = ExtResource("lm_wreck")
+offset = Vector2(720, 1000)
+
+[sub_resource type="Resource" id="Landmark_1"]
+script = ExtResource("lm_script")
+cell = Vector2i(0, 1)
+scene = ExtResource("lm_anemones")
+offset = Vector2(1040, 800)
+
 [resource]
 script = ExtResource("1_level")
 rooms = Array[ExtResource("3_room")]([SubResource("Room_0"), SubResource("Room_1"), SubResource("Room_2"), SubResource("Room_3"), SubResource("Room_4"), SubResource("Room_5"), SubResource("Room_6"), SubResource("Room_7"), SubResource("Room_8")])
 start_cell = Vector2i(0, 0)
 exit_cell = Vector2i(2, 1)
 lockdown_cell = Vector2i(1, 1)
+landmarks = Array[ExtResource("lm_script")]([SubResource("Landmark_0"), SubResource("Landmark_1")])
 lockdown_wave_calm = 2
 lockdown_wave_challenge = 3
 shard_count = 3

@@ -175,12 +175,21 @@ walls and corridors readable. Everything near is seen through **real lights**, n
    "outer rock" (lighter by `outer_rock_lift`, like the tops; no collision/shadow/sonar), so
    the level edge fades into darkness instead of a hard black strip. The glowing sonar
    edges only come with a pulse.
+   **Top falloff** (`TopLightFalloff`, created by the `LevelBuilder`): the rock tops, the
+   outer rock and the landmark parts share one material that keeps their colour within
+   `inner_share` of a light's radius and fades it to `far_brightness` at `outer_share`, so
+   far rock never shows the layout. Lights count when in the `falloff_lights` group (player
+   lights, lit corals, ancient light, stations, shards, landmark glows).
 4. **Environment light**: marine snow (`MarineSnow`) everywhere; very faint light shafts
    (`LightShafts`, one smooth gradient each) where `StageDefinition.light_shaft_strength` > 0
    (first stage only).
-5. **Brightness** (Options, 70-130 %): scales the ambient and the players' lights a little;
+5. **Area accents** (`AreaAccent`, over the floor at z -3, lit like the floor): one muted
+   soft disc per room from `WorldConfig.area_accents` (teal / violet / blue, picked by cell
+   and level), or the accent of a landmark in the room (amber at a vent, violet at the clam
+   and anemones, teal at the coral tree).
+6. **Brightness** (Options, 70-130 %): scales the ambient and the players' lights a little;
    the narrow range keeps far areas unreadable. The pulse and sonar are never affected.
-6. **Creature visibility zones** (all outside them stay invisible, except the close-range
+7. **Creature visibility zones** (all outside them stay invisible, except the close-range
    eyes and pulse reveals):
    - within the Echo's `light_reveal_radius` (115 px): full body, hittable, can be Exposed;
    - from there to the edge of her light (~280 px): only a dark moving silhouette with faint
@@ -210,6 +219,29 @@ walls and corridors readable. Everything near is seen through **real lights**, n
 Note: 2D renders in HDR (linear). Screenshots taken with `get_viewport().get_texture()` are
 linear float data and look much darker than the screen; convert each pixel with
 `Color.linear_to_srgb()` before saving (8-bit linear PNGs lose the dark detail).
+
+## Landmarks and harmless life
+- **Landmarks** (`Landmark` + one script per kind, scenes in `scenes/landmarks/<world>/`,
+  placed by hand in `LevelDefinition.landmarks` as `LandmarkPlacement`s: cell + offset in
+  the room, same spot every attempt, 1-3 per level, each level its own mix). Ocean: wreck,
+  statue (orb = Ancient Light hint), whale skeleton, coral tree, vent, anemone field, broken
+  arch, giant clam. Solid parts are `RockWall` bases (`get_footprints()` works before the
+  tree, so validation, navigation and the ground shadows include them); decor parts
+  (`add_part`) are y-sorted on their own base point; extra sonar lines (`add_sonar_line`,
+  group `sonar_shapes`, the line of sight may pass through the landmark's own walls).
+  Glow stays small and dim (optional weak light, dots on the level's `GlowLayer`).
+  Never rotated. `check_levels` checks count, unique mix, distance to rock / markers /
+  doorways.
+- **Harmless life** (`AmbientLife`: `FishSchool`, `Jellyfish`, `Crab`, `SeaPlant` kelp /
+  anemone, scenes in `scenes/life/<world>/`, `WorldConfig.ambient_life` = `AmbientLifeSpawn`
+  per kind and room, on open floor from the validator flood, with the seed). Fish scatter
+  from players and pulses, crabs scuttle sideways, plants / anemones shrink on a pulse
+  (`sonar_targets`), jellyfish flare. Never creature-like: no eyes, cool soft colours, no
+  sounds, no collision, not in `creatures`; creatures ignore it and the music stays calm.
+- **Cost**: far from the camera they skip updates (`GlowLayer.near_camera`); slow motion
+  redraws at `redraw_rate` (30/s); every moving shape goes through `ShapeBatch` (one
+  `canvas_item_add_triangle_array` per draw, no per-shape triangulation or anti-aliasing:
+  `draw_circle` / AA `draw_polyline` per frame cost far too much).
 
 ## 3/4 view (every Ocean room)
 The world is tilted to match the characters, still 2D:
@@ -294,6 +326,7 @@ The world is tilted to match the characters, still 2D:
 - `scenes/` — `.tscn` scenes (`main_menu`, `game`, `story_screen`, `world_map`, and
   `game_state.tscn` = the `Game` autoload)
 - `scenes/chunks/<world>/` — the hand-made room chunks of each world (`room_*.tscn`)
+- `scenes/landmarks/<world>/` — landmark set-pieces; `scenes/life/<world>/` — harmless life
 - `scripts/` — `.gd` scripts
 - `worlds/` — one `WorldConfig` resource (`.tres`) per world
 - `worlds/<world>/` — the world's `LevelDefinition`s (`level_<stage>_<level>.tres`)
@@ -310,7 +343,8 @@ The world is tilted to match the characters, still 2D:
   - `check_levels.gd`: checks every room alone (markers reachable, doorways open), every
     level's room graph (branches, loop, dead ends, lockdown position), validates every level
     (BFS) with many spawn seeds, reports the walking path start -> all shards -> exit, the
-    balance (Sentinels, lockdown wave per mode, escape timer vs path), and checks the
+    balance (Sentinels, lockdown wave per mode, escape timer vs path), the landmarks and
+    the harmless life, and checks the
     structure, lighting and the generator:
     `godot --headless --path . -s res://tools/check_levels.gd`
   - `test_save.gd`: save/load test (uses its own test files in `user://`):
@@ -318,7 +352,8 @@ The world is tilted to match the characters, still 2D:
   - `test_creatures.tscn`: creature + shard test, run as a scene (needs the `Game` autoload):
     chase speeds per mode/awareness, lunge, alerting, search, downed Echo (ignored, distress
     pulse, close sense, revive decay), Sentinels, lockdown, collapse escape, pathing on every
-    level (with and without navigation), shards, locked exit and arena door:
+    level (with and without navigation), shards, locked exit and arena door, landmarks
+    (solid base, navigation around it) and harmless life (ignored, calm music, reactions):
     `godot --headless --path . --fixed-fps 60 res://tools/test_creatures.tscn`
   - `test_stuck.tscn`: creatures (normal + boss size) chase hopping players through every
     level, plus a normal-AI pass with pulses and lit corals; fails on any stuck >= 1.5 s
@@ -351,14 +386,15 @@ them through the `world_listeners` group (`apply_world(world)`), never hard-code
    lockdown cells, shard count (default 3, boss levels 2), creature types and counts, corals,
    stations, sentinels, the lockdown wave per mode, on each stage's level 2 the collapse escape
    (`escape_event` + timers), and on each stage's last level the boss (exit = a boss arena)
-   and its health. The lockdown room needs Creature markers (the wave wakes there).
+   and its health, and 1-3 landmarks (a mix no other level has). The lockdown room needs
+   Creature markers (the wave wakes there).
    Every level needs branches, at least one loop and dead ends; shards go to different rooms
    (never the start or exit room), spread over the branches.
 3. Duplicate `worlds/ocean.tres` as `worlds/<world>.tres` and set: `world_id` (must match
    `Game.world_ids`), 3 `StageDefinition`s with their 3 levels each and their lighting, the
    room pool and sizes (for the builder and the generator), `sentinel_scene`,
    `lockdown_creature_scene`, `lockdown_room_scene`, the audio (low-pass, reverb, ambience
-   bed and one-shots), the palette, the pressure (name,
+   bed and one-shots), the palette and area accents, the ambient life, the pressure (name,
    drain, low warning, level refill, colour) and the pulse modifiers (radius, speed, cost).
 4. New creature types: a scene inheriting `scenes/creature.tscn` (or a script extending
    `Creature`), then add it to the levels' `creatures` lists.

@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelDefinition" load_steps=34 format=3]
+[gd_resource type="Resource" script_class="LevelDefinition" load_steps=41 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_definition.gd" id="1_level"]
 [ext_resource type="Script" path="res://scripts/creature_spawn.gd" id="2_spawn"]
@@ -15,6 +15,10 @@
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_tunnel_straight.tscn" id="room_tunnel_straight"]
 [ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_0"]
 [ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_1"]
+[ext_resource type="Script" path="res://scripts/landmark_placement.gd" id="lm_script"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_anemones.tscn" id="lm_anemones"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_vent.tscn" id="lm_vent"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_whale.tscn" id="lm_whale"]
 
 [sub_resource type="Resource" id="Spawn_0"]
 script = ExtResource("2_spawn")
@@ -122,12 +126,31 @@ cell = Vector2i(3, 3)
 room = ExtResource("room_pillars")
 quarter_turns = 0
 
+[sub_resource type="Resource" id="Landmark_0"]
+script = ExtResource("lm_script")
+cell = Vector2i(0, 3)
+scene = ExtResource("lm_whale")
+offset = Vector2(840, 400)
+
+[sub_resource type="Resource" id="Landmark_1"]
+script = ExtResource("lm_script")
+cell = Vector2i(1, 0)
+scene = ExtResource("lm_vent")
+offset = Vector2(720, 680)
+
+[sub_resource type="Resource" id="Landmark_2"]
+script = ExtResource("lm_script")
+cell = Vector2i(0, 1)
+scene = ExtResource("lm_anemones")
+offset = Vector2(1040, 800)
+
 [resource]
 script = ExtResource("1_level")
 rooms = Array[ExtResource("3_room")]([SubResource("Room_0"), SubResource("Room_1"), SubResource("Room_2"), SubResource("Room_3"), SubResource("Room_4"), SubResource("Room_5"), SubResource("Room_6"), SubResource("Room_7"), SubResource("Room_8"), SubResource("Room_9"), SubResource("Room_10"), SubResource("Room_11"), SubResource("Room_12"), SubResource("Room_13"), SubResource("Room_14"), SubResource("Room_15")])
 start_cell = Vector2i(0, 3)
 exit_cell = Vector2i(3, 0)
 lockdown_cell = Vector2i(2, 1)
+landmarks = Array[ExtResource("lm_script")]([SubResource("Landmark_0"), SubResource("Landmark_1"), SubResource("Landmark_2")])
 lockdown_wave_calm = 3
 lockdown_wave_challenge = 4
 shard_count = 3

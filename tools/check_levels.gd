@@ -15,6 +15,11 @@ extends SceneTree
 ##   lockdown room has Creature markers for it), and for collapse-escape levels
 ##   the timer per mode against the longest walk from any shard to the exit at
 ##   the slower player's full speed (must be at least ESCAPE_MIN_RATIO times it);
+## - landmarks: 1-3 per level, every level its own mix; each one clear of the
+##   room's rock, its markers and the doorway corridors (the level checks above
+##   already include their footprints as rock);
+## - ambient life: every creature is placed on open floor and none of it is a
+##   creature (a node in the "creatures" group);
 ## - the level generator (tools/propose_level.gd) still proposes valid levels.
 ##
 ## Run from the project folder:
@@ -36,6 +41,13 @@ const ESCAPE_MIN_RATIO: float = 1.6
 const GENERATOR_PROPOSALS: int = 3
 const GENERATOR_TRIES: int = 60
 const MARKER_PREFIXES: Array[String] = ["Player", "Goal", "Boss", "Shard", "Creature", "Coral", "Station"]
+## Landmarks per level, free space from the room's rock (beyond the footprint),
+## from every spawn marker, and from the doorway corridors.
+const LANDMARKS_MIN: int = 1
+const LANDMARKS_MAX: int = 3
+const LANDMARK_ROCK_MARGIN: float = 40.0
+const LANDMARK_MARKER_DISTANCE: float = 60.0
+const LANDMARK_DOORWAY_MARGIN: float = 40.0
 
 
 func _initialize() -> void:
@@ -48,6 +60,8 @@ func _initialize() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var all_ok: bool = true
+	## Landmark mix of every level (each one must differ).
+	var mixes: Dictionary = {}
 
 	print("World %s: %d room types, %d stages, %d spawn seeds per level" % [
 		world.world_name, world.room_chunks.size() + world.boss_arena_rooms.size(), world.get_stage_count(), seeds_per_level])
@@ -75,6 +89,8 @@ func _initialize() -> void:
 			if not _check_graph(definition, label):
 				all_ok = false
 			if not _check_level(builder, definition, label, seeds_per_level, rng):
+				all_ok = false
+			if not _check_landmarks(builder, definition, label, mixes):
 				all_ok = false
 
 	if not _check_lighting(world):
@@ -205,6 +221,77 @@ func _check_level(builder: LevelBuilder, definition: LevelDefinition, label: Str
 	if completable < seeds_per_level:
 		return _fail("%s: %d spawn seeds have no valid layout" % [label, seeds_per_level - completable])
 	return ok
+
+
+## The level's landmarks: how many, a mix no other level has, each one clear
+## of the room's rock, markers and doorway corridors; and the ambient life of
+## one layout on open floor, never a creature.
+func _check_landmarks(builder: LevelBuilder, definition: LevelDefinition, label: String, mixes: Dictionary) -> bool:
+	var ok: bool = true
+	var count: int = definition.landmarks.size()
+	if count < LANDMARKS_MIN or count > LANDMARKS_MAX:
+		ok = _fail("%s: %d landmarks (expected %d-%d)" % [label, count, LANDMARKS_MIN, LANDMARKS_MAX])
+	var names: Array[String] = []
+	for placement: LandmarkPlacement in definition.landmarks:
+		names.append(placement.scene.resource_path.get_file().get_basename().trim_prefix("landmark_") if placement.scene else "?")
+	var sorted_names: Array[String] = names.duplicate()
+	sorted_names.sort()
+	var mix: String = ", ".join(sorted_names)
+	if mixes.has(mix):
+		ok = _fail("%s: same landmarks as %s (%s)" % [label, mixes[mix], mix])
+	mixes[mix] = label
+	var layout: LevelBuilder.Layout = builder.find_valid_layout(definition, 1)
+	if layout == null:
+		return _fail("%s: no valid layout for the landmark check" % label)
+	var rock: Array[PackedVector2Array] = []
+	for chunk: LevelChunk in layout.chunks:
+		rock.append_array(chunk.get_wall_polygons())
+	rock.append_array(layout.seals)
+	var markers: Array[Vector2] = []
+	for chunk: LevelChunk in layout.chunks:
+		for prefix: String in MARKER_PREFIXES:
+			for marker: Marker2D in chunk.get_spawn_markers(prefix):
+				markers.append(chunk.position + marker.position)
+	var doorways: Array[Rect2] = builder.call("_doorway_corridors", layout)
+	var notes: Array[String] = []
+	for i: int in layout.landmarks.size():
+		var landmark: Landmark = layout.landmarks[i]
+		notes.append("%s %s" % [names[i], layout.landmark_cells[i]])
+		for footprint: PackedVector2Array in landmark.get_placed_footprints():
+			for grown: PackedVector2Array in Geometry2D.offset_polygon(footprint, LANDMARK_ROCK_MARGIN):
+				for polygon: PackedVector2Array in rock:
+					if not Geometry2D.intersect_polygons(grown, polygon).is_empty():
+						ok = _fail("%s: landmark %s is closer than %d px to rock" % [label, names[i], LANDMARK_ROCK_MARGIN])
+						break
+			for marker: Vector2 in markers:
+				if Geometry2D.is_point_in_polygon(marker, footprint) or _distance_to_outline(marker, footprint) < LANDMARK_MARKER_DISTANCE:
+					ok = _fail("%s: landmark %s is closer than %d px to a marker at %s" % [label, names[i], LANDMARK_MARKER_DISTANCE, marker])
+			for doorway: Rect2 in doorways:
+				var box := Rect2(footprint[0], Vector2.ZERO)
+				for point: Vector2 in footprint:
+					box = box.expand(point)
+				if box.grow(LANDMARK_DOORWAY_MARGIN).intersects(doorway):
+					ok = _fail("%s: landmark %s blocks a doorway" % [label, names[i]])
+	var life_ok: bool = true
+	for spot: Vector2 in layout.life_positions:
+		if not layout.validator.is_reachable(spot):
+			life_ok = _fail("%s: ambient life outside the open floor at %s" % [label, spot])
+	for scene: PackedScene in layout.life_scenes:
+		var probe: Node = scene.instantiate()
+		if not probe is AmbientLife or probe.is_in_group("creatures") or probe is CollisionObject2D:
+			life_ok = _fail("%s: ambient life %s is not harmless" % [label, scene.resource_path])
+		probe.free()
+	print("  landmarks: %s | ambient life: %d on open floor%s" % [", ".join(notes), layout.life_positions.size(), "" if life_ok else " PROBLEM"])
+	layout.free_chunks()
+	return ok and life_ok
+
+
+static func _distance_to_outline(point: Vector2, outline: PackedVector2Array) -> float:
+	var best: float = INF
+	for k: int in outline.size():
+		var closest: Vector2 = Geometry2D.get_closest_point_to_segment(point, outline[k], outline[(k + 1) % outline.size()])
+		best = minf(best, closest.distance_to(point))
+	return best
 
 
 ## Sentinels, lockdown wave per mode, and the collapse escape timer per mode.

@@ -23,7 +23,11 @@ extends Node
 ##   every creature hunts without losing track, the exit arrow stays on, the
 ##   timer running out downs both players, a new level stops it;
 ## - shards: locked ancient light, collection, unlock, the Echo's arrow, and the
-##   boss arena door blocking (collision + navigation) until all are collected.
+##   boss arena door blocking (collision + navigation) until all are collected;
+## - landmarks: solid base (collision), the navigation goes around it, extra
+##   sonar lines; harmless life: never a creature, no collision, fish scatter,
+##   crabs scuttle, plants and anemones shrink on a pulse, creatures ignore it
+##   and the music stays calm.
 
 const GAME_SCENE: String = "res://scenes/game.tscn"
 const CREATURE_SCENE: String = "res://scenes/creature.tscn"
@@ -75,6 +79,7 @@ func _run() -> void:
 	await _test_lockdown()
 	await _test_escape()
 	await _test_shards()
+	await _test_landmarks_and_life()
 	await _test_pathing()
 
 	print("RESULT: %s" % ("ALL CREATURE CHECKS PASSED" if _failures == 0 else "%d CHECK(S) FAILED" % _failures))
@@ -755,6 +760,102 @@ func _walk(from: Vector2, to: Vector2, navigation: bool) -> float:
 	_awareness.value = 0.0
 	await _frames(1)
 	return result
+
+
+# --- Landmarks and harmless life ----------------------------------------------
+
+func _test_landmarks_and_life() -> void:
+	print("  Landmarks and harmless life")
+	await _build(0, 0)
+	var landmarks: Array[Landmark] = _builder.get_landmarks()
+	_check(landmarks.size() == _builder._definition.landmarks.size() and not landmarks.is_empty(), "the level has its %d landmark(s)" % landmarks.size())
+	var solid: Landmark = null
+	var field: LandmarkAnemones = null
+	for landmark: Landmark in landmarks:
+		if not landmark.get_footprints().is_empty() and solid == null:
+			solid = landmark
+		if landmark is LandmarkAnemones:
+			field = landmark as LandmarkAnemones
+	if solid:
+		var footprint: PackedVector2Array = _builder.global_transform * solid.get_placed_footprints()[0]
+		var middle := Vector2.ZERO
+		for point: Vector2 in footprint:
+			middle += point / footprint.size()
+		_check(_point_blocked(middle), "a landmark's base is solid (%s)" % solid.name)
+		var from: Vector2 = _open_spot(middle, 300.0)
+		var to: Vector2 = _far_spot(middle + (middle - from), 10.0)
+		var path: PackedVector2Array = NavigationServer2D.map_get_path(get_viewport().world_2d.navigation_map, from, to, true)
+		var crosses: bool = false
+		for k: int in path.size() - 1:
+			for t: float in [0.25, 0.5, 0.75]:
+				if Geometry2D.is_point_in_polygon(path[k].lerp(path[k + 1], t), footprint):
+					crosses = true
+		_check(path.size() > 1 and not crosses, "the navigation leads around it")
+		_check(solid.is_in_group("sonar_shapes") and not solid.get_sonar_shape_lines().is_empty(), "it adds its own sonar lines")
+	var life: Array[Node] = get_tree().get_nodes_in_group("ambient_life")
+	_check(not life.is_empty(), "the level has harmless life (%d)" % life.size())
+	var harmless: bool = true
+	for node: Node in life:
+		if node.is_in_group("creatures") or not node.find_children("*", "CollisionObject2D", true, false).is_empty():
+			harmless = false
+	_check(harmless, "none of it is a creature or has collision")
+	var music := _game.get_node("MusicDirector") as MusicDirector
+	var camera := _game.get_node("SharedCamera") as SharedCamera
+	# A creature far from the players, with life around: it keeps wandering.
+	var school: FishSchool = null
+	var crab: Crab = null
+	var plant: SeaPlant = null
+	for node: Node in life:
+		if node is FishSchool and school == null:
+			school = node as FishSchool
+		elif node is Crab and crab == null:
+			crab = node as Crab
+		elif node is SeaPlant and plant == null:
+			plant = node as SeaPlant
+	if school:
+		# Players far away (the camera on the fish, so they update): a
+		# creature right next to the fish while they scatter keeps wandering.
+		_teleport_players(_far_spot(school.global_position, 1400.0))
+		var watcher: Creature = _spawn_creature(_open_spot(school.global_position, 120.0))
+		camera.global_position = school.global_position
+		await _frames(2)
+		school.scatter(watcher.global_position)
+		await _frames(60)
+		_check(watcher.state == Creature.State.WANDER, "a creature next to scattering fish ignores them")
+		_check(music.state == MusicDirector.State.CALM, "the music stays calm")
+		watcher.queue_free()
+		await _frames(2)
+		_teleport_players(_open_spot(school.global_position, 60.0))
+		camera.snap_to_players()
+		await _frames(20)
+		_check(school.is_scattered(), "fish scatter when a player comes near")
+	if crab:
+		_teleport_players(_open_spot(crab.global_position, 90.0))
+		camera.snap_to_players()
+		await _frames(4)
+		var start: Vector2 = crab.global_position
+		await _frames(10)
+		_check(crab.global_position.distance_to(start) > 5.0, "a crab scuttles away from a player")
+	if plant:
+		_teleport_players(_open_spot(plant.global_position, 120.0))
+		camera.snap_to_players()
+		await _frames(2)
+		plant.on_sonar_hit(_echo.global_position)
+		await _frames(6)
+		_check(plant.get_size_share() < 0.8, "a sea plant shrinks on a pulse")
+		await _frames(150)
+		_check(plant.get_size_share() > 0.99, "and grows back")
+	if field:
+		_teleport_players(_open_spot(field.global_position, 200.0))
+		camera.snap_to_players()
+		await _frames(2)
+		field.on_sonar_hit(_echo.global_position)
+		await _frames(30)
+		var closed: bool = true
+		for i: int in field.anemone_count:
+			closed = closed and field.get_openness(i) < 0.9
+		_check(closed, "the anemone field pulls in on a pulse")
+	_check(music.state == MusicDirector.State.CALM, "the music stays calm around harmless life (players among it)")
 
 
 # --- Helpers ------------------------------------------------------------------

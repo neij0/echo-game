@@ -34,6 +34,8 @@ var _top_light: PointLight2D
 
 
 func _ready() -> void:
+	# Rock tops near this light keep their full colour (TopLightFalloff).
+	add_to_group("falloff_lights")
 	texture = LightTextures.radial_smooth(texture_size, hard_edge)
 	texture_scale = LightTextures.scale_for_radius(texture, radius)
 	color = light_color

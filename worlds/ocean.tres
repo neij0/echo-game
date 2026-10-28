@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="WorldConfig" load_steps=36 format=3]
+[gd_resource type="Resource" script_class="WorldConfig" load_steps=47 format=3]
 
 [ext_resource type="Script" path="res://scripts/world_config.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/stage_definition.gd" id="2_stage"]
@@ -12,6 +12,12 @@
 [ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="13_wave"]
 [ext_resource type="PackedScene" path="res://scenes/lockdown_room.tscn" id="14_lockdown"]
 [ext_resource type="AudioStream" path="res://assets/audio/ambience/amb_ocean_bed.wav" id="15_bed"]
+[ext_resource type="Script" path="res://scripts/ambient_life_spawn.gd" id="16_life"]
+[ext_resource type="PackedScene" path="res://scenes/life/ocean/fish_school.tscn" id="17_fish"]
+[ext_resource type="PackedScene" path="res://scenes/life/ocean/jellyfish.tscn" id="18_jelly"]
+[ext_resource type="PackedScene" path="res://scenes/life/ocean/crab.tscn" id="19_crab"]
+[ext_resource type="PackedScene" path="res://scenes/life/ocean/kelp_tuft.tscn" id="20_kelp"]
+[ext_resource type="PackedScene" path="res://scenes/life/ocean/anemone_clump.tscn" id="21_anemone"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_1_1.tres" id="level_1_1"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_1_2.tres" id="level_1_2"]
 [ext_resource type="Resource" path="res://worlds/ocean/level_1_3.tres" id="level_1_3"]
@@ -55,6 +61,44 @@ ambient_color = Color(0.11, 0.17, 0.22, 1)
 deep_ambient_color = Color(0.095, 0.15, 0.2, 1)
 light_shaft_strength = 0.0
 
+[sub_resource type="Resource" id="Life_fish"]
+script = ExtResource("16_life")
+scene = ExtResource("17_fish")
+per_room_min = 0
+per_room_max = 1
+free_radius = 80.0
+
+[sub_resource type="Resource" id="Life_jelly"]
+script = ExtResource("16_life")
+scene = ExtResource("18_jelly")
+per_room_min = 0
+per_room_max = 1
+free_radius = 60.0
+
+[sub_resource type="Resource" id="Life_crab"]
+script = ExtResource("16_life")
+scene = ExtResource("19_crab")
+per_room_min = 1
+per_room_max = 2
+near_rock = true
+free_radius = 20.0
+
+[sub_resource type="Resource" id="Life_kelp"]
+script = ExtResource("16_life")
+scene = ExtResource("20_kelp")
+per_room_min = 1
+per_room_max = 3
+near_rock = true
+free_radius = 20.0
+
+[sub_resource type="Resource" id="Life_anemone"]
+script = ExtResource("16_life")
+scene = ExtResource("21_anemone")
+per_room_min = 0
+per_room_max = 2
+near_rock = true
+free_radius = 20.0
+
 [resource]
 script = ExtResource("1_world")
 world_id = "ocean"
@@ -77,6 +121,8 @@ level_depth_step_m = 400.0
 floor_color_shallow = Color(0.2, 0.3, 0.36, 1)
 floor_color_deep = Color(0.15, 0.23, 0.29, 1)
 rock_fill_lift = 0.09
+area_accents = Array[Color]([Color(0.1, 0.3, 0.32, 0.3), Color(0.24, 0.2, 0.36, 0.3), Color(0.14, 0.24, 0.34, 0.25), Color(0.1, 0.3, 0.32, 0.22)])
+ambient_life = Array[ExtResource("16_life")]([SubResource("Life_fish"), SubResource("Life_jelly"), SubResource("Life_crab"), SubResource("Life_kelp"), SubResource("Life_anemone")])
 ring_color = Color(0.4, 0.9, 1, 0.9)
 edge_color = Color(0.45, 0.95, 1, 1)
 pressure_name = "Oxygen"
