@@ -21,9 +21,12 @@ extends Node2D
 @export_flags("North", "East", "South", "West") var openings: int = 0
 ## The exit room of boss levels (has a Boss marker, usually one opening).
 @export var is_boss_arena: bool = false
-## 3/4 view (prototype): height of the rocks' front faces in this room
-## (RockWall.height, also given to the seals in its cell). 0 = flat rocks.
-@export var rock_height: float = 0.0
+## 3/4 view: the range of the rocks' heights in this room. The LevelBuilder
+## gives each rock a middle height in it (picked by the rock's position) and
+## lets it rise and fall along its length (RockWall.height / height_spread;
+## the seals in its cell too). Both 0 = flat rocks.
+@export var rock_height_min: float = 0.0
+@export var rock_height_max: float = 0.0
 
 ## Clockwise quarter turns applied by rotate_quarters.
 var quarter_turns: int = 0

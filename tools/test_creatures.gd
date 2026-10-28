@@ -33,6 +33,8 @@ const PATH_RUNS_PER_LEVEL: int = 3
 const BASELINE_RUNS_PER_LEVEL: int = 2
 ## A walk counts as arrived this close to the target.
 const ARRIVE_RADIUS: float = 200.0
+## The navigation map counts as synced when a path ends this close to both points.
+const NAV_READY_DISTANCE: float = 40.0
 
 var _game: Node2D
 var _stage: StageManager
@@ -771,7 +773,25 @@ func _build(stage_index: int, level_index: int) -> void:
 	_awareness.value = 0.0
 	# The navigation map syncs a few physics frames after the level is built.
 	await _frames(12)
+	await _wait_for_navigation()
 	_protect_players()
+
+
+## The map syncs on a thread (about 60 ms for the biggest level, more than 12
+## fast headless frames): wait until it gives a full path from the farthest
+## creature spot to the start (at most 300 frames).
+func _wait_for_navigation() -> void:
+	var map: RID = get_viewport().world_2d.navigation_map
+	var start: Vector2 = _builder.get_spawn_position(1)
+	var far: Vector2 = start
+	for spot: Vector2 in _builder.creature_spots:
+		if spot.distance_to(start) > far.distance_to(start):
+			far = spot
+	for i: int in 300:
+		var path: PackedVector2Array = NavigationServer2D.map_get_path(map, far, start, true)
+		if path.size() > 1 and path[path.size() - 1].distance_to(start) < NAV_READY_DISTANCE and path[0].distance_to(far) < NAV_READY_DISTANCE:
+			return
+		await _frames(1)
 
 
 func _clear_creatures() -> void:

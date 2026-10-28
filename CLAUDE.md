@@ -204,17 +204,27 @@ Note: 2D renders in HDR (linear). Screenshots taken with `get_viewport().get_tex
 linear float data and look much darker than the screen; convert each pixel with
 `Color.linear_to_srgb()` before saving (8-bit linear PNGs lose the dark detail).
 
-## 3/4 view (prototype: only `room_cavern`, the start room of level 1-1)
+## 3/4 view (every Ocean room)
 The world is tilted to match the characters, still 2D:
-- **Rock height** (classic 3/4): `LevelChunk.rock_height` > 0 gives its rocks (and the seals
-  in its cell) a `RockWall.height`. The polygon is the rock's **base**: collision, navigation
-  and the occluder stay there, so players stop at the foot of the rock like at a wall.
+- **Rock height** (classic 3/4): each room has a range (`LevelChunk.rock_height_min` /
+  `_max`, e.g. 32-72 px; both 0 = flat). The `LevelBuilder` gives each rock a middle
+  `RockWall.height` in it (picked by the rock's position, `rock_middle_low` / `_high`) and a
+  `height_spread` (`rock_height_spread` of the range): `RockWall.height_at(p)` rises and falls
+  along the rock (`height_wave`), so long walls are no flat extrusion. Seals get the middle of
+  their room's range. The polygon is the rock's **base**: collision, navigation and the
+  occluder stay there, so players stop at the foot of the rock like at a wall.
   `build_faces` (called by the `LevelBuilder`, in global space so turned rooms stand upright)
-  draws the rock standing on it as `RockFace` pieces: the top (the base shifted up by
-  `height`, lighter: `top_lift`, cut into vertical strips) and a front face over every
-  south-facing base edge (darker towards the base, colour patches, broken strata, a few
-  cracks, an irregular bottom edge, a rim light on top and a contact shadow on the floor).
-  The base polygon itself is not drawn.
+  splits the base into short edges (`face_piece_length`) and draws the rock standing on it as
+  `RockFace` pieces: the top (each base point raised by its height and drawn in by
+  `top_inset`, except where the rock touches other rock, so the base is a little wider;
+  lighter: `top_lift`; cut into vertical strips and cells with light patches
+  (`top_variation`), plus scattered cracks, moss patches and barnacle clusters (`detail_*`,
+  `moss_*`, `barnacle_*`) and a front face over every south-facing base edge (darker towards
+  the base, colour patches, broken strata, a few cracks, an irregular bottom edge, a rim
+  light on top and a contact shadow on the floor). The base polygon itself is not drawn.
+- **Doorways stay clear**: within `doorway_clear_distance` of every connected doorway corridor
+  (`LevelBuilder`, `RockWall.clear_zones`) the rock drops to `doorway_rock_height`, so no top
+  hides the opening or a player walking through it.
 - **Occluder of a tall rock**: culled (`tall_occluder_culled`) so only the far edges cast a
   shadow and a light in front of the rock lights its top and face; open lines that skip base
   edges touching another rock (`occluder_join_margin`), so a seal and a wall light as one.
@@ -222,7 +232,8 @@ The world is tilted to match the characters, still 2D:
   (`get_sonar_lines`): the top's outline, the vertical sides where a run of faces starts / ends
   and the front base edge. Lines where the rock touches other rock (another rock's base, or
   the room's edge: the next room or the outer rock) are left out; a side within
-  `sonar_side_margin` of another rock too. Line of sight is checked on the base straight
+  `sonar_side_margin` of another rock too, and runs of faces or gaps shorter than
+  `side_min_run` do not count (no side line at every bump). Line of sight is checked on the base straight
   below each point (`get_sonar_sights`); for the top and the sides the ray may pass through
   the rock itself (seen from above). Flat rocks keep the base outline.
 - **Draw order**: `Game`, `LevelBuilder`, `Level` and the chunks are y-sorted. z: floors /
@@ -231,11 +242,14 @@ The world is tilted to match the characters, still 2D:
   under it, so whatever stands north of (behind) the rock is covered. Glow layers are drawn
   above the world, so the Echo's / Guardian's glow and creature eyes fade there
   (`RockFace.is_covered(point, sort_y)`, `behind_rock_hide`; the lunge flare always shows).
+  `RockFace` keeps a lookup grid (`GRID_CELL`), so these tests only look at nearby pieces.
 - **Occluded players** (`OccludedOutline` under each player's visual, players only): the
   parts of the outline a rock covers are drawn through it, soft and semi-transparent (Echo
   cyan, Guardian gold), from the visual's `get_outline_lines()`.
-- **Rock outlines**: rounded boulders and smooth walls (few points, no spikes); room-edge and
-  doorway points stay where they are.
+- **Rock outlines**: natural, irregular shapes with soft bumps (no spikes, no perfect
+  circles); points on the room edge stay where they are. The bumps only cut into the rock
+  (walls 0 to -9 px), so no corridor or spawn point got less room than in the original design. Seals get soft bumps on their room side
+  (`LevelBuilder.seal_bump`). Lockdown barriers and the arena door stay flat (they fade).
 - **Depth layers** (`RoomDepthLayers` in the room): dim parallax ridges on the floor (lit like
   the floor, `background_drift`) and dark swaying kelp / coral tips at its `Kelp*` / `Coral*`
   markers on an unlit CanvasLayer, bigger and faster than the world (`foreground_scale`).

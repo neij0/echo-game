@@ -6,11 +6,14 @@ extends StaticBody2D
 ## Tall rocks (height > 0, classic 3/4 view): the polygon is the BASE of the
 ## rock (collision, occluder and navigation stay there, so players stop at
 ## the foot of the rock like at a real wall). The sonar outlines what the eye
-## sees instead (get_sonar_lines): the top, the face sides, the front base. build_faces draws the rock
-## standing on it: a lighter top surface (the base shifted up by height) and a
-## darker front face rising from every south-facing base edge. All pieces are
-## RockFace nodes y-sorted with the players and creatures by their base, so
-## the rock covers whatever stands behind (north of) it.
+## sees instead (get_sonar_lines): the top, the face sides, the front base.
+## build_faces draws the rock standing on it: a lighter top surface (the base
+## shifted up by the height at each point and drawn in a little, so the base is
+## wider than the top) and a darker front face rising from every south-facing
+## base edge. The height varies along the rock (height_at) and drops near the
+## doorways (clear_zones). All pieces are RockFace nodes y-sorted with the
+## players and creatures by their base, so the rock covers whatever stands
+## behind (north of) it.
 ## @tool only so the editor tool tools/propose_level.gd can read the walls;
 ## _ready does nothing in the editor.
 
@@ -20,8 +23,15 @@ extends StaticBody2D
 @export var casts_shadow: bool = true
 
 @export_group("Height (3/4 view)")
-## Pixels the rock rises above its base. 0 = flat rock.
+## Pixels the rock rises above its base (its middle height). 0 = flat rock.
 @export var height: float = 0.0
+## The height varies by up to this much (+ or -) along the rock (height_at).
+@export var height_spread: float = 0.0
+## Size of one rise or dip of the height, in pixels along the rock.
+@export var height_wave: float = 200.0
+## The top is drawn this much inside the base (the base is a little wider).
+## Not where the rock touches other rock, so touching tops stay joined.
+@export var top_inset: float = 5.0
 ## Draw order of a flat rock: under everything that moves.
 @export var flat_z_index: int = -1
 ## Draw order of a tall rock's pieces (the y-sorted layer of players and creatures).
@@ -37,9 +47,13 @@ extends StaticBody2D
 @export var sonar_side_margin: float = 6.0
 ## Base edges whose outward normal points down at least this much get a face.
 @export_range(0.0, 1.0) var face_min_facing: float = 0.15
+## A run of faces (or a gap between faces) shorter than this along the base
+## does not count for the sonar's face sides, so a bumpy side of a rock does
+## not get a side line at every bump.
+@export var side_min_run: float = 70.0
 ## Width of the top strips and longest face piece: each piece sorts by its
 ## own base, so large irregular rocks sort correctly.
-@export var face_piece_length: float = 48.0
+@export var face_piece_length: float = 64.0
 
 @export_group("Light and Colour (3/4 view)")
 ## The top surface (lit from above): the rock colour lightened by this much.
@@ -77,6 +91,36 @@ extends StaticBody2D
 @export var contact_shadow_size: float = 14.0
 @export_range(0.0, 1.0) var contact_shadow_alpha: float = 0.6
 
+@export_group("Top Detail (3/4 view)")
+## Light variation over the top (share of brightness, + or -), in patches of
+## top_variation_scale pixels; the top is cut into cells of top_cell_size.
+@export_range(0.0, 0.5) var top_variation: float = 0.1
+@export var top_variation_scale: float = 70.0
+@export var top_cell_size: float = 96.0
+## Small details on the top: one try per detail_spacing pixels (each way), each
+## kept with detail_chance, never closer than detail_margin to the top's edge.
+@export var detail_spacing: float = 46.0
+@export_range(0.0, 1.0) var detail_chance: float = 0.16
+@export var detail_margin: float = 14.0
+## Shares of the kept details (the rest are barnacles).
+@export_range(0.0, 1.0) var crack_share: float = 0.4
+@export_range(0.0, 1.0) var moss_share: float = 0.35
+@export var top_crack_length: float = 26.0
+@export_range(0.0, 1.0) var top_crack_darken: float = 0.45
+@export var moss_color: Color = Color(0.3, 0.42, 0.3)
+## How far the moss colour replaces the top colour, and its patch size.
+@export_range(0.0, 1.0) var moss_strength: float = 0.4
+@export var moss_radius: float = 9.0
+@export_range(0.0, 1.0) var barnacle_lift: float = 0.35
+@export var barnacle_radius: float = 2.2
+
+## Doorway corridors (global, set by the LevelBuilder): within clear_distance
+## of them the rock drops to clear_height, so its top never hides a doorway or
+## the players walking through it.
+var clear_zones: Array[Rect2] = []
+var clear_height: float = 10.0
+var clear_distance: float = 140.0
+
 ## Sonar outline of a tall rock (global): the visible lines, the point the
 ## line of sight is checked to for each of their points (on the base), and
 ## whether that check may pass through this rock (the top is seen from above).
@@ -85,6 +129,8 @@ var _sonar_sights: Array[PackedVector2Array] = []
 var _sonar_through_self: Array[bool] = []
 var _orientation: float = 1.0
 var _base_occluder: LightOccluder2D
+## Height above each point of the top outline (while building).
+var _top_heights := PackedFloat32Array()
 
 
 func _ready() -> void:
@@ -149,44 +195,90 @@ func get_sonar_through_self() -> Array[bool]:
 ## Works in global space (screen up), so a turned room still stands upright.
 ## others: every rock base of the level, global (this one may be included).
 ## room: the rect of the room this rock belongs to, global (empty = none);
-## beyond its edges lies other rock. Call once, after the rock entered the tree.
-func build_faces(others: Array[PackedVector2Array], room: Rect2) -> void:
+## beyond its edges lies other rock. other_bounds: the bounds of others (same
+## order; computed here when empty). Call once, after the rock entered the tree.
+func build_faces(others: Array[PackedVector2Array], room: Rect2, other_bounds: Array[Rect2] = []) -> void:
 	if height <= 0.0 or polygon.size() < 3:
 		return
 	# The pieces join the y-sort of the level through this node.
 	y_sort_enabled = true
-	var base: PackedVector2Array = get_global_outline()
-	var base_cutters: Array[PackedVector2Array] = _cutters(base, others, occluder_join_margin)
-	_open_occluder(base, base_cutters)
-	_orientation = 1.0 if _doubled_area(base) > 0.0 else -1.0
-	_add_top(base)
+	var outline: PackedVector2Array = get_global_outline()
+	if other_bounds.is_empty():
+		other_bounds = _bounds_list(others)
+	var base_cutters: Array[PackedVector2Array] = _cutters(outline, others, other_bounds, occluder_join_margin)
+	_open_occluder(outline, base_cutters)
+	_orientation = 1.0 if _doubled_area(outline) > 0.0 else -1.0
+	# Where this rock touches other rock (another base, the next room or the
+	# outer rock beyond the room's edge).
+	var touch_cutters: Array[PackedVector2Array] = base_cutters.duplicate()
+	var side_cutters: Array[PackedVector2Array] = _cutters(outline, others, other_bounds, sonar_side_margin)
+	if room.has_area():
+		touch_cutters.append_array(_beyond(room.grow(-occluder_join_margin)))
+		side_cutters.append_array(_beyond(room.grow(-sonar_side_margin)))
+	# Short edges, so the height can change along the rock; one top point per base point.
+	var base: PackedVector2Array = _densified(outline, face_piece_length)
+	var top: PackedVector2Array = _top_outline(base, touch_cutters)
+	_add_top(top)
 	var count: int = base.size()
 	var facing_edges: Array[bool] = []
 	for i: int in count:
-		var a: Vector2 = base[i]
-		var b: Vector2 = base[(i + 1) % count]
-		var facing: float = _facing(a, b, _orientation)
+		var next: int = (i + 1) % count
+		var facing: float = _facing(base[i], base[next], _orientation)
 		facing_edges.append(facing >= face_min_facing)
-		if facing < face_min_facing:
-			continue
-		var pieces: int = maxi(1, ceili(a.distance_to(b) / face_piece_length))
-		for k: int in pieces:
-			_add_face(a.lerp(b, float(k) / pieces), a.lerp(b, float(k + 1) / pieces), facing)
-	var sonar_cutters: Array[PackedVector2Array] = base_cutters.duplicate()
-	var side_cutters: Array[PackedVector2Array] = _cutters(base, others, sonar_side_margin)
-	if room.has_area():
-		sonar_cutters.append_array(_beyond(room.grow(-occluder_join_margin)))
-		side_cutters.append_array(_beyond(room.grow(-sonar_side_margin)))
-	_build_sonar_lines(base, facing_edges, sonar_cutters, side_cutters)
+		if facing >= face_min_facing:
+			_add_face(base[i], base[next], top[i], top[next], facing)
+	_build_sonar_lines(base, top, facing_edges, touch_cutters, side_cutters)
+
+
+## Height of the rock above base point p (global): its middle height with a
+## slow rise and fall along the rock, dropping to clear_height near a doorway.
+func height_at(p: Vector2) -> float:
+	var h: float = height + height_spread * _noise2(p / maxf(height_wave, 1.0))
+	if not clear_zones.is_empty():
+		var distance: float = INF
+		for zone: Rect2 in clear_zones:
+			var dx: float = maxf(maxf(zone.position.x - p.x, p.x - zone.end.x), 0.0)
+			var dy: float = maxf(maxf(zone.position.y - p.y, p.y - zone.end.y), 0.0)
+			distance = minf(distance, Vector2(dx, dy).length())
+		var f: float = clampf(distance / maxf(clear_distance, 1.0), 0.0, 1.0)
+		h = lerpf(minf(clear_height, h), h, f * f * (3.0 - 2.0 * f))
+	return maxf(h, 0.0)
+
+
+## The top outline: every base point raised by its height and moved in by
+## top_inset (not where the rock touches other rock).
+func _top_outline(base: PackedVector2Array, touch_cutters: Array[PackedVector2Array]) -> PackedVector2Array:
+	var count: int = base.size()
+	var top := PackedVector2Array()
+	_top_heights.clear()
+	var touch_bounds: Array[Rect2] = _bounds_list(touch_cutters)
+	for i: int in count:
+		var p: Vector2 = base[i]
+		var into_prev: Vector2 = _inward(base[(i - 1 + count) % count], p)
+		var into_next: Vector2 = _inward(p, base[(i + 1) % count])
+		var inward: Vector2 = (into_prev + into_next).normalized()
+		var inset: float = 0.0 if _inside_any(p, touch_cutters, touch_bounds) else top_inset
+		# Mitre, limited so a sharp corner does not shoot out.
+		inset /= maxf(inward.dot(into_next), 0.5)
+		var h: float = height_at(p)
+		_top_heights.append(h)
+		top.append(p + inward * inset - Vector2(0.0, h))
+	return top
+
+
+func _inward(a: Vector2, b: Vector2) -> Vector2:
+	var direction: Vector2 = (b - a).normalized()
+	return -Vector2(direction.y, -direction.x) * _orientation
 
 
 ## The outlines near this one (not itself), grown by margin: lines inside
 ## them are where two rocks touch.
-func _cutters(outline: PackedVector2Array, others: Array[PackedVector2Array], margin: float) -> Array[PackedVector2Array]:
+func _cutters(outline: PackedVector2Array, others: Array[PackedVector2Array], other_bounds: Array[Rect2], margin: float) -> Array[PackedVector2Array]:
 	var reach: Rect2 = _bounds_of(outline).grow(margin)
 	var cutters: Array[PackedVector2Array] = []
-	for other: PackedVector2Array in others:
-		if _same_outline(other, outline) or not reach.intersects(_bounds_of(other)):
+	for i: int in others.size():
+		var other: PackedVector2Array = others[i]
+		if not reach.intersects(other_bounds[i]) or _same_outline(other, outline):
 			continue
 		cutters.append_array(Geometry2D.offset_polygon(other, margin))
 	return cutters
@@ -208,11 +300,12 @@ func _open_occluder(base: PackedVector2Array, cutters: Array[PackedVector2Array]
 	# Edge by edge: the cut may reverse a piece, but the cull mode needs the
 	# outline's own direction. Pieces that follow on are joined into one line.
 	var lines: Array[PackedVector2Array] = []
+	var cutter_bounds: Array[Rect2] = _bounds_list(cutters)
 	var count: int = base.size()
 	for i: int in count:
 		var a: Vector2 = base[i]
 		var b: Vector2 = base[(i + 1) % count]
-		var pieces: Array[PackedVector2Array] = _clipped(PackedVector2Array([a, b]), cutters)
+		var pieces: Array[PackedVector2Array] = _clipped(PackedVector2Array([a, b]), cutters, cutter_bounds)
 		# Keep the original order along the edge, from a to b.
 		pieces.sort_custom(func(p: PackedVector2Array, q: PackedVector2Array) -> bool: return minf(a.distance_to(p[0]), a.distance_to(p[-1])) < minf(a.distance_to(q[0]), a.distance_to(q[-1])))
 		for piece: PackedVector2Array in pieces:
@@ -238,42 +331,168 @@ func _open_occluder(base: PackedVector2Array, cutters: Array[PackedVector2Array]
 
 
 ## The top surface, cut into vertical strips; each strip sorts by the base
-## right under it (the lowest point of the strip plus the height).
-func _add_top(base: PackedVector2Array) -> void:
-	var up := Vector2(0.0, -height)
-	var top: PackedVector2Array = _moved(base, up)
+## under it (the lowest point of the strip plus the lowest height there, so it
+## never sorts in front of a character standing at the rock's foot). Each strip
+## is cut into cells for the light variation, then the details go on top.
+func _add_top(top: PackedVector2Array) -> void:
 	var bounds: Rect2 = _bounds_of(top)
 	var top_color: Color = color.lightened(top_lift)
-	var x: float = floorf(bounds.position.x / face_piece_length) * face_piece_length
+	var size: float = face_piece_length
+	var pieces: Array[RockFace] = []
+	var parts: Array[PackedVector2Array] = []
+	var x_start: float = floorf(bounds.position.x / size) * size
+	var lowest: PackedFloat32Array = _lowest_heights(top, x_start, size)
+	var x: float = x_start
 	while x < bounds.end.x:
-		var strip := PackedVector2Array([
-			Vector2(x, bounds.position.y - 1.0), Vector2(x + face_piece_length, bounds.position.y - 1.0),
-			Vector2(x + face_piece_length, bounds.end.y + 1.0), Vector2(x, bounds.end.y + 1.0),
-		])
+		var strip := _rect_polygon(Rect2(x, bounds.position.y - 1.0, size, bounds.size.y + 2.0))
 		for part: PackedVector2Array in Geometry2D.intersect_polygons(top, strip):
 			# A cut can leave a degenerate sliver that cannot be drawn.
-			if Geometry2D.triangulate_polygon(part).is_empty():
+			if Geometry2D.is_polygon_clockwise(part) != Geometry2D.is_polygon_clockwise(top) or Geometry2D.triangulate_polygon(part).is_empty():
 				continue
-			# Just above the face pieces on the same base, so the rim stays on top.
-			var base_y: float = _bounds_of(part).end.y + height - 0.5
+			var part_bounds: Rect2 = _bounds_of(part)
+			var base_y: float = part_bounds.end.y + lowest[roundi((x - x_start) / size)] - 0.5
 			var piece: RockFace = _new_piece(base_y)
-			piece.fills.append(_moved(part, -Vector2(0.0, base_y)))
-			piece.fill_colors.append(_repeated(top_color, part.size()))
-			add_child(piece)
-		x += face_piece_length
+			piece.global_bounds = part_bounds
+			var y: float = floorf(part_bounds.position.y / top_cell_size) * top_cell_size
+			while y < part_bounds.end.y:
+				for cell: PackedVector2Array in Geometry2D.intersect_polygons(part, _rect_polygon(Rect2(x, y, size, top_cell_size))):
+					if not _drawable(cell):
+						continue
+					var colors := PackedColorArray()
+					for point: Vector2 in cell:
+						var patch: float = 1.0 + top_variation * _noise2(point / top_variation_scale)
+						colors.append(Color(top_color.r * patch, top_color.g * patch, top_color.b * patch))
+					piece.fills.append(_moved(cell, -Vector2(0.0, base_y)))
+					piece.fill_colors.append(colors)
+				y += top_cell_size
+			pieces.append(piece)
+			parts.append(part)
+		x += size
+	_add_top_details(top, top_color, pieces, parts)
+	for piece: RockFace in pieces:
+		add_child(piece)
 
 
-## The front face over one piece (a -> b) of a south-facing base edge, global.
-func _add_face(a: Vector2, b: Vector2, facing: float) -> void:
-	if is_equal_approx(a.x, b.x):
+## For every strip (from x0, strip_width wide) the smallest height of the top
+## edges that cross it, in one pass over the outline.
+func _lowest_heights(top: PackedVector2Array, x0: float, strip_width: float) -> PackedFloat32Array:
+	var bounds: Rect2 = _bounds_of(top)
+	var strips: int = ceili((bounds.end.x - x0) / strip_width) + 1
+	var lowest := PackedFloat32Array()
+	lowest.resize(strips)
+	lowest.fill(height)
+	var seen := PackedByteArray()
+	seen.resize(strips)
+	seen.fill(0)
+	for i: int in top.size():
+		var next: int = (i + 1) % top.size()
+		var h: float = minf(_top_heights[i], _top_heights[next])
+		var first: int = clampi(floori((minf(top[i].x, top[next].x) - x0) / strip_width), 0, strips - 1)
+		var last: int = clampi(floori((maxf(top[i].x, top[next].x) - x0) / strip_width), 0, strips - 1)
+		for k: int in range(first, last + 1):
+			lowest[k] = h if seen[k] == 0 else minf(lowest[k], h)
+			seen[k] = 1
+	return lowest
+
+
+## Cracks, moss patches and barnacle clusters scattered over the top, each in
+## the strip piece it lies on (same rock = same look every attempt).
+func _add_top_details(top: PackedVector2Array, top_color: Color, pieces: Array[RockFace], parts: Array[PackedVector2Array]) -> void:
+	var inner: Array[PackedVector2Array] = []
+	for shrunk: PackedVector2Array in Geometry2D.offset_polygon(top, -detail_margin):
+		if Geometry2D.is_polygon_clockwise(shrunk) == Geometry2D.is_polygon_clockwise(top):
+			inner.append(shrunk)
+	if inner.is_empty():
+		return
+	var bounds: Rect2 = _bounds_of(top)
+	var crack_color: Color = top_color.darkened(top_crack_darken)
+	var moss: Color = top_color.lerp(moss_color, moss_strength)
+	var barnacle: Color = top_color.lightened(barnacle_lift)
+	var gy: float = floorf(bounds.position.y / detail_spacing) * detail_spacing
+	while gy < bounds.end.y:
+		var gx: float = floorf(bounds.position.x / detail_spacing) * detail_spacing
+		while gx < bounds.end.x:
+			var key: float = gx * 0.371 + gy * 1.913
+			var p := Vector2(gx + detail_spacing * _hash(key + 3.1), gy + detail_spacing * _hash(key + 7.7))
+			gx += detail_spacing
+			if _hash(key) > detail_chance or not _inside_any(p, inner):
+				continue
+			var index: int = -1
+			for i: int in parts.size():
+				if Geometry2D.is_point_in_polygon(p, parts[i]):
+					index = i
+					break
+			if index < 0:
+				continue
+			var piece: RockFace = pieces[index]
+			# From global space into the piece's space.
+			var offset := Vector2(0.0, -_piece_base_y(piece))
+			var kind: float = _hash(key + 13.3)
+			if kind < crack_share:
+				var angle: float = TAU * _hash(key + 17.9)
+				var length: float = top_crack_length * (0.6 + 0.6 * _hash(key + 19.1))
+				var crack := PackedVector2Array()
+				for step: int in 4:
+					var sway: Vector2 = Vector2.from_angle(angle + PI * 0.5) * 3.0 * _noise(key + step * 2.3) * minf(step, 1.0)
+					crack.append(p + Vector2.from_angle(angle) * length * (step / 3.0 - 0.5) + sway + offset)
+				_add_line(piece, crack, crack_color, 1.0)
+			elif kind < crack_share + moss_share:
+				var radius: float = moss_radius * (0.7 + 0.6 * _hash(key + 23.7))
+				_add_fill(piece, _blob(p + offset, radius, key), moss)
+			else:
+				for k: int in 3 + int(_hash(key + 29.3) * 3.0):
+					var spot: Vector2 = p + Vector2.from_angle(TAU * _hash(key + k * 5.1)) * barnacle_radius * 3.0 * _hash(key + k * 3.3)
+					_add_fill(piece, _blob(spot + offset, barnacle_radius * (0.6 + 0.6 * _hash(key + k)), key + k), barnacle)
+		gy += detail_spacing
+
+
+## One flat-coloured shape (skipped if too small to be drawn).
+static func _add_fill(piece: RockFace, shape: PackedVector2Array, fill_color: Color) -> void:
+	if not _drawable(shape):
+		return
+	piece.fills.append(shape)
+	piece.fill_colors.append(_repeated(fill_color, shape.size()))
+
+
+## False for slivers the renderer cannot triangulate (tiny or degenerate).
+static func _drawable(shape: PackedVector2Array) -> bool:
+	return absf(_doubled_area(shape)) >= 2.0 and not Geometry2D.triangulate_polygon(shape).is_empty()
+
+
+## The global y line a piece sorts on (its transform is a pure move from
+## global space, see _new_piece).
+func _piece_base_y(piece: RockFace) -> float:
+	return (global_transform * piece.transform).origin.y
+
+
+## A small soft-edged round patch of 7 points around center.
+static func _blob(center: Vector2, radius: float, key: float) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for k: int in 7:
+		var r: float = radius * (0.75 + 0.35 * _hash(key + k * 1.7))
+		points.append(center + Vector2.from_angle(TAU * k / 7.0) * r)
+	return points
+
+
+static func _rect_polygon(rect: Rect2) -> PackedVector2Array:
+	return PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
+
+
+## The front face over one south-facing base edge (a -> b), global, up to
+## the top edge above it (at -> bt).
+func _add_face(a: Vector2, b: Vector2, at: Vector2, bt: Vector2, facing: float) -> void:
+	# A very short edge has nothing to show (and its shapes cannot be drawn).
+	if absf(a.x - b.x) < 1.0:
 		return
 	var origin := Vector2(0.0, maxf(a.y, b.y))
 	var piece: RockFace = _new_piece(origin.y)
+	piece.global_bounds = _bounds_of(PackedVector2Array([a, b, at, bt]))
 	var side: float = face_side_darken * (1.0 - facing)
 	var top_color: Color = color.darkened(face_darken_top + side)
 	var bottom_color: Color = color.darkened(face_darken_bottom + side)
 	var mid: Vector2 = a.lerp(b, 0.5)
 	var seed_value: float = mid.x * 0.731 + mid.y * 1.137
+	var edge := PackedVector2Array([a, b, at, bt])
 
 	# Contact shadow on the floor (from just inside the raised bottom edge).
 	var shade := Color(0.0, 0.0, 0.0, contact_shadow_alpha)
@@ -287,15 +506,15 @@ func _add_face(a: Vector2, b: Vector2, facing: float) -> void:
 	for row: int in face_rows:
 		var t0: float = float(row) / face_rows
 		var t1: float = float(row + 1) / face_rows
-		var points := PackedVector2Array([_face_point(a, t0), _face_point(b, t0), _face_point(b, t1)])
+		var points := PackedVector2Array([_face_point(edge, 0.0, t0), _face_point(edge, 1.0, t0), _face_point(edge, 1.0, t1)])
 		var colors := PackedColorArray([_face_color(a, t0, top_color, bottom_color), _face_color(b, t0, top_color, bottom_color), _face_color(b, t1, top_color, bottom_color)])
 		if row == face_rows - 1:
 			# The irregular bottom edge gets a middle point too.
-			points.append(_face_point(mid, t1))
+			points.append(_face_point(edge, 0.5, t1))
 			colors.append(_face_color(mid, t1, top_color, bottom_color))
-		points.append(_face_point(a, t1))
+		points.append(_face_point(edge, 0.0, t1))
 		colors.append(_face_color(a, t1, top_color, bottom_color))
-		if Geometry2D.triangulate_polygon(points).is_empty():
+		if not _drawable(points):
 			continue
 		piece.fills.append(_moved(points, -origin))
 		piece.fill_colors.append(colors)
@@ -306,35 +525,36 @@ func _add_face(a: Vector2, b: Vector2, facing: float) -> void:
 			continue
 		var t: float = strata_heights[k]
 		var line := PackedVector2Array()
-		for point: Vector2 in [a, mid, b]:
-			var wobble: float = strata_wobble * _noise(point.x / 19.0 + k * 7.3)
-			line.append(_face_point(point, t) + Vector2(0.0, wobble) - origin)
+		for u: float in [0.0, 0.5, 1.0]:
+			var wobble: float = strata_wobble * _noise(a.lerp(b, u).x / 19.0 + k * 7.3)
+			line.append(_face_point(edge, u, t) + Vector2(0.0, wobble) - origin)
 		var stratum: Color = top_color.lerp(bottom_color, t).darkened(strata_darken)
 		_add_line(piece, line, Color(stratum, strata_alpha), 1.0)
 
 	# Now and then a short crack from the rim downwards.
 	if _hash(seed_value + 91.0) < crack_chance:
-		var start: Vector2 = a.lerp(b, 0.3 + 0.4 * _hash(seed_value + 5.0))
+		var u_start: float = 0.3 + 0.4 * _hash(seed_value + 5.0)
 		var end_t: float = 0.45 + 0.4 * _hash(seed_value + 11.0)
 		var crack := PackedVector2Array()
 		for step: int in 4:
 			var t: float = lerpf(0.04, end_t, step / 3.0)
 			var sway: float = 3.0 * _noise(seed_value + step * 2.7) * minf(step, 1.0)
-			crack.append(_face_point(start, t) + Vector2(sway, 0.0) - origin)
+			crack.append(_face_point(edge, u_start, t) + Vector2(sway, 0.0) - origin)
 		_add_line(piece, crack, top_color.darkened(crack_darken), 1.0)
 
 	# Rim light where the top meets the face.
-	_add_line(piece, PackedVector2Array([_face_point(a, 0.0) - origin, _face_point(b, 0.0) - origin]), color.lightened(rim_lift), rim_width)
+	_add_line(piece, PackedVector2Array([at - origin, bt - origin]), color.lightened(rim_lift), rim_width)
 	add_child(piece)
 
 
-## A point of the face above base point p: t = 0 at the top edge, 1 at the
-## base (raised a little by the irregular edge).
-func _face_point(p: Vector2, t: float) -> Vector2:
-	var y: float = -height * (1.0 - t)
+## A point of the face over edge = [a, b, at, bt]: u along the edge (0 = a),
+## t = 0 at the top edge, 1 at the base (raised a little by the irregular edge).
+func _face_point(edge: PackedVector2Array, u: float, t: float) -> Vector2:
+	var bottom: Vector2 = edge[0].lerp(edge[1], u)
+	var point: Vector2 = edge[2].lerp(edge[3], u).lerp(bottom, t)
 	if t >= 1.0:
-		y -= edge_jitter * (0.5 + 0.5 * _noise(p.x / 11.0 + 3.0))
-	return p + Vector2(0.0, y)
+		point.y -= edge_jitter * (0.5 + 0.5 * _noise(bottom.x / 11.0 + 3.0))
+	return point
 
 
 func _face_color(p: Vector2, t: float, top_color: Color, bottom_color: Color) -> Color:
@@ -347,8 +567,9 @@ func _face_color(p: Vector2, t: float, top_color: Color, bottom_color: Color) ->
 ## space even when the room is turned. Fill it, then add it as a child (its
 ## _ready measures the fills).
 func _new_piece(base_y: float) -> RockFace:
+	# No name: thousands of siblings with one name make every add_child search
+	# for a free one.
 	var piece := RockFace.new()
-	piece.name = "Piece"
 	piece.z_as_relative = false
 	piece.z_index = face_z_index
 	piece.transform = global_transform.affine_inverse() * Transform2D(0.0, Vector2(0.0, base_y))
@@ -363,28 +584,66 @@ static func _add_line(piece: RockFace, line: PackedVector2Array, line_color: Col
 
 ## The sonar outline (see get_sonar_lines), global, without the lines over
 ## base edges inside the cutters (where this rock touches other rock); a face
-## side is left out when its base corner is inside a side cutter.
-func _build_sonar_lines(base: PackedVector2Array, facing_edges: Array[bool], cutters: Array[PackedVector2Array], side_cutters: Array[PackedVector2Array]) -> void:
+## side is left out when its base corner is inside a side cutter. base and top
+## have one point each per corner (top = the point of the top above it).
+func _build_sonar_lines(base: PackedVector2Array, top: PackedVector2Array, facing_edges: Array[bool], cutters: Array[PackedVector2Array], side_cutters: Array[PackedVector2Array]) -> void:
 	_sonar_lines.clear()
 	_sonar_sights.clear()
 	_sonar_through_self.clear()
-	var down := Vector2(0.0, height)
 	var count: int = base.size()
+	var side_runs: Array[bool] = _merged_runs(base, facing_edges)
+	var cutter_bounds: Array[Rect2] = _bounds_list(cutters)
+	var side_bounds: Array[Rect2] = _bounds_list(side_cutters)
 	for i: int in count:
-		var edge_pieces: Array[PackedVector2Array] = _clipped(PackedVector2Array([base[i], base[(i + 1) % count]]), cutters)
+		var a: Vector2 = base[i]
+		var b: Vector2 = base[(i + 1) % count]
+		var edge_pieces: Array[PackedVector2Array] = _clipped(PackedVector2Array([a, b]), cutters, cutter_bounds)
 		# The top outline: seen from above, checked straight below it on the base.
 		for piece: PackedVector2Array in edge_pieces:
-			_add_sonar_line(_moved(piece, -down), piece, true)
+			var top_piece := PackedVector2Array()
+			for point: Vector2 in piece:
+				top_piece.append(top[i].lerp(top[(i + 1) % count], a.distance_to(point) / maxf(a.distance_to(b), 0.001)))
+			_add_sonar_line(top_piece, piece, true)
 		# A side where a run of faces starts or ends, from the top down to the base.
-		var previous: bool = facing_edges[(i - 1 + count) % count]
-		if facing_edges[i] != previous and not _inside_any(base[i], side_cutters):
+		var previous: bool = side_runs[(i - 1 + count) % count]
+		if side_runs[i] != previous and not _inside_any(a, side_cutters, side_bounds):
 			# Its corner sits where the base turns away: the ray to it grazes this
 			# rock, so it may pass through it like the top.
-			_add_sonar_line(PackedVector2Array([base[i] - down, base[i]]), PackedVector2Array([base[i], base[i]]), true)
-		# The front base edge under each face.
-		if facing_edges[i]:
+			_add_sonar_line(PackedVector2Array([top[i], a]), PackedVector2Array([a, a]), true)
+		# The front base edge under each face (in a real run of faces).
+		if facing_edges[i] and side_runs[i]:
 			for piece: PackedVector2Array in edge_pieces:
 				_add_sonar_line(piece, piece, false)
+
+
+## The facing flags with every run (of faces or of gaps) shorter than
+## side_min_run along the base flipped to its neighbours' value: gaps first
+## (bumps inside a face), then short faces (bumps on a side).
+func _merged_runs(base: PackedVector2Array, flags: Array[bool]) -> Array[bool]:
+	var result: Array[bool] = flags.duplicate()
+	for value: bool in [false, true]:
+		var count: int = result.size()
+		# Start at an edge where the value changes, so no run wraps around.
+		var start: int = -1
+		for i: int in count:
+			if result[i] != result[(i - 1 + count) % count]:
+				start = i
+				break
+		if start < 0:
+			return result
+		var i: int = 0
+		while i < count:
+			var first: int = (start + i) % count
+			var length: float = 0.0
+			var n: int = 0
+			while n < count and result[(first + n) % count] == result[first]:
+				length += base[(first + n) % count].distance_to(base[(first + n + 1) % count])
+				n += 1
+			if result[first] == value and length < side_min_run and n < count:
+				for k: int in n:
+					result[(first + k) % count] = not value
+			i += n
+	return result
 
 
 ## Four bands around rect (outside it), as polygons.
@@ -412,9 +671,14 @@ func _add_sonar_line(line: PackedVector2Array, sights: PackedVector2Array, throu
 
 
 ## The parts of an open line outside every cutter.
-static func _clipped(line: PackedVector2Array, cutters: Array[PackedVector2Array]) -> Array[PackedVector2Array]:
+## bounds: the cutters' bounds (_bounds_list), to skip the far ones quickly.
+static func _clipped(line: PackedVector2Array, cutters: Array[PackedVector2Array], bounds: Array[Rect2] = []) -> Array[PackedVector2Array]:
 	var pieces: Array[PackedVector2Array] = [line]
-	for cutter: PackedVector2Array in cutters:
+	var line_bounds: Rect2 = _bounds_of(line)
+	for c: int in cutters.size():
+		var cutter: PackedVector2Array = cutters[c]
+		if not bounds.is_empty() and not bounds[c].intersects(line_bounds, true):
+			continue
 		var kept: Array[PackedVector2Array] = []
 		for piece: PackedVector2Array in pieces:
 			kept.append_array(Geometry2D.clip_polyline_with_polygon(piece, cutter))
@@ -422,11 +686,20 @@ static func _clipped(line: PackedVector2Array, cutters: Array[PackedVector2Array
 	return pieces
 
 
-static func _inside_any(point: Vector2, cutters: Array[PackedVector2Array]) -> bool:
-	for cutter: PackedVector2Array in cutters:
-		if Geometry2D.is_point_in_polygon(point, cutter):
+static func _inside_any(point: Vector2, cutters: Array[PackedVector2Array], bounds: Array[Rect2] = []) -> bool:
+	for c: int in cutters.size():
+		if not bounds.is_empty() and not bounds[c].has_point(point):
+			continue
+		if Geometry2D.is_point_in_polygon(point, cutters[c]):
 			return true
 	return false
+
+
+static func _bounds_list(polygons: Array[PackedVector2Array]) -> Array[Rect2]:
+	var result: Array[Rect2] = []
+	for polygon: PackedVector2Array in polygons:
+		result.append(_bounds_of(polygon))
+	return result
 
 
 ## Downward share of the edge's outward normal (1 = faces straight down).
@@ -486,3 +759,25 @@ static func _noise(x: float) -> float:
 	var cell: float = floorf(x)
 	var f: float = x - cell
 	return lerpf(_hash(cell), _hash(cell + 1.0), f * f * (3.0 - 2.0 * f)) * 2.0 - 1.0
+
+
+## Smooth 2D value noise in [-1, 1].
+static func _noise2(p: Vector2) -> float:
+	var cell := Vector2(floorf(p.x), floorf(p.y))
+	var f: Vector2 = p - cell
+	f = f * f * (Vector2(3.0, 3.0) - 2.0 * f)
+	var top_row: float = lerpf(_hash(cell.x * 57.0 + cell.y * 113.0), _hash((cell.x + 1.0) * 57.0 + cell.y * 113.0), f.x)
+	var bottom_row: float = lerpf(_hash(cell.x * 57.0 + (cell.y + 1.0) * 113.0), _hash((cell.x + 1.0) * 57.0 + (cell.y + 1.0) * 113.0), f.x)
+	return lerpf(top_row, bottom_row, f.y) * 2.0 - 1.0
+
+
+## The outline with extra points, so no edge is longer than max_length.
+static func _densified(points: PackedVector2Array, max_length: float) -> PackedVector2Array:
+	var result := PackedVector2Array()
+	for i: int in points.size():
+		var a: Vector2 = points[i]
+		var b: Vector2 = points[(i + 1) % points.size()]
+		var pieces: int = maxi(1, ceili(a.distance_to(b) / max_length))
+		for k: int in pieces:
+			result.append(a.lerp(b, float(k) / pieces))
+	return result

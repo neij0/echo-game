@@ -60,6 +60,26 @@ signal level_built(level_index: int)
 @export var door_shake_strength: float = 6.0
 @export var door_shake_time: float = 0.5
 
+@export_group("Seals")
+## Soft bumps on a seal's edge facing the room (pixels, + or -), one point
+## every seal_bump_spacing pixels.
+@export var seal_bump: float = 10.0
+@export var seal_bump_spacing: float = 30.0
+
+@export_group("Rock Height (3/4 view)")
+## A rock's middle height is picked in this share of its room's height range
+## (0 = rock_height_min, 1 = rock_height_max), by the rock's position.
+@export var rock_middle_low: float = 0.25
+@export var rock_middle_high: float = 0.75
+## How far the height rises and falls along a rock, as a share of the range.
+@export var rock_height_spread: float = 0.4
+## Near a connected doorway the rocks drop to this height, rising back to
+## their own over doorway_clear_distance (so no top hides the way through).
+@export var doorway_rock_height: float = 10.0
+@export var doorway_clear_distance: float = 150.0
+## Depth of the doorway corridor on each side of the shared room edge.
+@export var doorway_clear_depth: float = 200.0
+
 @export_group("Validation")
 @export var validator_cell_size: float = 20.0
 ## Free space a player needs (player radius + margin).
@@ -247,7 +267,7 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 			if other and other.has_opening(RoomGrid.opposite(side)):
 				neighbours.append(cell + RoomGrid.direction(side))
 			else:
-				layout.seals.append(seal_polygon(cell, side))
+				layout.seals.append(seal_polygon(cell, side, true))
 				layout.seal_cells.append(cell)
 		layout.links[cell] = neighbours
 
@@ -319,7 +339,9 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 
 
 ## Rock that closes an unused opening of a room (this node's space).
-func seal_polygon(cell: Vector2i, side: int) -> PackedVector2Array:
+## natural: its edge facing the room gets soft bumps (seal_bump), so it does
+## not look like a cut block; its ends stay where they are.
+func seal_polygon(cell: Vector2i, side: int, natural: bool = false) -> PackedVector2Array:
 	var size: float = world.room_size
 	var half_door: float = world.room_door_width * 0.5 + world.room_wall_band * 0.2
 	var depth: float = world.room_seal_depth
@@ -334,7 +356,32 @@ func seal_polygon(cell: Vector2i, side: int) -> PackedVector2Array:
 		_:
 			local = Rect2(size - depth, size * 0.5 - half_door, depth, half_door * 2.0)
 	local.position += Vector2(cell) * size
-	return PackedVector2Array([local.position, Vector2(local.end.x, local.position.y), local.end, Vector2(local.position.x, local.end.y)])
+	var corners := PackedVector2Array([local.position, Vector2(local.end.x, local.position.y), local.end, Vector2(local.position.x, local.end.y)])
+	if not natural:
+		return corners
+	# The edge facing the room: [corner from, corner to, direction into the room].
+	var inner: Array = [3, 0, Vector2.LEFT]
+	match side:
+		RoomGrid.Side.NORTH:
+			inner = [2, 3, Vector2.DOWN]
+		RoomGrid.Side.SOUTH:
+			inner = [0, 1, Vector2.UP]
+		RoomGrid.Side.WEST:
+			inner = [1, 2, Vector2.RIGHT]
+	var result := PackedVector2Array()
+	var phase: float = fposmod(sin(cell.x * 12.9898 + cell.y * 78.233 + side * 37.719) * 43758.5453, 1.0) * TAU
+	for i: int in 4:
+		result.append(corners[i])
+		if i != int(inner[0]):
+			continue
+		var a: Vector2 = corners[inner[0]]
+		var b: Vector2 = corners[inner[1]]
+		var steps: int = maxi(2, ceili(a.distance_to(b) / seal_bump_spacing))
+		for k: int in range(1, steps):
+			var t: float = float(k) / steps
+			var bump: float = seal_bump * sin(PI * t) * (0.6 * sin(TAU * 1.5 * t + phase) + 0.4 * sin(TAU * 3.3 * t + phase * 1.7))
+			result.append(a.lerp(b, t) + (inner[2] as Vector2) * bump)
+	return result
 
 
 ## Shard spots: one per room (never the start or exit room). Each next shard
@@ -449,7 +496,9 @@ func _instantiate(layout: Layout) -> void:
 		seal.name = "Seal"
 		seal.polygon = layout.seals[i]
 		seal.color = floor_color.lightened(world.rock_fill_lift)
-		seal.height = (layout.rooms[layout.seal_cells[i]] as LevelChunk).rock_height
+		var seal_room := layout.rooms[layout.seal_cells[i]] as LevelChunk
+		seal.height = lerpf(seal_room.rock_height_min, seal_room.rock_height_max, 0.5)
+		seal.height_spread = (seal_room.rock_height_max - seal_room.rock_height_min) * rock_height_spread
 		_level.add_child(seal)
 	_build_rock_faces(layout)
 	_player_spawns = layout.player_spawns
@@ -651,14 +700,27 @@ func _apply_palette(chunk: LevelChunk, floor_color: Color) -> void:
 		if node is RockWall:
 			var wall := node as RockWall
 			wall.color = floor_color.lightened(world.rock_fill_lift)
-			wall.height = chunk.rock_height
+			_apply_height(wall, chunk)
 		elif node is Polygon2D:
 			var floor_shape := node as Polygon2D
 			floor_shape.color = floor_color
 			floor_shape.z_index = floor_z_index
 
 
-## Top surfaces and front faces of the tall rocks (rooms with a rock_height).
+## A rock's middle height and spread from its room's range (the same rock
+## gets the same height on every attempt).
+func _apply_height(wall: RockWall, chunk: LevelChunk) -> void:
+	var middle := Vector2.ZERO
+	for point: Vector2 in wall.polygon:
+		middle += point / wall.polygon.size()
+	middle += chunk.position
+	var pick: float = fposmod(sin(middle.x * 0.0173 + middle.y * 0.0291) * 43758.5453, 1.0)
+	var share: float = lerpf(rock_middle_low, rock_middle_high, pick)
+	wall.height = lerpf(chunk.rock_height_min, chunk.rock_height_max, share)
+	wall.height_spread = (chunk.rock_height_max - chunk.rock_height_min) * rock_height_spread
+
+
+## Top surfaces and front faces of the tall rocks (rooms with a rock height range).
 ## Overlapping rocks need no cutting: every piece sorts by its own base, so
 ## the rock in front covers the one behind. Every base of the level is passed
 ## on, so touching rocks cast no shadow on each other.
@@ -679,8 +741,44 @@ func _build_rock_faces(layout: Layout) -> void:
 	var rooms: Array[Rect2] = []
 	for chunk: LevelChunk in layout.chunks:
 		rooms.append(global_transform * Rect2(chunk.position, Vector2.ONE * world.room_size))
+	var doorways: Array[Rect2] = _doorway_corridors(layout)
+	var base_bounds: Array[Rect2] = []
+	for base: PackedVector2Array in bases:
+		base_bounds.append(_bounds_of(base))
 	for wall: RockWall in walls:
-		wall.build_faces(bases, _room_of(wall, rooms))
+		var reach: Rect2 = _bounds_of(wall.get_global_outline()).grow(doorway_clear_distance)
+		wall.clear_zones.clear()
+		for doorway: Rect2 in doorways:
+			if reach.intersects(doorway):
+				wall.clear_zones.append(doorway)
+		wall.clear_height = doorway_rock_height
+		wall.clear_distance = doorway_clear_distance
+		wall.build_faces(bases, _room_of(wall, rooms), base_bounds)
+
+
+## The corridor of every connected doorway (global): door wide, reaching
+## doorway_clear_depth into both rooms.
+func _doorway_corridors(layout: Layout) -> Array[Rect2]:
+	var size: float = world.room_size
+	var result: Array[Rect2] = []
+	for cell: Vector2i in layout.links:
+		for other: Vector2i in layout.links[cell]:
+			# Each doorway once (from the cell with the smaller neighbour step).
+			if other.x < cell.x or other.y < cell.y:
+				continue
+			var middle: Vector2 = (Vector2(cell) + Vector2(other) + Vector2.ONE) * 0.5 * size
+			var across: float = world.room_door_width
+			var along: float = doorway_clear_depth * 2.0
+			var extent := Vector2(along, across) if other.x != cell.x else Vector2(across, along)
+			result.append(global_transform * Rect2(middle - extent * 0.5, extent))
+	return result
+
+
+static func _bounds_of(points: PackedVector2Array) -> Rect2:
+	var bounds := Rect2(points[0], Vector2.ZERO)
+	for point: Vector2 in points:
+		bounds = bounds.expand(point)
+	return bounds
 
 
 ## The room rect (global) holding the middle of the wall's base, or an empty rect.
