@@ -412,6 +412,5 @@ func _draw_sparks() -> void:
 		var color: Color = _hdr(spark_color, spark_energy, (1.0 - t) * spark.strength)
 		# Drift back towards the pulse, like a tiny reflection off the rock.
 		var center: Vector2 = spark.position - spark.direction * spark_drift * t
+		# A round glint only: crossed lines read as hair-like ticks on the rock.
 		draw_circle(center, size * 0.5, color)
-		draw_line(center - Vector2(size, 0.0), center + Vector2(size, 0.0), color, 1.0, true)
-		draw_line(center - Vector2(0.0, size), center + Vector2(0.0, size), color, 1.0, true)

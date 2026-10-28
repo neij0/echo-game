@@ -60,6 +60,21 @@ signal level_built(level_index: int)
 @export var door_shake_strength: float = 6.0
 @export var door_shake_time: float = 0.5
 
+@export_group("Floor Detail")
+## Subtle sand ripples and pebbles multiplied over every room's floor
+## (SurfaceTextures.floor_detail), low contrast so they never compete with
+## the rocks: how dark the ripples / pebbles get, the ripple spacing, the
+## pebbles per texture, and the texture size (pixels, it repeats).
+@export_range(0.0, 0.5) var floor_ripple_strength: float = 0.07
+@export var floor_ripple_period: float = 26.0
+@export_range(0.0, 0.5) var floor_pebble_strength: float = 0.12
+@export var floor_pebble_count: int = 60
+@export var floor_texture_size: int = 256
+@export var floor_texture_seed: int = 5
+## The outer rock around the level: the rock colour lightened by this much,
+## so it continues the (lighter) rock tops at the level's edge.
+@export_range(0.0, 1.0) var outer_rock_lift: float = 0.28
+
 @export_group("Seals")
 ## Soft bumps on a seal's edge facing the room (pixels, + or -), one point
 ## every seal_bump_spacing pixels.
@@ -487,7 +502,7 @@ func _instantiate(layout: Layout) -> void:
 	var floor_color: Color = world.floor_color_shallow.lerp(world.floor_color_deep, progress)
 	for chunk: LevelChunk in layout.chunks:
 		_apply_palette(chunk, floor_color)
-	_add_outer_rock(layout, floor_color.lightened(world.rock_fill_lift))
+	_add_outer_rock(layout, floor_color.lightened(world.rock_fill_lift).lightened(outer_rock_lift))
 	# Floors first (all chunks), so pocket floors never cover a neighbour's walls.
 	for chunk: LevelChunk in layout.chunks:
 		_level.add_child(chunk)
@@ -705,6 +720,8 @@ func _apply_palette(chunk: LevelChunk, floor_color: Color) -> void:
 			var floor_shape := node as Polygon2D
 			floor_shape.color = floor_color
 			floor_shape.z_index = floor_z_index
+			floor_shape.texture = SurfaceTextures.floor_detail(floor_texture_size, floor_ripple_strength, floor_ripple_period, floor_pebble_strength, floor_pebble_count, floor_texture_seed)
+			floor_shape.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 
 
 ## A rock's middle height and spread from its room's range (the same rock

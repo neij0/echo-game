@@ -19,6 +19,13 @@ var line_widths: Array[float] = []
 ## Fills drawn first that do not hide what is behind (the contact shadow).
 var shadows: Array[PackedVector2Array] = []
 var shadow_colors: Array[PackedColorArray] = []
+## Multiplied over the fills (rock grain), repeating every texture_size
+## pixels in global space, so neighbouring pieces continue the same grain.
+var texture: Texture2D
+var texture_size: float = 256.0
+## False for a piece that never hides anything (the ground shadow): it stays
+## out of the cover tests.
+var covers_things: bool = true
 
 ## Size of one cell of the lookup grid (global pixels).
 const GRID_CELL: float = 256.0
@@ -36,6 +43,10 @@ var _cells: Array[Vector2i] = []
 
 
 func _ready() -> void:
+	if texture:
+		texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	if not covers_things:
+		return
 	_bounds = global_bounds
 	if not _bounds.has_area():
 		var first: bool = true
@@ -106,6 +117,12 @@ func _draw() -> void:
 	for i: int in shadows.size():
 		draw_polygon(shadows[i], shadow_colors[i])
 	for i: int in fills.size():
-		draw_polygon(fills[i], fill_colors[i])
+		if texture == null:
+			draw_polygon(fills[i], fill_colors[i])
+			continue
+		var uvs := PackedVector2Array()
+		for point: Vector2 in fills[i]:
+			uvs.append((point + global_position) / texture_size)
+		draw_polygon(fills[i], fill_colors[i], uvs, texture)
 	for i: int in lines.size():
 		draw_polyline(lines[i], line_colors[i], line_widths[i], true)

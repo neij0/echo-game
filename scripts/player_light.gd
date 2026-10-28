@@ -19,6 +19,19 @@ extends PointLight2D
 ## Size of the generated light texture in pixels.
 @export var texture_size: int = 512
 
+@export_group("Rock Tops (3/4 view)")
+## A rock's top is drawn higher on screen than its base, so it is farther
+## from this light than the floor in front of it and would look darker (a pit,
+## not a raised rock). A copy of this light raised by top_light_raise pixels
+## lights only the light layer top_light_layer (the tops, RockWall), with
+## top_light_share of the energy and no shadows, as if each top were lit
+## where it stands.
+@export var top_light_raise: float = 48.0
+@export_range(0.0, 2.0) var top_light_share: float = 0.5
+@export var top_light_layer: int = 2
+
+var _top_light: PointLight2D
+
 
 func _ready() -> void:
 	texture = LightTextures.radial_smooth(texture_size, hard_edge)
@@ -28,6 +41,14 @@ func _ready() -> void:
 	shadow_enabled = shadows
 	shadow_filter = Light2D.SHADOW_FILTER_PCF13
 	shadow_filter_smooth = shadow_smoothing
+	if top_light_share > 0.0:
+		_top_light = PointLight2D.new()
+		_top_light.texture = texture
+		_top_light.texture_scale = texture_scale
+		_top_light.color = light_color
+		_top_light.range_item_cull_mask = 1 << (top_light_layer - 1)
+		_top_light.position = Vector2(0.0, -top_light_raise)
+		add_child(_top_light)
 
 
 func _process(_delta: float) -> void:
@@ -35,3 +56,5 @@ func _process(_delta: float) -> void:
 	# autoloads (godot -s ...) can still load the player scripts.
 	var game := get_node_or_null("/root/Game") as GameState
 	energy = base_energy * (game.brightness if game else 1.0)
+	if _top_light:
+		_top_light.energy = energy * top_light_share

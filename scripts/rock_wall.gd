@@ -42,22 +42,26 @@ extends StaticBody2D
 ## Tall rocks: base edges within this distance of another rock (a seal against
 ## a wall) cast no shadow, so touching rocks light like one rock.
 @export var occluder_join_margin: float = 2.0
-## Tall rocks: a face side this close to another rock (a seal a few pixels
-## behind the wall's face) gets no sonar line, so the seam does not show.
+## Tall rocks: sonar outline within this distance of another rock (a seal a
+## few pixels behind the wall's face, the room's edge) is left out, so the
+## seams between rocks do not show.
 @export var sonar_side_margin: float = 6.0
-## Base edges whose outward normal points down at least this much get a face.
-@export_range(0.0, 1.0) var face_min_facing: float = 0.15
-## A run of faces (or a gap between faces) shorter than this along the base
-## does not count for the sonar's face sides, so a bumpy side of a rock does
-## not get a side line at every bump.
-@export var side_min_run: float = 70.0
+## Spacing of the points of the sonar outline (each gets its own line of sight).
+@export var sonar_point_spacing: float = 12.0
+## Base edges whose outward normal points down at least this much get a face
+## (near 0: every edge facing down at all, so the outline has no steps).
+@export_range(0.0, 1.0) var face_min_facing: float = 0.02
 ## Width of the top strips and longest face piece: each piece sorts by its
 ## own base, so large irregular rocks sort correctly.
 @export var face_piece_length: float = 64.0
 
 @export_group("Light and Colour (3/4 view)")
 ## The top surface (lit from above): the rock colour lightened by this much.
-@export_range(0.0, 1.0) var top_lift: float = 0.12
+## Clearly lighter than the floor, so the top never reads as floor.
+@export_range(0.0, 1.0) var top_lift: float = 0.36
+## The tops are also on this light layer, lit by the raised copy of each
+## player's light (PlayerLight.top_light_layer, same number).
+@export var top_light_layer: int = 2
 ## How much darker than the rock colour the face is under the rim / at the base.
 @export_range(0.0, 1.0) var face_darken_top: float = 0.3
 @export_range(0.0, 1.0) var face_darken_bottom: float = 0.75
@@ -90,6 +94,25 @@ extends StaticBody2D
 ## Dark band on the floor where the face meets it.
 @export var contact_shadow_size: float = 14.0
 @export_range(0.0, 1.0) var contact_shadow_alpha: float = 0.6
+
+@export_group("Grain (3/4 view)")
+## Rock grain multiplied over the top and the faces (SurfaceTextures): how
+## dark its darkest specks get, their size, the share of horizontal streaks
+## (strata), and the pixels after which it repeats.
+@export_range(0.0, 1.0) var grain_strength: float = 0.32
+@export var grain_frequency: float = 0.06
+@export_range(0.0, 1.0) var grain_streaks: float = 0.4
+@export var grain_size: int = 256
+@export var grain_seed: int = 11
+
+@export_group("Ground Shadow (3/4 view)")
+## Soft dark band on the floor around the base, wider and darker below the
+## front face, so the rock sits on the floor. Under players and creatures.
+@export var ground_shadow_size: float = 16.0
+@export_range(0.0, 1.0) var ground_shadow_alpha: float = 0.35
+@export var front_shadow_size: float = 34.0
+@export_range(0.0, 1.0) var front_shadow_alpha: float = 0.55
+@export var ground_shadow_z_index: int = -2
 
 @export_group("Top Detail (3/4 view)")
 ## Light variation over the top (share of brightness, + or -), in patches of
@@ -211,23 +234,26 @@ func build_faces(others: Array[PackedVector2Array], room: Rect2, other_bounds: A
 	# Where this rock touches other rock (another base, the next room or the
 	# outer rock beyond the room's edge).
 	var touch_cutters: Array[PackedVector2Array] = base_cutters.duplicate()
-	var side_cutters: Array[PackedVector2Array] = _cutters(outline, others, other_bounds, sonar_side_margin)
+	var sonar_cutters: Array[PackedVector2Array] = _cutters(outline, others, other_bounds, sonar_side_margin)
 	if room.has_area():
 		touch_cutters.append_array(_beyond(room.grow(-occluder_join_margin)))
-		side_cutters.append_array(_beyond(room.grow(-sonar_side_margin)))
+		sonar_cutters.append_array(_beyond(room.grow(-sonar_side_margin)))
 	# Short edges, so the height can change along the rock; one top point per base point.
 	var base: PackedVector2Array = _densified(outline, face_piece_length)
 	var top: PackedVector2Array = _top_outline(base, touch_cutters)
 	_add_top(top)
 	var count: int = base.size()
-	var facing_edges: Array[bool] = []
+	var faces: Array[PackedVector2Array] = []
+	var face_base_ys := PackedFloat32Array()
 	for i: int in count:
 		var next: int = (i + 1) % count
 		var facing: float = _facing(base[i], base[next], _orientation)
-		facing_edges.append(facing >= face_min_facing)
 		if facing >= face_min_facing:
 			_add_face(base[i], base[next], top[i], top[next], facing)
-	_build_sonar_lines(base, top, facing_edges, touch_cutters, side_cutters)
+			faces.append(PackedVector2Array([base[i], base[next], top[next], top[i]]))
+			face_base_ys.append(maxf(base[i].y, base[next].y))
+	_add_ground_shadow(base, touch_cutters)
+	_build_sonar_lines(outline, top, faces, face_base_ys, sonar_cutters)
 
 
 ## Height of the rock above base point p (global): its middle height with a
@@ -346,13 +372,16 @@ func _add_top(top: PackedVector2Array) -> void:
 	while x < bounds.end.x:
 		var strip := _rect_polygon(Rect2(x, bounds.position.y - 1.0, size, bounds.size.y + 2.0))
 		for part: PackedVector2Array in Geometry2D.intersect_polygons(top, strip):
-			# A cut can leave a degenerate sliver that cannot be drawn.
-			if Geometry2D.is_polygon_clockwise(part) != Geometry2D.is_polygon_clockwise(top) or Geometry2D.triangulate_polygon(part).is_empty():
+			# A strip cut from a simple outline has no holes (so the point order
+			# says nothing: some outlines run the other way); only degenerate
+			# slivers are skipped.
+			if Geometry2D.triangulate_polygon(part).is_empty():
 				continue
 			var part_bounds: Rect2 = _bounds_of(part)
 			var base_y: float = part_bounds.end.y + lowest[roundi((x - x_start) / size)] - 0.5
 			var piece: RockFace = _new_piece(base_y)
 			piece.global_bounds = part_bounds
+			piece.light_mask = 1 | (1 << (top_light_layer - 1))
 			var y: float = floorf(part_bounds.position.y / top_cell_size) * top_cell_size
 			while y < part_bounds.end.y:
 				for cell: PackedVector2Array in Geometry2D.intersect_polygons(part, _rect_polygon(Rect2(x, y, size, top_cell_size))):
@@ -398,10 +427,8 @@ func _lowest_heights(top: PackedVector2Array, x0: float, strip_width: float) -> 
 ## Cracks, moss patches and barnacle clusters scattered over the top, each in
 ## the strip piece it lies on (same rock = same look every attempt).
 func _add_top_details(top: PackedVector2Array, top_color: Color, pieces: Array[RockFace], parts: Array[PackedVector2Array]) -> void:
-	var inner: Array[PackedVector2Array] = []
-	for shrunk: PackedVector2Array in Geometry2D.offset_polygon(top, -detail_margin):
-		if Geometry2D.is_polygon_clockwise(shrunk) == Geometry2D.is_polygon_clockwise(top):
-			inner.append(shrunk)
+	# Shrinking a simple outline gives no holes, only pieces.
+	var inner: Array[PackedVector2Array] = Geometry2D.offset_polygon(top, -detail_margin)
 	if inner.is_empty():
 		return
 	var bounds: Rect2 = _bounds_of(top)
@@ -572,6 +599,8 @@ func _new_piece(base_y: float) -> RockFace:
 	var piece := RockFace.new()
 	piece.z_as_relative = false
 	piece.z_index = face_z_index
+	piece.texture = SurfaceTextures.rock_grain(grain_size, grain_strength, grain_frequency, grain_streaks, grain_seed)
+	piece.texture_size = grain_size
 	piece.transform = global_transform.affine_inverse() * Transform2D(0.0, Vector2(0.0, base_y))
 	return piece
 
@@ -582,68 +611,132 @@ static func _add_line(piece: RockFace, line: PackedVector2Array, line_color: Col
 	piece.line_widths.append(width)
 
 
-## The sonar outline (see get_sonar_lines), global, without the lines over
-## base edges inside the cutters (where this rock touches other rock); a face
-## side is left out when its base corner is inside a side cutter. base and top
-## have one point each per corner (top = the point of the top above it).
-func _build_sonar_lines(base: PackedVector2Array, top: PackedVector2Array, facing_edges: Array[bool], cutters: Array[PackedVector2Array], side_cutters: Array[PackedVector2Array]) -> void:
-	_sonar_lines.clear()
-	_sonar_sights.clear()
-	_sonar_through_self.clear()
+## The ground shadow: a band along every base edge (wider and darker the
+## more the edge faces down) plus a small fan at each outer corner, on the
+## floor under everything that moves. Not where the rock touches other rock.
+func _add_ground_shadow(base: PackedVector2Array, touch_cutters: Array[PackedVector2Array]) -> void:
+	var piece := RockFace.new()
+	piece.covers_things = false
+	piece.z_as_relative = false
+	piece.z_index = ground_shadow_z_index
+	piece.transform = global_transform.affine_inverse()
+	var touch_bounds: Array[Rect2] = _bounds_list(touch_cutters)
 	var count: int = base.size()
-	var side_runs: Array[bool] = _merged_runs(base, facing_edges)
-	var cutter_bounds: Array[Rect2] = _bounds_list(cutters)
-	var side_bounds: Array[Rect2] = _bounds_list(side_cutters)
+	var normals := PackedVector2Array()
+	var sizes := PackedFloat32Array()
+	var shades := PackedColorArray()
 	for i: int in count:
 		var a: Vector2 = base[i]
 		var b: Vector2 = base[(i + 1) % count]
-		var edge_pieces: Array[PackedVector2Array] = _clipped(PackedVector2Array([a, b]), cutters, cutter_bounds)
-		# The top outline: seen from above, checked straight below it on the base.
-		for piece: PackedVector2Array in edge_pieces:
-			var top_piece := PackedVector2Array()
-			for point: Vector2 in piece:
-				top_piece.append(top[i].lerp(top[(i + 1) % count], a.distance_to(point) / maxf(a.distance_to(b), 0.001)))
-			_add_sonar_line(top_piece, piece, true)
-		# A side where a run of faces starts or ends, from the top down to the base.
-		var previous: bool = side_runs[(i - 1 + count) % count]
-		if side_runs[i] != previous and not _inside_any(a, side_cutters, side_bounds):
-			# Its corner sits where the base turns away: the ray to it grazes this
-			# rock, so it may pass through it like the top.
-			_add_sonar_line(PackedVector2Array([top[i], a]), PackedVector2Array([a, a]), true)
-		# The front base edge under each face (in a real run of faces).
-		if facing_edges[i] and side_runs[i]:
-			for piece: PackedVector2Array in edge_pieces:
-				_add_sonar_line(piece, piece, false)
+		var down: float = clampf(_facing(a, b, _orientation), 0.0, 1.0)
+		normals.append(-_inward(a, b))
+		sizes.append(lerpf(ground_shadow_size, front_shadow_size, down))
+		shades.append(Color(0.0, 0.0, 0.0, lerpf(ground_shadow_alpha, front_shadow_alpha, down)))
+	var clear := Color(0.0, 0.0, 0.0, 0.0)
+	for i: int in count:
+		var out: Vector2 = normals[i] * sizes[i]
+		for part: PackedVector2Array in _clipped(PackedVector2Array([base[i], base[(i + 1) % count]]), touch_cutters, touch_bounds):
+			var first: Vector2 = part[0]
+			var last: Vector2 = part[part.size() - 1]
+			if first.distance_squared_to(last) < 1.0:
+				continue
+			piece.shadows.append(PackedVector2Array([first, last, last + out, first + out]))
+			piece.shadow_colors.append(PackedColorArray([shades[i], shades[i], clear, clear]))
+		# Outer corner: fill the wedge between this edge's band and the previous one's.
+		var previous: int = (i - 1 + count) % count
+		var p: Vector2 = base[i]
+		var fan := PackedVector2Array([p, p + normals[previous] * sizes[previous], p + out])
+		if absf(_doubled_area(fan)) < 1.0 or _inside_any(p, touch_cutters, touch_bounds) or Geometry2D.is_point_in_polygon((fan[1] + fan[2]) * 0.5, base):
+			continue
+		piece.shadows.append(fan)
+		piece.shadow_colors.append(PackedColorArray([shades[i], clear, clear]))
+	add_child(piece)
 
 
-## The facing flags with every run (of faces or of gaps) shorter than
-## side_min_run along the base flipped to its neighbours' value: gaps first
-## (bumps inside a face), then short faces (bumps on a side).
-func _merged_runs(base: PackedVector2Array, flags: Array[bool]) -> Array[bool]:
-	var result: Array[bool] = flags.duplicate()
-	for value: bool in [false, true]:
-		var count: int = result.size()
-		# Start at an edge where the value changes, so no run wraps around.
-		var start: int = -1
-		for i: int in count:
-			if result[i] != result[(i - 1 + count) % count]:
-				start = i
-				break
-		if start < 0:
-			return result
-		var i: int = 0
-		while i < count:
-			var first: int = (start + i) % count
-			var length: float = 0.0
-			var n: int = 0
-			while n < count and result[(first + n) % count] == result[first]:
-				length += base[(first + n) % count].distance_to(base[(first + n + 1) % count])
-				n += 1
-			if result[first] == value and length < side_min_run and n < count:
-				for k: int in n:
-					result[(first + k) % count] = not value
-			i += n
-	return result
+## The sonar outline (see get_sonar_lines), global: the outer silhouette of
+## the drawn rock (the top and every face as one shape: top outline, face
+## sides, front base edge) and the rim where a face meets the top, where no
+## face in front hides it. Never the lines inside the shape (a concave rock's
+## hidden edges) and never where the rock touches other rock: a point whose
+## base point lies inside a cutter is left out.
+func _build_sonar_lines(outline: PackedVector2Array, top: PackedVector2Array, faces: Array[PackedVector2Array], face_base_ys: PackedFloat32Array, cutters: Array[PackedVector2Array]) -> void:
+	_sonar_lines.clear()
+	_sonar_sights.clear()
+	_sonar_through_self.clear()
+	var cutter_bounds: Array[Rect2] = _bounds_list(cutters)
+	# The silhouette: the top merged with every face (they share the rim).
+	var silhouette: PackedVector2Array = top
+	for face: PackedVector2Array in faces:
+		if absf(_doubled_area(face)) < 2.0:
+			continue
+		var merged: PackedVector2Array = _largest(Geometry2D.merge_polygons(silhouette, face))
+		if not merged.is_empty():
+			silhouette = merged
+	var loop: PackedVector2Array = _densified(silhouette, sonar_point_spacing)
+	loop.append(loop[0])
+	_add_sonar_run(loop, outline, cutters, cutter_bounds)
+	# Rims: the top edge of each face, unless a face in front covers it.
+	var face_bounds: Array[Rect2] = _bounds_list(faces)
+	for f: int in faces.size():
+		var at: Vector2 = faces[f][3]
+		var bt: Vector2 = faces[f][2]
+		var steps: int = maxi(1, ceili(at.distance_to(bt) / sonar_point_spacing))
+		var rim := PackedVector2Array()
+		for k: int in steps + 1:
+			# Just inside the ends: the corners touch the neighbouring faces.
+			var point: Vector2 = at.lerp(bt, clampf(float(k) / steps, 0.02, 0.98))
+			var hidden: bool = false
+			for g: int in faces.size():
+				if face_base_ys[g] > face_base_ys[f] + 0.5 and face_bounds[g].has_point(point) and Geometry2D.is_point_in_polygon(point, faces[g]):
+					hidden = true
+					break
+			if hidden:
+				_add_sonar_run(rim, outline, cutters, cutter_bounds)
+				rim = PackedVector2Array()
+			else:
+				rim.append(point)
+		_add_sonar_run(rim, outline, cutters, cutter_bounds)
+
+
+## Adds a run of outline points as sonar lines. Each point gets the point its
+## line of sight is checked to: on the front base edge the point itself (it
+## must not be seen through the rock), else the base straight below it (the
+## ray may pass through this rock: the top and the sides are seen from above).
+## A point whose sight point lies over a cutter (other rock) splits the run.
+func _add_sonar_run(points: PackedVector2Array, outline: PackedVector2Array, cutters: Array[PackedVector2Array], cutter_bounds: Array[Rect2]) -> void:
+	var line := PackedVector2Array()
+	var sights := PackedVector2Array()
+	var line_on_base: bool = false
+	for point: Vector2 in points:
+		var on_base: bool = Geometry2D.is_point_in_polygon(point + Vector2(0.0, -2.0), outline) and not Geometry2D.is_point_in_polygon(point + Vector2(0.0, 2.0), outline)
+		var sight: Vector2 = point if on_base else point + Vector2(0.0, height_at(point))
+		if _inside_any(sight, cutters, cutter_bounds):
+			_add_sonar_line(line, sights, not line_on_base)
+			line = PackedVector2Array()
+			sights = PackedVector2Array()
+			continue
+		if not line.is_empty() and on_base != line_on_base:
+			# The kind of point changes: a new line, joined to the old one.
+			var joint: Vector2 = line[line.size() - 1]
+			var joint_sight: Vector2 = sights[sights.size() - 1]
+			_add_sonar_line(line, sights, not line_on_base)
+			line = PackedVector2Array([joint])
+			sights = PackedVector2Array([joint if on_base else joint_sight])
+		line.append(point)
+		sights.append(sight)
+		line_on_base = on_base
+	_add_sonar_line(line, sights, not line_on_base)
+
+
+static func _largest(polygons: Array[PackedVector2Array]) -> PackedVector2Array:
+	var best := PackedVector2Array()
+	var best_area: float = 0.0
+	for polygon: PackedVector2Array in polygons:
+		var area: float = absf(_doubled_area(polygon))
+		if area > best_area:
+			best_area = area
+			best = polygon
+	return best
 
 
 ## Four bands around rect (outside it), as polygons.
@@ -663,7 +756,7 @@ static func _beyond(rect: Rect2) -> Array[PackedVector2Array]:
 
 
 func _add_sonar_line(line: PackedVector2Array, sights: PackedVector2Array, through_self: bool) -> void:
-	if line.size() < 2:
+	if line.size() < 2 or line.size() != sights.size():
 		return
 	_sonar_lines.append(line)
 	_sonar_sights.append(sights)

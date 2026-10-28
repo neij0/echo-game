@@ -163,11 +163,18 @@ walls and corridors readable. Everything near is seen through **real lights**, n
    - The Guardian's `PlayerLight` is tiny and faint (~70 px): he is almost blind and has to
      stay near the Echo to see.
    - Corals (when woken by the pulse) and the ancient light are local lights too.
+   - Each `PlayerLight` has a raised copy (`top_light_raise`, `top_light_share`, no shadows)
+     that only lights the rock tops (light layer `top_light_layer`): a top is drawn higher
+     than its base, so without it the top gets less light than the floor in front of it and
+     the rock reads as a pit.
    - Light textures are float (`use_hdr`) and debanding is on, so soft fades show no rings.
-3. **Rock fill**: the floor colour lightened by `rock_fill_lift` (small, so walls only read
-   up close). Around the whole level the `LevelBuilder` draws solid "outer rock" (same fill,
-   no collision/shadow/sonar), so the level edge fades into darkness instead of a hard black
-   strip. The glowing sonar edges only come with a pulse.
+3. **Rock fill**: the floor colour lightened by `rock_fill_lift`; rock tops are clearly
+   lighter (`RockWall.top_lift`) with grain, so floor and rock never look alike. The floor
+   only gets subtle, low-contrast sand ripples and pebbles (`LevelBuilder` "Floor Detail",
+   `SurfaceTextures.floor_detail`). Around the whole level the `LevelBuilder` draws solid
+   "outer rock" (lighter by `outer_rock_lift`, like the tops; no collision/shadow/sonar), so
+   the level edge fades into darkness instead of a hard black strip. The glowing sonar
+   edges only come with a pulse.
 4. **Environment light**: marine snow (`MarineSnow`) everywhere; very faint light shafts
    (`LightShafts`, one smooth gradient each) where `StageDefinition.light_shaft_strength` > 0
    (first stage only).
@@ -219,25 +226,30 @@ The world is tilted to match the characters, still 2D:
   `top_inset`, except where the rock touches other rock, so the base is a little wider;
   lighter: `top_lift`; cut into vertical strips and cells with light patches
   (`top_variation`), plus scattered cracks, moss patches and barnacle clusters (`detail_*`,
-  `moss_*`, `barnacle_*`) and a front face over every south-facing base edge (darker towards
-  the base, colour patches, broken strata, a few cracks, an irregular bottom edge, a rim
-  light on top and a contact shadow on the floor). The base polygon itself is not drawn.
+  `moss_*`, `barnacle_*`) and a front face over every base edge that faces down at all
+  (`face_min_facing`; darker towards the base, colour patches, broken strata, a few cracks,
+  an irregular bottom edge, a rim light on top and a contact shadow on the floor). Tops and
+  faces get a procedural rock grain with faint strata streaks (`grain_*`,
+  `SurfaceTextures.rock_grain`, continuous across pieces). The base polygon is not drawn.
+- **Ground shadow**: a soft dark band on the floor around every base (`ground_shadow_*`,
+  wider and darker below the front face: `front_shadow_*`, z `ground_shadow_z_index`), so
+  rocks sit on the floor; not where the rock touches other rock.
 - **Doorways stay clear**: within `doorway_clear_distance` of every connected doorway corridor
   (`LevelBuilder`, `RockWall.clear_zones`) the rock drops to `doorway_rock_height`, so no top
   hides the opening or a player walking through it.
 - **Occluder of a tall rock**: culled (`tall_occluder_culled`) so only the far edges cast a
   shadow and a light in front of the rock lights its top and face; open lines that skip base
   edges touching another rock (`occluder_join_margin`), so a seal and a wall light as one.
-- **Sonar** outlines what the eye sees, never the base hidden under the top
-  (`get_sonar_lines`): the top's outline, the vertical sides where a run of faces starts / ends
-  and the front base edge. Lines where the rock touches other rock (another rock's base, or
-  the room's edge: the next room or the outer rock) are left out; a side within
-  `sonar_side_margin` of another rock too, and runs of faces or gaps shorter than
-  `side_min_run` do not count (no side line at every bump). Line of sight is checked on the base straight
-  below each point (`get_sonar_sights`); for the top and the sides the ray may pass through
-  the rock itself (seen from above). Flat rocks keep the base outline.
+- **Sonar** outlines what the eye sees (`get_sonar_lines`): the outer silhouette of the drawn
+  rock (top and faces merged: top outline, face sides, front base edge) plus the rim where a
+  face meets the top, unless a face in front hides it. Never lines inside the shape (a
+  concave rock's hidden edges), never the details on the top, and never within
+  `sonar_side_margin` of other rock (another rock's base, the room's edge). Points every
+  `sonar_point_spacing`; line of sight is checked on the base straight below each point
+  (`get_sonar_sights`); except on the front base edge the ray may pass through the rock
+  itself (seen from above). Sparks are small round glints. Flat rocks keep the base outline.
 - **Draw order**: `Game`, `LevelBuilder`, `Level` and the chunks are y-sorted. z: floors /
-  outer rock -4, `RoomDepthLayers` background -3, `DropShadow` -2, flat rocks -1, players,
+  outer rock -4, `DropShadow` and the rocks' ground shadows -2, flat rocks -1, players,
   creatures, shards, corals and the `RockFace` pieces 0 (y-sorted). Each piece sits on the base
   under it, so whatever stands north of (behind) the rock is covered. Glow layers are drawn
   above the world, so the Echo's / Guardian's glow and creature eyes fade there
@@ -248,11 +260,12 @@ The world is tilted to match the characters, still 2D:
   cyan, Guardian gold), from the visual's `get_outline_lines()`.
 - **Rock outlines**: natural, irregular shapes with soft bumps (no spikes, no perfect
   circles); points on the room edge stay where they are. The bumps only cut into the rock
-  (walls 0 to -9 px), so no corridor or spawn point got less room than in the original design. Seals get soft bumps on their room side
+  (walls 0 to -9 px), so no corridor or spawn point got less room than in the original
+  design. Seals get soft bumps on their room side
   (`LevelBuilder.seal_bump`). Lockdown barriers and the arena door stay flat (they fade).
-- **Depth layers** (`RoomDepthLayers` in the room): dim parallax ridges on the floor (lit like
-  the floor, `background_drift`) and dark swaying kelp / coral tips at its `Kelp*` / `Coral*`
-  markers on an unlit CanvasLayer, bigger and faster than the world (`foreground_scale`).
+- **Depth layers** (`RoomDepthLayers` in the room): dark swaying kelp / coral tips at its
+  `Kelp*` / `Coral*` markers on an unlit CanvasLayer, bigger and faster than the world
+  (`foreground_scale`). No background layer: dim ridges on the floor read as fake rocks.
 - **Drop shadows** (`DropShadow` on every player and creature, all rooms): a soft ellipse a
   little below the body; a creature's follows `get_body_visibility()`.
 

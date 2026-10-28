@@ -1,30 +1,11 @@
 class_name RoomDepthLayers
 extends Node2D
-## 3/4 view prototype: depth layers of one room (a child of its LevelChunk).
-## - Background: dim silhouettes of distant rock ridges on the room's floor,
-##   drawn in the world (so only lit floor shows them, the darkness stays) and
-##   moving slower than the floor when the camera moves (parallax), as if far
-##   below. Clipped to the room's Floor. The z_index (set in the scene) puts
-##   them between the floor and the drop shadows.
-## - Foreground: kelp strands and coral tips at the Marker2D children of this
-##   node (name starting with "Kelp" or "Coral"), close to the camera: drawn
-##   dark and unlit on an own CanvasLayer above the world, bigger and moving
-##   faster than the world, swaying. They partly cover the view.
-
-@export_group("Background")
-@export var background_count: int = 9
-## Seed of the ridge shapes (the same room always looks the same).
-@export var background_seed: int = 7
-## Share of the camera's movement the ridges move along with (0 = glued to
-## the floor, 1 = glued to the screen). Higher = they look farther away.
-@export_range(0.0, 1.0) var background_drift: float = 0.35
-## Half width and half height range of one ridge.
-@export var ridge_radius_min: Vector2 = Vector2(140.0, 50.0)
-@export var ridge_radius_max: Vector2 = Vector2(320.0, 120.0)
-## How ragged a ridge outline is (share of its radius).
-@export_range(0.0, 1.0) var ridge_roughness: float = 0.35
-@export var ridge_points: int = 16
-@export var background_color: Color = Color(0.0, 0.0, 0.0, 0.18)
+## 3/4 view: the foreground depth layer of one room (a child of its
+## LevelChunk): kelp strands and coral tips at the Marker2D children of this
+## node (name starting with "Kelp" or "Coral"), close to the camera: drawn
+## dark and unlit on an own CanvasLayer above the world, bigger and moving
+## faster than the world, swaying. They partly cover the view.
+## (There is no background layer: dim ridges on the floor read as fake rocks.)
 
 @export_group("Foreground")
 ## Above the world and the glow layers, under the HUD.
@@ -44,24 +25,12 @@ extends Node2D
 @export var coral_branches: int = 5
 @export var coral_sway_amount: float = 6.0
 
-var _ridges: Array[PackedVector2Array] = []
-var _floor := PackedVector2Array()
-var _room_center := Vector2.ZERO
 var _foreground: Node2D
 var _spots: Array[Marker2D] = []
 var _time: float = 0.0
-var _last_camera := Vector2.INF
 
 
 func _ready() -> void:
-	var floor_shape := get_parent().get_node_or_null("Floor") as Polygon2D
-	if floor_shape:
-		_floor = floor_shape.polygon
-		var bounds := Rect2(_floor[0], Vector2.ZERO)
-		for point: Vector2 in _floor:
-			bounds = bounds.expand(point)
-		_room_center = bounds.get_center()
-		_make_ridges(bounds)
 	for child: Node in get_children():
 		if child is Marker2D:
 			_spots.append(child as Marker2D)
@@ -75,43 +44,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
-	var camera: Camera2D = get_viewport().get_camera_2d()
-	if camera:
-		var center: Vector2 = camera.get_screen_center_position()
-		if center != _last_camera:
-			_last_camera = center
-			queue_redraw()
 	_foreground.queue_redraw()
-
-
-func _make_ridges(bounds: Rect2) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = background_seed
-	for i: int in background_count:
-		var center := Vector2(rng.randf_range(bounds.position.x, bounds.end.x), rng.randf_range(bounds.position.y, bounds.end.y))
-		var radius := Vector2(rng.randf_range(ridge_radius_min.x, ridge_radius_max.x), rng.randf_range(ridge_radius_min.y, ridge_radius_max.y))
-		var points := PackedVector2Array()
-		for k: int in ridge_points:
-			var angle: float = TAU * k / ridge_points
-			var ragged: float = 1.0 + rng.randf_range(-ridge_roughness, ridge_roughness)
-			points.append(center + Vector2(cos(angle) * radius.x, sin(angle) * radius.y) * ragged)
-		_ridges.append(points)
-
-
-func _draw() -> void:
-	if _floor.is_empty() or _last_camera == Vector2.INF:
-		return
-	# Far away = moves along with the camera a little (parallax).
-	var offset: Vector2 = (to_local(_last_camera) - _room_center) * background_drift
-	for ridge: PackedVector2Array in _ridges:
-		var moved := PackedVector2Array()
-		for point: Vector2 in ridge:
-			moved.append(point + offset)
-		# The floor is a square, so the parts never have holes; a ridge that
-		# only grazes its edge can leave a degenerate sliver (skipped).
-		for part: PackedVector2Array in Geometry2D.intersect_polygons(moved, _floor):
-			if not Geometry2D.triangulate_polygon(part).is_empty():
-				draw_colored_polygon(part, background_color)
 
 
 func _draw_foreground() -> void:
