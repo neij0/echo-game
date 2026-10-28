@@ -676,8 +676,23 @@ func _build_rock_faces(layout: Layout) -> void:
 			bases.append(global_transform * polygon)
 	for polygon: PackedVector2Array in layout.seals:
 		bases.append(global_transform * polygon)
+	var rooms: Array[Rect2] = []
+	for chunk: LevelChunk in layout.chunks:
+		rooms.append(global_transform * Rect2(chunk.position, Vector2.ONE * world.room_size))
 	for wall: RockWall in walls:
-		wall.build_faces(bases)
+		wall.build_faces(bases, _room_of(wall, rooms))
+
+
+## The room rect (global) holding the middle of the wall's base, or an empty rect.
+static func _room_of(wall: RockWall, rooms: Array[Rect2]) -> Rect2:
+	var middle := Vector2.ZERO
+	var outline: PackedVector2Array = wall.get_global_outline()
+	for point: Vector2 in outline:
+		middle += point / outline.size()
+	for room: Rect2 in rooms:
+		if room.has_point(middle):
+			return room
+	return Rect2()
 
 
 func _marker_positions(chunk: LevelChunk, prefix: String) -> Array[Vector2]:

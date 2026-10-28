@@ -207,8 +207,8 @@ linear float data and look much darker than the screen; convert each pixel with
 ## 3/4 view (prototype: only `room_cavern`, the start room of level 1-1)
 The world is tilted to match the characters, still 2D:
 - **Rock height** (classic 3/4): `LevelChunk.rock_height` > 0 gives its rocks (and the seals
-  in its cell) a `RockWall.height`. The polygon is the rock's **base**: collision, navigation,
-  sonar and the occluder stay there, so players stop at the foot of the rock like at a wall.
+  in its cell) a `RockWall.height`. The polygon is the rock's **base**: collision, navigation
+  and the occluder stay there, so players stop at the foot of the rock like at a wall.
   `build_faces` (called by the `LevelBuilder`, in global space so turned rooms stand upright)
   draws the rock standing on it as `RockFace` pieces: the top (the base shifted up by
   `height`, lighter: `top_lift`, cut into vertical strips) and a front face over every
@@ -218,8 +218,13 @@ The world is tilted to match the characters, still 2D:
 - **Occluder of a tall rock**: culled (`tall_occluder_culled`) so only the far edges cast a
   shadow and a light in front of the rock lights its top and face; open lines that skip base
   edges touching another rock (`occluder_join_margin`), so a seal and a wall light as one.
-- **Sonar**: the base outline plus each face's sides and top edge (`get_face_lines`); a face
-  sample is visible when the base right below it is.
+- **Sonar** outlines what the eye sees, never the base hidden under the top
+  (`get_sonar_lines`): the top's outline, the vertical sides where a run of faces starts / ends
+  and the front base edge. Lines where the rock touches other rock (another rock's base, or
+  the room's edge: the next room or the outer rock) are left out; a side within
+  `sonar_side_margin` of another rock too. Line of sight is checked on the base straight
+  below each point (`get_sonar_sights`); for the top and the sides the ray may pass through
+  the rock itself (seen from above). Flat rocks keep the base outline.
 - **Draw order**: `Game`, `LevelBuilder`, `Level` and the chunks are y-sorted. z: floors /
   outer rock -4, `RoomDepthLayers` background -3, `DropShadow` -2, flat rocks -1, players,
   creatures, shards, corals and the `RockFace` pieces 0 (y-sorted). Each piece sits on the base

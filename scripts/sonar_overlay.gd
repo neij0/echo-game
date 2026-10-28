@@ -108,8 +108,11 @@ var _sparks: Array[Spark] = []
 
 # One entry per outline sample point (all rocks flattened into one list).
 var _points: PackedVector2Array = PackedVector2Array()
-## Where the line of sight to each point is checked (the base under a face).
+## Where the line of sight to each point is checked (the base under a tall rock's line).
 var _sight_points: PackedVector2Array = PackedVector2Array()
+## A rock the line of sight may pass through, per point (the top of a tall
+## rock is seen from above); an empty RID for none.
+var _sight_exclude: Array[RID] = []
 ## Index of the next point on the same rock outline (closes the loop).
 var _next: PackedInt32Array = PackedInt32Array()
 var _lit_at: PackedFloat32Array = PackedFloat32Array()
@@ -140,6 +143,7 @@ func apply_world(world: WorldConfig) -> void:
 func rebuild_samples() -> void:
 	_points.clear()
 	_sight_points.clear()
+	_sight_exclude.clear()
 	_next.clear()
 	_active.clear()
 	_waves.clear()
@@ -203,12 +207,17 @@ func _build_samples() -> void:
 		var wall := node as RockWall
 		if wall == null:
 			continue
-		_add_samples(wall.get_global_outline(), true)
-		# Tall rocks (3/4 view): the sides and top edges of the front faces.
-		# They stand above the base, inside the rock's collision: a face is
-		# visible when its base (straight below) is.
-		for line: PackedVector2Array in wall.get_face_lines():
-			_add_samples(line, false, Vector2(0.0, wall.height))
+		if wall.height <= 0.0:
+			_add_samples(wall.get_global_outline(), true)
+			continue
+		# Tall rocks (3/4 view): what the eye sees (top outline, face sides,
+		# front base edge), never the base hidden under the top. The line of
+		# sight is checked straight below, on the base.
+		var lines: Array[PackedVector2Array] = wall.get_sonar_lines()
+		var sights: Array[PackedVector2Array] = wall.get_sonar_sights()
+		var through_self: Array[bool] = wall.get_sonar_through_self()
+		for i: int in lines.size():
+			_add_samples(lines[i], false, sights[i], wall.get_rid() if through_self[i] else RID())
 
 	var total: int = _points.size()
 	_lit_at.resize(total)
@@ -229,20 +238,24 @@ func _build_samples() -> void:
 
 ## Sample points along an outline (closed = a loop, else an open line whose
 ## last point links to itself, so no segment joins its two ends).
-## sight_offset: the line of sight is checked to the point moved by this.
-func _add_samples(outline: PackedVector2Array, closed: bool, sight_offset: Vector2 = Vector2.ZERO) -> void:
+## sights: per outline point, where the line of sight is checked (empty =
+## the point itself); sight_exclude: a rock that check may pass through.
+func _add_samples(outline: PackedVector2Array, closed: bool, sights: PackedVector2Array = PackedVector2Array(), sight_exclude: RID = RID()) -> void:
+	if sights.is_empty():
+		sights = outline
 	var first: int = _points.size()
 	var edge_count: int = outline.size() if closed else outline.size() - 1
 	for e: int in edge_count:
-		var a: Vector2 = outline[e]
-		var b: Vector2 = outline[(e + 1) % outline.size()]
-		var steps: int = maxi(1, ceili(a.distance_to(b) / sample_spacing))
+		var next_index: int = (e + 1) % outline.size()
+		var steps: int = maxi(1, ceili(outline[e].distance_to(outline[next_index]) / sample_spacing))
 		for k: int in steps:
-			_points.append(a.lerp(b, float(k) / steps))
-			_sight_points.append(a.lerp(b, float(k) / steps) + sight_offset)
+			_points.append(outline[e].lerp(outline[next_index], float(k) / steps))
+			_sight_points.append(sights[e].lerp(sights[next_index], float(k) / steps))
+			_sight_exclude.append(sight_exclude)
 	if not closed:
 		_points.append(outline[outline.size() - 1])
-		_sight_points.append(outline[outline.size() - 1] + sight_offset)
+		_sight_points.append(sights[sights.size() - 1])
+		_sight_exclude.append(sight_exclude)
 	var count: int = _points.size() - first
 	for k: int in count:
 		_next.append(first + (k + 1) % count if closed or k < count - 1 else first + k)
@@ -259,7 +272,7 @@ func _scan_wave(space: PhysicsDirectSpaceState2D, wave: Wave) -> void:
 	for i: int in _points.size():
 		var point: Vector2 = _points[i]
 		var distance: float = wave.origin.distance_to(point)
-		if distance > wave.max_radius or not _in_line_of_sight(space, wave.origin, _sight_points[i]):
+		if distance > wave.max_radius or not _in_line_of_sight(space, wave.origin, _sight_points[i], _sight_exclude[i]):
 			continue
 		var ratio: float = distance / wave.max_radius
 		_pending_at[i] = wave.start_time + ratio * wave.expand_time
@@ -295,9 +308,11 @@ func _ray_distance(space: PhysicsDirectSpaceState2D, from: Vector2, to: Vector2)
 	return from.distance_to(hit["position"])
 
 
-func _in_line_of_sight(space: PhysicsDirectSpaceState2D, from: Vector2, point: Vector2) -> bool:
+func _in_line_of_sight(space: PhysicsDirectSpaceState2D, from: Vector2, point: Vector2, exclude: RID = RID()) -> bool:
 	var target: Vector2 = point - from.direction_to(point) * los_tolerance
 	var query := PhysicsRayQueryParameters2D.create(from, target, wall_mask)
+	if exclude.is_valid():
+		query.exclude = [exclude]
 	return space.intersect_ray(query).is_empty()
 
 

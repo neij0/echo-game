@@ -4,8 +4,9 @@ extends StaticBody2D
 ## A grey-box rock wall: one polygon used for the visual, the collision and the
 ## light occluder. Its outline is drawn by SonarOverlay when a pulse hits it.
 ## Tall rocks (height > 0, classic 3/4 view): the polygon is the BASE of the
-## rock (collision, occluder, navigation and sonar stay there, so players stop
-## at the foot of the rock like at a real wall). build_faces draws the rock
+## rock (collision, occluder and navigation stay there, so players stop at
+## the foot of the rock like at a real wall). The sonar outlines what the eye
+## sees instead (get_sonar_lines): the top, the face sides, the front base. build_faces draws the rock
 ## standing on it: a lighter top surface (the base shifted up by height) and a
 ## darker front face rising from every south-facing base edge. All pieces are
 ## RockFace nodes y-sorted with the players and creatures by their base, so
@@ -31,6 +32,9 @@ extends StaticBody2D
 ## Tall rocks: base edges within this distance of another rock (a seal against
 ## a wall) cast no shadow, so touching rocks light like one rock.
 @export var occluder_join_margin: float = 2.0
+## Tall rocks: a face side this close to another rock (a seal a few pixels
+## behind the wall's face) gets no sonar line, so the seam does not show.
+@export var sonar_side_margin: float = 6.0
 ## Base edges whose outward normal points down at least this much get a face.
 @export_range(0.0, 1.0) var face_min_facing: float = 0.15
 ## Width of the top strips and longest face piece: each piece sorts by its
@@ -73,8 +77,12 @@ extends StaticBody2D
 @export var contact_shadow_size: float = 14.0
 @export_range(0.0, 1.0) var contact_shadow_alpha: float = 0.6
 
-## Sonar lines of the faces (sides + top edge of each run of faces), global.
-var _face_lines: Array[PackedVector2Array] = []
+## Sonar outline of a tall rock (global): the visible lines, the point the
+## line of sight is checked to for each of their points (on the base), and
+## whether that check may pass through this rock (the top is seen from above).
+var _sonar_lines: Array[PackedVector2Array] = []
+var _sonar_sights: Array[PackedVector2Array] = []
+var _sonar_through_self: Array[bool] = []
 var _orientation: float = 1.0
 var _base_occluder: LightOccluder2D
 
@@ -114,23 +122,42 @@ func get_global_outline() -> PackedVector2Array:
 	return result
 
 
-## The faces' outlines for the sonar, as open lines in global coordinates:
-## for each run of faces, up one side, along the top edge, down the other side.
-func get_face_lines() -> Array[PackedVector2Array]:
-	return _face_lines
+## What the sonar outlines of a tall rock, as open lines in global
+## coordinates: the top surface's outline, the vertical sides at the ends of
+## each run of faces and the front base edge where the faces meet the floor.
+## The part of the base hidden under the top is never included, nor the lines
+## along which this rock touches another one (a seal against a wall, the rock
+## of the next room or the outer rock beyond the room's edge).
+## Empty for a flat rock (the sonar uses get_global_outline).
+func get_sonar_lines() -> Array[PackedVector2Array]:
+	return _sonar_lines
+
+
+## For each point of get_sonar_lines(): where the line of sight is checked
+## (straight below it, on the base).
+func get_sonar_sights() -> Array[PackedVector2Array]:
+	return _sonar_sights
+
+
+## For each line of get_sonar_lines(): true if its line of sight may pass
+## through this rock (the top outline seen from above, the face sides).
+func get_sonar_through_self() -> Array[bool]:
+	return _sonar_through_self
 
 
 ## Builds the drawn pieces of a tall rock (does nothing when height is 0).
 ## Works in global space (screen up), so a turned room still stands upright.
 ## others: every rock base of the level, global (this one may be included).
-## Call once, after the rock entered the tree.
-func build_faces(others: Array[PackedVector2Array]) -> void:
+## room: the rect of the room this rock belongs to, global (empty = none);
+## beyond its edges lies other rock. Call once, after the rock entered the tree.
+func build_faces(others: Array[PackedVector2Array], room: Rect2) -> void:
 	if height <= 0.0 or polygon.size() < 3:
 		return
 	# The pieces join the y-sort of the level through this node.
 	y_sort_enabled = true
 	var base: PackedVector2Array = get_global_outline()
-	_open_occluder(base, others)
+	var base_cutters: Array[PackedVector2Array] = _cutters(base, others, occluder_join_margin)
+	_open_occluder(base, base_cutters)
 	_orientation = 1.0 if _doubled_area(base) > 0.0 else -1.0
 	_add_top(base)
 	var count: int = base.size()
@@ -145,7 +172,24 @@ func build_faces(others: Array[PackedVector2Array]) -> void:
 		var pieces: int = maxi(1, ceili(a.distance_to(b) / face_piece_length))
 		for k: int in pieces:
 			_add_face(a.lerp(b, float(k) / pieces), a.lerp(b, float(k + 1) / pieces), facing)
-	_face_lines = _runs(base, facing_edges)
+	var sonar_cutters: Array[PackedVector2Array] = base_cutters.duplicate()
+	var side_cutters: Array[PackedVector2Array] = _cutters(base, others, sonar_side_margin)
+	if room.has_area():
+		sonar_cutters.append_array(_beyond(room.grow(-occluder_join_margin)))
+		side_cutters.append_array(_beyond(room.grow(-sonar_side_margin)))
+	_build_sonar_lines(base, facing_edges, sonar_cutters, side_cutters)
+
+
+## The outlines near this one (not itself), grown by margin: lines inside
+## them are where two rocks touch.
+func _cutters(outline: PackedVector2Array, others: Array[PackedVector2Array], margin: float) -> Array[PackedVector2Array]:
+	var reach: Rect2 = _bounds_of(outline).grow(margin)
+	var cutters: Array[PackedVector2Array] = []
+	for other: PackedVector2Array in others:
+		if _same_outline(other, outline) or not reach.intersects(_bounds_of(other)):
+			continue
+		cutters.append_array(Geometry2D.offset_polygon(other, margin))
+	return cutters
 
 
 ## Cull the edges facing the light: the shadow starts at the far side of the
@@ -156,15 +200,9 @@ func _tall_cull_mode() -> OccluderPolygon2D.CullMode:
 
 ## Replaces the closed occluder by open lines along the base edges that no
 ## other rock touches (an edge inside a wall would shade the wall itself).
-func _open_occluder(base: PackedVector2Array, others: Array[PackedVector2Array]) -> void:
+func _open_occluder(base: PackedVector2Array, cutters: Array[PackedVector2Array]) -> void:
 	if _base_occluder == null or not tall_occluder_culled:
 		return
-	var reach: Rect2 = _bounds_of(base).grow(occluder_join_margin)
-	var cutters: Array[PackedVector2Array] = []
-	for other: PackedVector2Array in others:
-		if _same_outline(other, base) or not reach.intersects(_bounds_of(other)):
-			continue
-		cutters.append_array(Geometry2D.offset_polygon(other, occluder_join_margin))
 	if cutters.is_empty():
 		return
 	# Edge by edge: the cut may reverse a piece, but the cull mode needs the
@@ -174,12 +212,7 @@ func _open_occluder(base: PackedVector2Array, others: Array[PackedVector2Array])
 	for i: int in count:
 		var a: Vector2 = base[i]
 		var b: Vector2 = base[(i + 1) % count]
-		var pieces: Array[PackedVector2Array] = [PackedVector2Array([a, b])]
-		for cutter: PackedVector2Array in cutters:
-			var kept: Array[PackedVector2Array] = []
-			for piece: PackedVector2Array in pieces:
-				kept.append_array(Geometry2D.clip_polyline_with_polygon(piece, cutter))
-			pieces = kept
+		var pieces: Array[PackedVector2Array] = _clipped(PackedVector2Array([a, b]), cutters)
 		# Keep the original order along the edge, from a to b.
 		pieces.sort_custom(func(p: PackedVector2Array, q: PackedVector2Array) -> bool: return minf(a.distance_to(p[0]), a.distance_to(p[-1])) < minf(a.distance_to(q[0]), a.distance_to(q[-1])))
 		for piece: PackedVector2Array in pieces:
@@ -328,24 +361,72 @@ static func _add_line(piece: RockFace, line: PackedVector2Array, line_color: Col
 	piece.line_widths.append(width)
 
 
-## Sonar lines of every run of consecutive facing edges (global).
-func _runs(base: PackedVector2Array, facing_edges: Array[bool]) -> Array[PackedVector2Array]:
+## The sonar outline (see get_sonar_lines), global, without the lines over
+## base edges inside the cutters (where this rock touches other rock); a face
+## side is left out when its base corner is inside a side cutter.
+func _build_sonar_lines(base: PackedVector2Array, facing_edges: Array[bool], cutters: Array[PackedVector2Array], side_cutters: Array[PackedVector2Array]) -> void:
+	_sonar_lines.clear()
+	_sonar_sights.clear()
+	_sonar_through_self.clear()
+	var down := Vector2(0.0, height)
+	var count: int = base.size()
+	for i: int in count:
+		var edge_pieces: Array[PackedVector2Array] = _clipped(PackedVector2Array([base[i], base[(i + 1) % count]]), cutters)
+		# The top outline: seen from above, checked straight below it on the base.
+		for piece: PackedVector2Array in edge_pieces:
+			_add_sonar_line(_moved(piece, -down), piece, true)
+		# A side where a run of faces starts or ends, from the top down to the base.
+		var previous: bool = facing_edges[(i - 1 + count) % count]
+		if facing_edges[i] != previous and not _inside_any(base[i], side_cutters):
+			# Its corner sits where the base turns away: the ray to it grazes this
+			# rock, so it may pass through it like the top.
+			_add_sonar_line(PackedVector2Array([base[i] - down, base[i]]), PackedVector2Array([base[i], base[i]]), true)
+		# The front base edge under each face.
+		if facing_edges[i]:
+			for piece: PackedVector2Array in edge_pieces:
+				_add_sonar_line(piece, piece, false)
+
+
+## Four bands around rect (outside it), as polygons.
+static func _beyond(rect: Rect2) -> Array[PackedVector2Array]:
+	var far: float = maxf(rect.size.x, rect.size.y)
+	var outer: Rect2 = rect.grow(far)
+	var bands: Array[Rect2] = [
+		Rect2(outer.position, Vector2(outer.size.x, rect.position.y - outer.position.y)),
+		Rect2(Vector2(outer.position.x, rect.end.y), Vector2(outer.size.x, outer.end.y - rect.end.y)),
+		Rect2(Vector2(outer.position.x, rect.position.y), Vector2(rect.position.x - outer.position.x, rect.size.y)),
+		Rect2(Vector2(rect.end.x, rect.position.y), Vector2(outer.end.x - rect.end.x, rect.size.y)),
+	]
 	var result: Array[PackedVector2Array] = []
-	var count: int = facing_edges.size()
-	var up := Vector2(0.0, -height)
-	for start: int in count:
-		# A run starts at a facing edge whose previous edge does not face.
-		if not facing_edges[start] or facing_edges[(start - 1 + count) % count]:
-			continue
-		var line := PackedVector2Array([base[start]])
-		var i: int = start
-		while facing_edges[i % count] and line.size() <= count:
-			line.append(base[i % count] + up)
-			i += 1
-		line.append(base[i % count] + up)
-		line.append(base[i % count])
-		result.append(line)
+	for band: Rect2 in bands:
+		result.append(PackedVector2Array([band.position, Vector2(band.end.x, band.position.y), band.end, Vector2(band.position.x, band.end.y)]))
 	return result
+
+
+func _add_sonar_line(line: PackedVector2Array, sights: PackedVector2Array, through_self: bool) -> void:
+	if line.size() < 2:
+		return
+	_sonar_lines.append(line)
+	_sonar_sights.append(sights)
+	_sonar_through_self.append(through_self)
+
+
+## The parts of an open line outside every cutter.
+static func _clipped(line: PackedVector2Array, cutters: Array[PackedVector2Array]) -> Array[PackedVector2Array]:
+	var pieces: Array[PackedVector2Array] = [line]
+	for cutter: PackedVector2Array in cutters:
+		var kept: Array[PackedVector2Array] = []
+		for piece: PackedVector2Array in pieces:
+			kept.append_array(Geometry2D.clip_polyline_with_polygon(piece, cutter))
+		pieces = kept
+	return pieces
+
+
+static func _inside_any(point: Vector2, cutters: Array[PackedVector2Array]) -> bool:
+	for cutter: PackedVector2Array in cutters:
+		if Geometry2D.is_point_in_polygon(point, cutter):
+			return true
+	return false
 
 
 ## Downward share of the edge's outward normal (1 = faces straight down).
