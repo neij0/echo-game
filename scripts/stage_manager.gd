@@ -296,12 +296,17 @@ func _retry() -> void:
 	get_tree().paused = false
 
 
-## The pause menu's "Restart level": the current level again, with the meters,
-## health and skills every player had when it started.
+## The pause menu's "Restart level". Calm: the current level again, with the
+## meters, health and skills every player had when it started. Challenge: the
+## whole stage from level 1, the same as both players downed (full meters and
+## health, the skills of the stage start).
 func restart_level() -> void:
 	is_over = false
 	_is_changing_level = false
 	Engine.time_scale = 1.0
+	if mode == SaveData.Mode.CHALLENGE:
+		_retry()
+		return
 	for player: Player in players:
 		player.pressure.value = player.pressure.max_value * float(_level_start_pressure.get(player, 1.0))
 		player.pressure.ensure_ratio(0.0)

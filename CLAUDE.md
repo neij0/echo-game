@@ -116,7 +116,9 @@ After the 3rd stage of a world: a story text screen, then the World Map.
 - **Pause menu** (`PauseMenu`, `pause` action: Esc / Start on any gamepad, only while a level is
   played: `StageManager.can_pause`): pauses the whole tree (players, creatures, oxygen, the
   escape timer, stage time). Resume, Options (`OptionsPanel`, shared with the main menu),
-  Restart level (`StageManager.restart_level`: meters, health and skills of the level start),
+  Restart level (`StageManager.restart_level`; Calm: the level again with the meters, health
+  and skills of its start; Challenge: shown as "Restart stage", the whole stage from level 1
+  like both downed, with its own confirmation text),
   Quit to World Map, Quit to Main Menu (the last three with a confirmation; quitting loses the
   stage's progress since the last save). Shows the mode and both players' skills (read-only).
   Navigated with the `ui_*` actions (keyboard + every gamepad).

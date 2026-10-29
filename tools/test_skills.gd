@@ -521,6 +521,37 @@ func _test_pause() -> void:
 	_check(_echo.skills.get_rank("far_echo") == 2 and _echo.skills.get_rank("calm_lungs") == 0, "and the skills of the level start")
 	_check(not escape.is_active, "and stops the escape")
 
+	# Challenge: Restart level = the whole stage from level 1 (like both downed).
+	print("== Pause menu: Restart in Challenge ==")
+	_stage.mode = SaveData.Mode.CHALLENGE
+	_stage.loadout = SkillLoadout.new("ocean")
+	_stage._stage_start_loadout = _stage.loadout.copy()
+	_stage._apply_loadout()
+	_stage._start_level(0)
+	await _frames(2)
+	_stage.apply_picks({_echo: [_catalog.find("far_echo")]})
+	_stage._start_level(1)
+	await _frames(12)
+	_echo.pressure.value = _echo.pressure.max_value * 0.3
+	_guardian.health.set_segments(1.0)
+	_pause.open()
+	_check(_pause._restart_button.text == Game.text("pause_restart_stage"), "the button says Restart stage")
+	_pause._ask(PauseMenu.Confirm.RESTART)
+	_check(_pause._confirm_label.text == Game.text("pause_confirm_restart_stage")
+		and _pause._confirm_warning.text == Game.text("pause_restart_stage_warning"), "the confirmation says the whole stage restarts")
+	_pause._on_confirmed()
+	await _frames(5)
+	_check(not get_tree().paused and not _pause.is_open, "it resumes the game")
+	_check(_stage.level_index == 0, "back to level 1 of the stage (level %d)" % (_stage.level_index + 1))
+	# A few frames of drain since the restart.
+	_check(_echo.pressure.get_ratio() > 0.99 and _guardian.health.is_full(), "full oxygen and health, like both downed (%.3f)" % _echo.pressure.get_ratio())
+	_check(_echo.skills.get_rank("far_echo") == 0, "only the skills of the stage start")
+	_stage.mode = SaveData.Mode.CALM
+	_pause.open()
+	_check(_pause._restart_button.text == Game.text("pause_restart"), "Calm: the button says Restart level")
+	_pause.close()
+	_protect_players()
+
 
 # --- Helpers ---------------------------------------------------------------
 

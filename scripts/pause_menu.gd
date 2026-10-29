@@ -3,7 +3,8 @@ extends CanvasLayer
 ## The pause menu: either player presses Start / Esc ("pause" action) while a
 ## level is played (StageManager.can_pause). The whole game tree pauses
 ## (players, creatures, oxygen, the escape timer...). Pages: the main list
-## (Resume, Options, Restart level, Quit to world map, Quit to main menu), the
+## (Resume, Options, Restart level (Challenge: Restart stage, from level 1),
+## Quit to world map, Quit to main menu), the
 ## Options (OptionsPanel) and a confirmation for the three that lose the
 ## level's progress (stage saves are kept). Beside the list: the current mode
 ## and both players' skills with their ranks (read-only). Navigated with the
@@ -174,7 +175,7 @@ func _ask(action: Confirm) -> void:
 	_confirm_action = action
 	match action:
 		Confirm.RESTART:
-			_confirm_label.text = Game.text("pause_confirm_restart")
+			_confirm_label.text = Game.text("pause_confirm_restart_stage" if _is_challenge() else "pause_confirm_restart")
 			_return_focus = _restart_button
 		Confirm.WORLD_MAP:
 			_confirm_label.text = Game.text("pause_confirm_world_map")
@@ -182,7 +183,10 @@ func _ask(action: Confirm) -> void:
 		Confirm.MAIN_MENU:
 			_confirm_label.text = Game.text("pause_confirm_main_menu")
 			_return_focus = _main_menu_button
-	_confirm_warning.text = Game.text("pause_restart_warning" if action == Confirm.RESTART else "pause_quit_warning")
+	var warning: String = "pause_quit_warning"
+	if action == Confirm.RESTART:
+		warning = "pause_restart_stage_warning" if _is_challenge() else "pause_restart_warning"
+	_confirm_warning.text = Game.text(warning)
 	_show_page("confirm")
 
 
@@ -209,11 +213,16 @@ func _refresh_text() -> void:
 	_title.text = Game.text("pause_title")
 	_resume_button.text = Game.text("pause_resume")
 	_options_button.text = Game.text("options")
-	_restart_button.text = Game.text("pause_restart")
+	_restart_button.text = Game.text("pause_restart_stage" if _is_challenge() else "pause_restart")
 	_world_map_button.text = Game.text("pause_world_map")
 	_main_menu_button.text = Game.text("pause_main_menu")
 	_yes_button.text = Game.text("yes")
 	_no_button.text = Game.text("no")
+
+
+## Challenge: "Restart level" restarts the whole stage (StageManager.restart_level).
+func _is_challenge() -> bool:
+	return stage_manager != null and stage_manager.mode == SaveData.Mode.CHALLENGE
 
 
 ## The mode and both players' skills (read-only).

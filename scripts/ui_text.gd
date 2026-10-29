@@ -107,6 +107,16 @@ const STRINGS: Dictionary = {
 	"pause_world_map": {"en": "Quit to World Map", "ar": "الخروج إلى خريطة العوالم"},
 	"pause_main_menu": {"en": "Quit to Main Menu", "ar": "الخروج إلى القائمة الرئيسية"},
 	"pause_confirm_restart": {"en": "Restart this level?", "ar": "إعادة هذا المستوى؟"},
+	# Challenge mode: the restart goes back to level 1 of the stage.
+	"pause_restart_stage": {"en": "Restart stage", "ar": "إعادة المرحلة"},
+	"pause_confirm_restart_stage": {
+		"en": "Challenge mode: restart the whole stage from level 1?",
+		"ar": "وضع التحدّي: إعادة المرحلة كاملة من المستوى 1؟",
+	},
+	"pause_restart_stage_warning": {
+		"en": "Like when both of you are down: the stage starts again from level 1 with full oxygen and health, and only the skills you had when the stage began.",
+		"ar": "كما لو سقطتما معاً: تبدأ المرحلة من جديد من المستوى 1 بأكسجين وصحة كاملين، وبالمهارات التي كانت معكما عند بداية المرحلة فقط.",
+	},
 	"pause_confirm_world_map": {"en": "Quit to the World Map?", "ar": "الخروج إلى خريطة العوالم؟"},
 	"pause_confirm_main_menu": {"en": "Quit to the main menu?", "ar": "الخروج إلى القائمة الرئيسية؟"},
 	"pause_restart_warning": {
