@@ -150,6 +150,22 @@ value per rank), name / description / co-op tip in EN + AR, `available_from_worl
   slows him, no sword; protects the Echo behind him), `DashSkill` (burst + short
   invulnerability). Skill button: `p1_skill` (Left Shift / gamepad 1 X), `p2_skill`
   (Right Ctrl / gamepad 2 X): `Player.try_skill_pressed` / `is_skill_held`.
+- **Aiming (twin-stick)**: `p1_aim_*` / `p2_aim_*` = the right stick of the player's own gamepad
+  (device 0 / 1 only). `Player.uses_gamepad` follows the player's own last input (their gamepad
+  device, or their own keys; never the partner's), `get_stick_aim()` (deadzone `aim_deadzone`),
+  `get_aim_direction()` (stick, else move direction, else facing), `get_attack_direction()`
+  (stick, else facing). Lure: gamepad = the button throws along the stick (she keeps moving);
+  keyboard = hold to aim (`Player.move_locked`: she stops, the move keys aim), release to throw;
+  dotted line + target circle while aiming. Shield: `shield_direction` set from the aim when
+  raised, then locked; the right stick turns it at once, keyboard keys turn it at
+  `keyboard_turn_speed` (240°/s) while he strafes slowly. Sword: each hit along
+  `get_attack_direction()`, a faint tick while the stick aims; keyboard = facing.
+- **Cooldown readability**: `SkillIcon.set_state` (also the Echo's pulse in the HUD,
+  `setup_custom`): recharging = dimmed + desaturated, a dark radial fill, a thin progress ring;
+  ready = full colour, glowing edge; becoming ready = a short flash. In the world a `ReadyCue`
+  (ring out of the character + the soft `skill_ready` chime) plays once when an active skill or
+  the pulse (`PulseAbility.ready_cue`, quieter) is ready again (`became_ready`). A hold skill
+  without a cooldown (Shield) only lights up while held.
 - **Offers** (`SkillOffer`, no UI): own + shared pool, available in this world, below max rank
   (higher ranks come back), weighted, no repeats; once an active is owned no active is
   offered, and one offer never holds two new actives; empty places get a fallback
@@ -163,8 +179,8 @@ value per rank), name / description / co-op tip in EN + AR, `available_from_worl
 - **Lifetime**: `StageManager.loadout` (a `SkillLoadout`: character -> {id: rank}); a Calm retry
   restores the skills of the level start, a Challenge retry those of the stage start; saved
   with every completed stage (`Game.complete_stage(loadout)`); cleared when the next world
-  starts. HUD (`PlayerStatus`): the active skill with its cooldown sweep and button, small icons
-  for the passives (rank dots).
+  starts. HUD (`PlayerStatus`): the Echo's pulse and the active skill with their cooldown and
+  button, small icons for the passives (rank dots).
 
 ### Adding a new skill
 1. Only existing stats (e.g. another drain or radius bonus): duplicate a `.tres` in `skills/`,
@@ -183,9 +199,10 @@ value per rank), name / description / co-op tip in EN + AR, `available_from_worl
 The game will have 5 worlds, each with its own chunks, colours, creatures, survival pressure
 and pulse behaviour. Only the Ocean exists so far.
 
-Controls: P1 Echo = WASD + Space (pulse) + Left Shift (skill) or gamepad 1 (A / X). P2 Guardian =
-arrow keys + Enter (attack) + Right Ctrl (skill) or gamepad 2 (A / X). Holding the action button
-next to a downed partner revives them. Esc / Start = pause.
+Controls: P1 Echo = WASD + Space (pulse) + Left Shift (skill) or gamepad 1 (left stick, A, X,
+right stick aims). P2 Guardian = arrow keys + Enter (attack) + Right Ctrl (skill) or gamepad 2
+(left stick, A, X, right stick aims skills and sword). Holding the action button next to a downed
+partner revives them. Esc / Start = pause.
 
 ## Audio
 Everything is procedural (`tools/generate_sounds.py`, the `preview` section; no AI tools).
@@ -214,7 +231,7 @@ numbered variant) replaces one without code changes.
   **`PlayerAudio`**: swishes while swimming, hurt, downed, revive. Also: sword whoosh per combo
   hit + impact (heavier on the finisher), pulse ping with echoes, distress ping, shard hum loop
   + chime, mending hum, low oxygen beep, low-health heartbeat, barrier close / open, collapse
-  rumble + falling rocks.
+  rumble + falling rocks, `skill_ready` (soft two-note chime: pulse / active skill ready).
 - Loops carry a WAV "smpl" loop chunk (Godot: "Detect From WAV").
 - Tools: `tools/sound_test.tscn` (every sound, the music crossfades, ambience),
   `tools/test_audio.tscn` (headless checks).
@@ -434,7 +451,9 @@ The world is tilted to match the characters, still 2D:
   - `test_skills.tscn`: skills and pause, run as a scene: offer sizes per stage, offer rules
     (pools, ranks, active slot, worlds, fallback), a data-only skill, every Ocean skill's
     effect value, the choice flow, retries keeping the level / stage start skills, the pause
-    menu freezing creatures / oxygen / escape timer and its Restart level:
+    menu freezing creatures / oxygen / escape timer and its Restart level (Calm / Challenge),
+    aiming (device binding, Lure / Shield / sword with gamepad and keyboard) and the cooldown
+    states (icon looks, ready flash, ReadyCue + chime, the pulse in the HUD):
     `godot --headless --path . --fixed-fps 60 res://tools/test_skills.tscn`
   - `test_creatures.tscn`: creature + shard test, run as a scene (needs the `Game` autoload):
     chase speeds per mode/awareness, lunge, alerting, search, downed Echo (ignored, distress

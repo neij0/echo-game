@@ -15,6 +15,8 @@ extends Node2D
 ## on that side. Flips and the return after a combo blend over rest_transition_time.
 ## Attacks are unchanged: each hit aims along player.facing.
 ## Skills: "sword_arc_mult" widens both arcs (at most a full circle).
+## Aim: each hit goes along Player.get_attack_direction (the right stick on a
+## gamepad, else the facing); while the stick is pushed a faint tick shows it.
 ## Look: a dark blade whose edge glows gold inside the Echo's light, a bright
 ## slash arc that trails the swing, and a small body lunge per hit (visual
 ## only, read by GuardianVisual; the finisher pulls back first, then lunges further).
@@ -115,6 +117,14 @@ signal exposed_kill(creature_position: Vector2)
 ## The finisher's arc is this much brighter.
 @export var finisher_arc_boost: float = 1.6
 
+@export_group("Aim Tick")
+## A faint mark beyond the blade tip while the right stick aims.
+@export var aim_tick_color: Color = Color(0.85, 0.9, 1.0)
+@export var aim_tick_energy: float = 1.2
+@export_range(0.0, 1.0) var aim_tick_alpha: float = 0.45
+@export var aim_tick_distance: float = 56.0
+@export var aim_tick_length: float = 9.0
+
 @export_group("Lunge")
 ## Body lunge towards the swing (pixels, visual only).
 @export var quick_lunge: float = 4.0
@@ -173,6 +183,11 @@ func _process(delta: float) -> void:
 
 func is_attacking() -> bool:
 	return hit_index >= 0
+
+
+## True while the right stick aims (the tick is drawn).
+func is_showing_aim_tick() -> bool:
+	return player != null and not player.health.is_downed and hit_index < 0 and player.get_stick_aim() != Vector2.ZERO
 
 
 ## Visual body offset for the current hit: pulled back during the finisher's
@@ -246,7 +261,7 @@ func _start_hit(index: int) -> void:
 	_buffered = false
 	_applied = false
 	_window_left = 0.0
-	_swing_dir = player.facing
+	_swing_dir = player.get_attack_direction()
 	if not whoosh_sounds.is_empty():
 		_play(whoosh_sounds[mini(index, whoosh_sounds.size() - 1)], player.global_position)
 	_make_noise()
@@ -387,6 +402,10 @@ func _draw() -> void:
 			direction = _swing_dir.rotated(lerpf(-half_arc, half_arc, sweep) * side)
 	_drawn_angle = direction.angle()
 	_draw_blade(direction, edge_color)
+	if is_showing_aim_tick():
+		var aim: Vector2 = player.get_stick_aim()
+		draw_line(aim * aim_tick_distance, aim * (aim_tick_distance + aim_tick_length),
+			_hdr(aim_tick_color, aim_tick_energy, aim_tick_alpha), 2.0, true)
 
 
 ## A dark blade narrowing to a point, a small cross-guard, and a glowing edge.

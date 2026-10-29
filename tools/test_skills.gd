@@ -12,7 +12,11 @@ extends Node
 ## - the choice flow (screen -> loadout -> players), retries keep the skills of
 ##   the level start (Calm) / stage start (Challenge), the saved loadout;
 ## - the pause menu freezes creatures, oxygen and the escape timer, and its
-##   Restart level restores the level start.
+##   Restart level restores the level start;
+## - aiming: per-player device binding, Lure / Shield / sword with the right
+##   stick (independent of moving) and with the keyboard (hold + move keys);
+## - cooldown readability: icon states, the ready flash and the ReadyCue on
+##   the character (active skills and the Echo's pulse).
 
 const GAME_SCENE: String = "res://scenes/game.tscn"
 const CREATURE_SCENE: String = "res://scenes/creature.tscn"
@@ -57,6 +61,11 @@ func _run() -> void:
 	await _test_lure_pulse()
 	await _test_shield()
 	await _test_dash()
+	await _test_device_binding()
+	await _test_aim_lure()
+	await _test_aim_shield()
+	await _test_aim_sword()
+	await _test_cooldown_states()
 	await _test_choice_flow()
 	await _test_retry_keeps_level_start_skills()
 	await _test_pause()
@@ -317,7 +326,7 @@ func _test_lure_pulse() -> void:
 		return
 	_guardian.global_position = _echo.global_position + Vector2(20.0, 0.0)
 	_echo.facing = _open_direction(_echo.global_position, 350.0)
-	var landing: Vector2 = lure.get_landing_point()
+	var landing: Vector2 = lure.get_landing_point(_echo.facing)
 	_check(landing.distance_to(_echo.global_position) <= 351.0, "the decoy lands at most 350 px away (%.0f)" % landing.distance_to(_echo.global_position))
 	var near: Creature = _spawn_creature(_open_spot(landing, 300.0))
 	var far: Creature = _spawn_creature(_far_spot(landing, 900.0))
@@ -327,7 +336,7 @@ func _test_lure_pulse() -> void:
 		creature.pulse_spot_distance = 0.0
 	await _frames(2)
 	_echo.pressure.refill()
-	lure.throw_decoy()
+	lure.throw_decoy(_echo.facing)
 	_check(is_equal_approx(_echo.pressure.get_ratio(), 0.98), "a throw costs 2%% oxygen (%.3f)" % _echo.pressure.get_ratio())
 	_check(is_equal_approx(lure.cooldown_left, 10.0), "10 s cooldown")
 	await _frames(30)
@@ -403,6 +412,299 @@ func _test_dash() -> void:
 	_protect_players()
 
 
+# --- Aiming ----------------------------------------------------------------
+
+func _test_device_binding() -> void:
+	print("== Aim: per-player device binding ==")
+	_check(_echo.joypad_device == 0 and _guardian.joypad_device == 1, "Echo = gamepad 1, Guardian = gamepad 2")
+	for prefix: String in ["p1_", "p2_"]:
+		for action_name: String in ["aim_left", "aim_right", "aim_up", "aim_down"]:
+			var events: Array[InputEvent] = InputMap.action_get_events(prefix + action_name)
+			var device: int = 0 if prefix == "p1_" else 1
+			_check(events.size() == 1 and events[0] is InputEventJoypadMotion and events[0].device == device,
+				"%s%s: the right stick of gamepad %d only" % [prefix, action_name, device + 1])
+	var other_stick := InputEventJoypadMotion.new()
+	other_stick.device = 1
+	other_stick.axis = JOY_AXIS_RIGHT_X
+	other_stick.axis_value = 1.0
+	_check(not other_stick.is_action("p1_aim_right") and other_stick.is_action("p2_aim_right"), "gamepad 2's right stick never aims for the Echo")
+	_echo.uses_gamepad = false
+	_guardian.uses_gamepad = false
+	var button := InputEventJoypadButton.new()
+	button.device = 1
+	button.button_index = JOY_BUTTON_A
+	button.pressed = true
+	_echo._input(button)
+	_guardian._input(button)
+	_check(not _echo.uses_gamepad and _guardian.uses_gamepad, "a button on gamepad 2 switches only the Guardian to gamepad aiming")
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_W
+	key.pressed = true
+	_guardian._input(key)
+	_check(_guardian.uses_gamepad, "the Echo's keys do not switch the Guardian back")
+	var arrow := InputEventKey.new()
+	arrow.physical_keycode = KEY_UP
+	arrow.pressed = true
+	_guardian._input(arrow)
+	_check(not _guardian.uses_gamepad, "his own keys switch him back to keyboard aiming")
+	var small := InputEventJoypadMotion.new()
+	small.device = 0
+	small.axis = JOY_AXIS_LEFT_X
+	small.axis_value = 0.1
+	_echo._input(small)
+	_check(not _echo.uses_gamepad, "stick drift below the threshold does not switch")
+
+
+func _test_aim_lure() -> void:
+	print("== Aim: Lure Pulse ==")
+	await _build(0, 0)
+	_give(_echo, "lure_pulse", 1)
+	var lure := _echo.skills.active as LurePulseSkill
+	_guardian.global_position = _echo.global_position + Vector2(0.0, 30.0)
+	await _frames(2)
+	# Gamepad: move left, aim right.
+	_echo.uses_gamepad = true
+	_echo.facing = Vector2.UP
+	var right: Vector2 = _open_both_ways(_echo.global_position, 350.0, 150.0)
+	_press_aim("p1_", right)
+	_press_move("p1_", -right)
+	await _frames(20)
+	_check(lure.is_aiming(), "gamepad: the indicator shows while the right stick is pushed")
+	_check(_echo.velocity.dot(-right) > 50.0, "gamepad: she keeps moving the other way while aiming (%.0f px/s)" % _echo.velocity.dot(-right))
+	_check(_echo.get_aim_direction().dot(right) > 0.99, "gamepad: the aim is the right stick, not the move direction")
+	lure.throw_decoy(_echo.get_aim_direction())
+	_check(_echo.global_position.direction_to(lure.decoy_position).dot(right) > 0.95, "gamepad: the decoy flies along the right stick")
+	_release_aim("p1_")
+	_release_move("p1_")
+	await _frames(2)
+	_check(not lure.is_aiming(), "gamepad: no indicator on cooldown / with the stick neutral")
+	# Stick neutral: the move direction, else the facing.
+	_check(_echo.get_aim_direction() == _echo.facing, "stick neutral and standing: the facing")
+	Input.action_press("p1_move_down")
+	await _frames(1)
+	_check(_echo.get_aim_direction().dot(Vector2.DOWN) > 0.99, "stick neutral and moving: the move direction")
+	Input.action_release("p1_move_down")
+	await _frames(20)
+
+	# Keyboard: hold = stop + aim with the move keys, release = throw.
+	lure.cooldown_left = 0.0
+	_echo.uses_gamepad = false
+	_echo.velocity = Vector2.ZERO
+	_echo.facing = Vector2.RIGHT
+	# The skill's own _process reads the press (just pressed = this frame).
+	Input.action_press("p1_skill")
+	await get_tree().process_frame
+	await _frames(1)
+	_check(lure.is_key_aiming and lure.is_aiming() and _echo.move_locked, "keyboard: holding the skill button starts aiming")
+	var aim_dir: Vector2 = _open_direction(_echo.global_position, 350.0, 8)
+	var start: Vector2 = _echo.global_position
+	_press_move("p1_", aim_dir)
+	await _frames(20)
+	_check(_echo.global_position.distance_to(start) < 3.0, "keyboard: she stands still while aiming (%.1f px)" % _echo.global_position.distance_to(start))
+	_check(lure.key_aim_direction.dot(aim_dir.normalized()) > 0.9, "keyboard: the move keys aim")
+	_check(lure.cooldown_left == 0.0, "keyboard: nothing is thrown while held")
+	Input.action_release("p1_skill")
+	await _frames(2)
+	_check(not lure.is_key_aiming and not _echo.move_locked and lure.cooldown_left > 0.0, "keyboard: releasing throws and frees the movement")
+	_check(_echo.global_position.direction_to(lure.decoy_position).dot(aim_dir.normalized()) > 0.9, "keyboard: the decoy flies where the keys aimed")
+	_release_move("p1_")
+	_give(_echo, "", 0)
+	_check(not _echo.move_locked, "losing the skill never leaves her locked")
+
+
+func _test_aim_shield() -> void:
+	print("== Aim: Shield ==")
+	await _build(0, 0)
+	_give(_guardian, "shield", 1)
+	var shield := _guardian.skills.active as ShieldSkill
+	_guardian.global_position = _echo.global_position + Vector2(0.0, 40.0)
+	await _frames(2)
+	# Gamepad: right stick aims left while the left stick strafes right.
+	_guardian.uses_gamepad = true
+	var move_dir: Vector2 = _open_direction(_guardian.global_position, 150.0, 8)
+	var aim_dir: Vector2 = -move_dir
+	_guardian.facing = move_dir
+	_press_aim("p2_", aim_dir)
+	Input.action_press("p2_skill")
+	_press_move("p2_", move_dir)
+	await _frames(20)
+	_check(shield.is_raised and shield.shield_direction.dot(aim_dir) > 0.99, "gamepad: the right stick points the shield")
+	_check(_guardian.velocity.dot(move_dir) > 20.0, "gamepad: he strafes the other way (%.0f px/s)" % _guardian.velocity.dot(move_dir))
+	_check(_guardian.velocity.length() <= _guardian.max_speed * 0.55 + 1.0, "gamepad: strafing is slow")
+	var center: Vector2 = _guardian.global_position
+	_guardian.health._invulnerable_left = 0.0
+	var before: float = _guardian.health.value
+	_check(shield.blocks_hit(_guardian, center + aim_dir * 40.0, null), "a hit from the aimed side is blocked")
+	_check(not shield.blocks_hit(_guardian, center + move_dir * 40.0, null), "a hit from the move side is not")
+	_release_aim("p2_")
+	await _frames(10)
+	_check(shield.shield_direction.dot(aim_dir) > 0.99, "gamepad: stick neutral keeps the shield locked")
+	_release_move("p2_")
+	Input.action_release("p2_skill")
+	await _frames(3)
+	_check(_guardian.health.value == before, "no damage taken")
+
+	# Keyboard: locked to the aim when raised, the keys turn it, slow strafing.
+	_guardian.uses_gamepad = false
+	var keys_dir: Vector2 = _open_direction(_guardian.global_position, 150.0, 8)
+	_guardian.facing = keys_dir.orthogonal()
+	_guardian.velocity = Vector2.ZERO
+	Input.action_press("p2_skill")
+	await _frames(2)
+	_check(shield.shield_direction.dot(keys_dir.orthogonal()) > 0.99, "keyboard: raised towards the facing")
+	_press_move("p2_", keys_dir)
+	await _frames(6)
+	var partial: float = rad_to_deg(shield.shield_direction.angle_to(keys_dir))
+	_check(absf(partial) > 20.0, "keyboard: the keys turn it gradually (%.0f° left after 0.1 s)" % absf(partial))
+	await _frames(40)
+	_check(shield.shield_direction.dot(keys_dir) > 0.99, "keyboard: after a moment it faces the keys")
+	_check(_guardian.velocity.dot(keys_dir) > 20.0 and _guardian.velocity.length() <= _guardian.max_speed * 0.55 + 1.0, "keyboard: he moves slowly meanwhile")
+	_release_move("p2_")
+	await _frames(10)
+	_check(shield.shield_direction.dot(keys_dir) > 0.99, "keyboard: no keys = the shield stays where it was")
+	Input.action_release("p2_skill")
+	await _frames(3)
+	_give(_guardian, "", 0)
+	_protect_players()
+
+
+func _test_aim_sword() -> void:
+	print("== Aim: sword ==")
+	await _build(0, 0)
+	var sword := _guardian.get_node("UnlitLayer/Sword") as SwordAbility
+	_guardian.uses_gamepad = true
+	_guardian.facing = Vector2.RIGHT
+	_press_aim("p2_", Vector2.DOWN)
+	await _frames(2)
+	_check(sword.is_showing_aim_tick(), "gamepad: the aim tick shows while the right stick is pushed")
+	sword._start_hit(0)
+	_check(sword._swing_dir.dot(Vector2.DOWN) > 0.99, "gamepad: the swing goes along the right stick, not the facing")
+	_release_aim("p2_")
+	await _frames(40)
+	_check(not sword.is_showing_aim_tick(), "stick neutral: no tick")
+	sword._start_hit(0)
+	_check(sword._swing_dir.dot(Vector2.RIGHT) > 0.99, "stick neutral: the swing goes along the facing")
+	await _frames(40)
+	_guardian.uses_gamepad = false
+	_guardian.facing = Vector2.LEFT
+	sword._start_hit(0)
+	_check(sword._swing_dir.dot(Vector2.LEFT) > 0.99, "keyboard: the swing goes along the facing")
+	await _frames(40)
+
+
+# --- Cooldown readability --------------------------------------------------
+
+func _test_cooldown_states() -> void:
+	print("== Cooldown states ==")
+	await _build(0, 0)
+	var icon := SkillIcon.new()
+	icon.setup(_catalog.find("dash"), 1, 34.0)
+	add_child(icon)
+	icon.set_state(0.6, false)
+	var dim: Color = icon.get_shape_color()
+	var full: Color = _catalog.find("dash").icon_color
+	_check(icon.is_cooling() and dim.s < full.s * 0.5 and dim.v < full.v * 0.6, "recharging: the icon is dimmed and desaturated")
+	icon.set_state(0.0, false)
+	_check(not icon.is_cooling() and icon.get_shape_color() == full, "ready: full colour")
+	_check(icon.is_flashing() and icon.flashes == 1, "becoming ready flashes once")
+	icon.set_state(0.0, false)
+	_check(icon.flashes == 1, "staying ready does not flash again")
+	icon.queue_free()
+
+	# Active skill: the HUD icon and the cue in the world.
+	_give(_guardian, "dash", 1)
+	var dash := _guardian.skills.active as DashSkill
+	await _frames(2)
+	var status: PlayerStatus = _status_of(_guardian)
+	var heard: Array[String] = []
+	var audio: AudioDirector = AudioDirector.find(get_tree())
+	var listen: Callable = func(sound_name: String, _at: Vector2) -> void: heard.append(sound_name)
+	audio.sound_played.connect(listen)
+	var ready_signals: Array[int] = [0]
+	dash.became_ready.connect(func() -> void: ready_signals[0] += 1)
+	dash.dash()
+	await _frames(30)
+	_check(status.get_active_icon().is_cooling(), "Dash on cooldown: the HUD icon shows it")
+	_check(dash.ready_cue.plays == 0 and not heard.has("skill_ready"), "no ready cue while recharging")
+	await _frames(roundi(60.0 * 4.0))
+	_check(ready_signals[0] == 1, "became_ready fires once when the cooldown ends")
+	_check(dash.ready_cue.plays == 1, "the ready ring plays on the Guardian")
+	_check(heard.has("skill_ready"), "the soft ready chime plays")
+	_check(not status.get_active_icon().is_cooling() and status.get_active_icon().flashes == 1, "the HUD icon is ready and flashed")
+
+	# The Echo's pulse: same treatment.
+	var pulse := _echo.get_node("Pulse") as PulseAbility
+	var echo_status: PlayerStatus = _status_of(_echo)
+	_check(echo_status.get_pulse_icon() != null, "the Echo's HUD shows the pulse")
+	_check(_status_of(_guardian).get_pulse_icon() == null, "the Guardian's HUD has no pulse icon")
+	var plays: int = pulse.ready_cue.plays
+	heard.clear()
+	pulse.emit_pulse()
+	await _frames(20)
+	_check(echo_status.get_pulse_icon().is_cooling(), "after a pulse the pulse icon recharges")
+	await _frames(roundi(60.0 * pulse.pulse_cooldown))
+	_check(pulse.ready_cue.plays == plays + 1 and heard.has("skill_ready"), "pulse ready again: ring + chime")
+	_check(not echo_status.get_pulse_icon().is_cooling(), "and the pulse icon is ready")
+	audio.sound_played.disconnect(listen)
+	_give(_guardian, "", 0)
+
+
+func _status_of(player: Player) -> PlayerStatus:
+	for node: Node in _game.get_node("Hud/PlayerStatuses").get_children():
+		var status := node as PlayerStatus
+		if status and status.player == player:
+			return status
+	return null
+
+
+## A direction (of `steps` around) with no rock for `forward` px ahead and
+## `back` px behind.
+func _open_both_ways(from: Vector2, forward: float, back: float) -> Vector2:
+	var space: PhysicsDirectSpaceState2D = get_viewport().world_2d.direct_space_state
+	for i: int in 16:
+		var direction: Vector2 = Vector2.from_angle(TAU * i / 16.0)
+		var ahead := PhysicsRayQueryParameters2D.create(from, from + direction * forward, 1)
+		var behind := PhysicsRayQueryParameters2D.create(from, from - direction * back, 1)
+		if space.intersect_ray(ahead).is_empty() and space.intersect_ray(behind).is_empty():
+			return direction
+	return Vector2.RIGHT
+
+
+## Simulates this player's right stick.
+func _press_aim(prefix: String, direction: Vector2) -> void:
+	_release_aim(prefix)
+	if direction.x < -0.01:
+		Input.action_press(prefix + "aim_left", -direction.x)
+	elif direction.x > 0.01:
+		Input.action_press(prefix + "aim_right", direction.x)
+	if direction.y < -0.01:
+		Input.action_press(prefix + "aim_up", -direction.y)
+	elif direction.y > 0.01:
+		Input.action_press(prefix + "aim_down", direction.y)
+
+
+func _release_aim(prefix: String) -> void:
+	for action_name: String in ["aim_left", "aim_right", "aim_up", "aim_down"]:
+		Input.action_release(prefix + action_name)
+
+
+func _press_move(prefix: String, direction: Vector2) -> void:
+	_release_move(prefix)
+	if direction.x < -0.3:
+		Input.action_press(prefix + "move_left")
+	elif direction.x > 0.3:
+		Input.action_press(prefix + "move_right")
+	if direction.y < -0.3:
+		Input.action_press(prefix + "move_up")
+	elif direction.y > 0.3:
+		Input.action_press(prefix + "move_down")
+
+
+func _release_move(prefix: String) -> void:
+	for action_name: String in ["move_left", "move_right", "move_up", "move_down"]:
+		Input.action_release(prefix + action_name)
+
+
 # --- Flow -----------------------------------------------------------------
 
 func _test_choice_flow() -> void:
@@ -434,7 +736,7 @@ func _test_choice_flow() -> void:
 	for node: Node in _game.get_node("Hud/PlayerStatuses").find_children("*", "", true, false):
 		if node is SkillIcon and not node.is_queued_for_deletion():
 			hud_icons += 1
-	_check(hud_icons == 4, "the HUD shows the 4 owned skills (%d)" % hud_icons)
+	_check(hud_icons == 5, "the HUD shows the pulse + the 4 owned skills (%d)" % hud_icons)
 	get_tree().paused = false
 	# The world's final boss: no choice.
 	_stage.stage_index = 2
@@ -616,11 +918,11 @@ func _protect_players() -> void:
 		player.pressure.refill()
 
 
-## A direction with no rock for `distance` px.
-func _open_direction(from: Vector2, distance: float) -> Vector2:
+## A direction (of `steps` around; 8 = the key directions) with no rock for `distance` px.
+func _open_direction(from: Vector2, distance: float, steps: int = 16) -> Vector2:
 	var space: PhysicsDirectSpaceState2D = get_viewport().world_2d.direct_space_state
-	for i: int in 16:
-		var direction: Vector2 = Vector2.from_angle(TAU * i / 16.0)
+	for i: int in steps:
+		var direction: Vector2 = Vector2.from_angle(TAU * i / float(steps))
 		var query := PhysicsRayQueryParameters2D.create(from, from + direction * distance, 1)
 		if space.intersect_ray(query).is_empty():
 			return direction

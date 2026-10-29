@@ -99,6 +99,7 @@ const STRINGS: Dictionary = {
 	"skill_summary_title": {"en": "Your new skills", "ar": "مهاراتكما الجديدة"},
 	"skill_key_echo": {"en": "L-Shift / X", "ar": "L-Shift / X"},
 	"skill_key_guardian": {"en": "R-Ctrl / X", "ar": "R-Ctrl / X"},
+	"pulse_key": {"en": "Space / A", "ar": "Space / A"},
 
 	# Pause menu
 	"pause_title": {"en": "Paused", "ar": "إيقاف مؤقت"},

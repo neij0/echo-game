@@ -3,8 +3,8 @@ extends VBoxContainer
 ## One player's HUD block: depth, the health segments (HealthSegments), the
 ## world's pressure meter (Oxygen in the Ocean) and its low warning, and the
 ## distress pulse hint while a player who has one (the Echo) is downed, and the
-## skills (SkillIcon): the active skill with its cooldown and button, then small
-## icons for the passive ones. Created by Hud for every registered player
+## abilities (SkillIcon): the Echo's pulse and the active skill with their
+## cooldown and button, then small icons for the passive skills. Created by Hud for every registered player
 ## (builds its UI in code). The meter's name and colour come from the WorldConfig.
 
 @export var bar_size: Vector2 = Vector2(300.0, 18.0)
@@ -17,6 +17,9 @@ extends VBoxContainer
 @export var active_icon_size: float = 34.0
 @export var passive_icon_size: float = 22.0
 @export var skill_key_color: Color = Color(0.6, 0.66, 0.78)
+## The pulse's HUD icon (the Echo only).
+@export var pulse_icon_shape: SkillIcon.Shape = SkillIcon.Shape.RINGS
+@export var pulse_icon_color: Color = Color(0.45, 0.95, 1.0)
 
 var player: Player
 var level_builder: LevelBuilder
@@ -32,6 +35,8 @@ var _distress_label: Label
 var _distress: DistressPulse
 var _skill_row: HBoxContainer
 var _active_icon: SkillIcon
+var _pulse_icon: SkillIcon
+var _pulse: PulseAbility
 var _time: float = 0.0
 
 
@@ -75,6 +80,7 @@ func _ready() -> void:
 	_skill_row = HBoxContainer.new()
 	_skill_row.add_theme_constant_override("separation", 6)
 	add_child(_skill_row)
+	_pulse = player.get_node_or_null("Pulse") as PulseAbility
 	player.skills.changed.connect(_rebuild_skills)
 	_rebuild_skills()
 
@@ -99,11 +105,18 @@ func _process(delta: float) -> void:
 	_update_active_icon()
 
 
-## The active skill (with its button), then the passive skills.
+## The pulse (Echo) and the active skill (with their buttons), then the passive skills.
 func _rebuild_skills() -> void:
 	for child: Node in _skill_row.get_children():
 		child.queue_free()
 	_active_icon = null
+	_pulse_icon = null
+	if _pulse:
+		_pulse_icon = SkillIcon.new()
+		_pulse_icon.setup_custom(pulse_icon_shape, pulse_icon_color, active_icon_size)
+		_pulse_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_skill_row.add_child(_pulse_icon)
+		_add_key_label(Game.text("pulse_key"))
 	for definition: SkillDefinition in player.skills.get_owned():
 		var icon := SkillIcon.new()
 		var rank: int = player.skills.get_rank(definition.id)
@@ -113,19 +126,39 @@ func _rebuild_skills() -> void:
 		_skill_row.add_child(icon)
 		if definition.is_active():
 			_active_icon = icon
-			var key := Label.new()
-			key.text = Game.text("skill_key_echo" if player.skill_owner == SkillDefinition.Owner.ECHO else "skill_key_guardian")
-			key.add_theme_color_override("font_color", skill_key_color)
-			key.add_theme_font_size_override("font_size", 14)
-			key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			_skill_row.add_child(key)
+			_add_key_label(Game.text("skill_key_echo" if player.skill_owner == SkillDefinition.Owner.ECHO else "skill_key_guardian"))
+
+
+func _add_key_label(text: String) -> void:
+	var key := Label.new()
+	key.text = text
+	key.add_theme_color_override("font_color", skill_key_color)
+	key.add_theme_font_size_override("font_size", 14)
+	key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_skill_row.add_child(key)
 
 
 func _update_active_icon() -> void:
+	if _pulse_icon and _pulse:
+		_pulse_icon.set_state(_pulse.get_cooldown_ratio(), false)
 	var active: ActiveSkill = player.skills.active
 	if _active_icon == null or active == null or not is_instance_valid(active):
 		return
-	_active_icon.set_state(active.get_cooldown_ratio(), active.is_in_use())
+	# A hold skill without a cooldown (Shield) just lights up while held.
+	if active.get_cooldown() > 0.0:
+		_active_icon.set_state(active.get_cooldown_ratio(), active.is_in_use())
+	elif active.is_in_use() != _active_icon.in_use:
+		_active_icon.in_use = active.is_in_use()
+		_active_icon.queue_redraw()
+
+
+## The Echo's pulse icon (tests).
+func get_pulse_icon() -> SkillIcon:
+	return _pulse_icon
+
+
+func get_active_icon() -> SkillIcon:
+	return _active_icon
 
 
 func _update_distress_hint() -> void:

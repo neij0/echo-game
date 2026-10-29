@@ -13,7 +13,8 @@ signal pulse_emitted(origin: Vector2)
 ## 1 = Echo (P1), 2 = Guardian (P2). Used for spawn points and HUD order.
 @export var player_number: int = 1
 @export var display_name: String = "Echo"
-## Input actions are "<prefix>move_left", ..., "<prefix>action", "<prefix>skill".
+## Input actions are "<prefix>move_left", ..., "<prefix>action", "<prefix>skill",
+## "<prefix>aim_left" ... (the right stick of this player's own gamepad).
 @export var input_prefix: String = "p1_"
 ## Which skills this character can own (SkillDefinition.owner): Echo or Guardian.
 @export var skill_owner: SkillDefinition.Owner = SkillDefinition.Owner.ECHO
@@ -28,6 +29,13 @@ signal pulse_emitted(origin: Vector2)
 @export var drag: float = 2.5
 ## Lower drag when input stops, so the player glides a little.
 @export var glide_drag: float = 1.2
+
+@export_group("Aim")
+## Right stick push (0-1) needed to count as aiming.
+@export_range(0.0, 1.0) var aim_deadzone: float = 0.35
+## Stick push (0-1) on this player's gamepad that switches them to gamepad
+## controls (keys of their own actions switch back).
+@export_range(0.0, 1.0) var gamepad_switch_threshold: float = 0.5
 
 @export_group("Knockback")
 ## Seconds after a knockback during which max_speed is not applied, so the
@@ -46,6 +54,14 @@ signal pulse_emitted(origin: Vector2)
 var facing: Vector2 = Vector2.DOWN
 ## Share of max_speed / acceleration allowed right now (a raised Shield: < 1).
 var speed_scale: float = 1.0
+## True while an active skill uses the move keys to aim (keyboard Lure Pulse):
+## the player stands still.
+var move_locked: bool = false
+## True when this player last used their own gamepad, false after their own
+## keys. Decides how skills aim (right stick vs. hold + move keys).
+var uses_gamepad: bool = false
+## The gamepad bound to this player's actions (-1 = none / any).
+var joypad_device: int = -1
 var _knockback_left: float = 0.0
 
 @onready var health: PlayerHealth = $Health
@@ -56,11 +72,26 @@ var _knockback_left: float = 0.0
 
 func _ready() -> void:
 	add_to_group("players")
+	joypad_device = _find_joypad_device()
 
+
+## Switches between keyboard and gamepad aiming on this player's own input only
+## (the other player's keys or gamepad never change it).
+func _input(event: InputEvent) -> void:
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		if joypad_device >= 0 and event.device != joypad_device:
+			return
+		if event is InputEventJoypadMotion and absf((event as InputEventJoypadMotion).axis_value) < gamepad_switch_threshold:
+			return
+		if event is InputEventJoypadButton and not (event as InputEventJoypadButton).pressed:
+			return
+		uses_gamepad = true
+	elif event is InputEventKey and (event as InputEventKey).pressed and _is_own_key(event):
+		uses_gamepad = false
 
 func _physics_process(delta: float) -> void:
 	var input_dir: Vector2 = Vector2.ZERO
-	if not health.is_downed:
+	if not health.is_downed and not move_locked:
 		input_dir = Input.get_vector(_action("move_left"), _action("move_right"), _action("move_up"), _action("move_down"))
 	if input_dir != Vector2.ZERO:
 		facing = input_dir.normalized()
@@ -118,11 +149,35 @@ func is_skill_held() -> bool:
 	return not health.is_downed and Input.is_action_pressed(_action("skill"))
 
 
-## The current move input (zero while downed).
+## The current move input (zero while downed), also while move_locked (then
+## it aims instead of moving).
 func get_move_input() -> Vector2:
 	if health.is_downed:
 		return Vector2.ZERO
 	return Input.get_vector(_action("move_left"), _action("move_right"), _action("move_up"), _action("move_down"))
+
+
+## The right stick of this player's gamepad (normalized), zero inside aim_deadzone.
+func get_stick_aim() -> Vector2:
+	if health.is_downed:
+		return Vector2.ZERO
+	var aim: Vector2 = Input.get_vector(_action("aim_left"), _action("aim_right"), _action("aim_up"), _action("aim_down"))
+	return aim.normalized() if aim.length() >= aim_deadzone else Vector2.ZERO
+
+
+## Where skills aim: the right stick, else the move direction, else the facing.
+func get_aim_direction() -> Vector2:
+	var stick: Vector2 = get_stick_aim()
+	if stick != Vector2.ZERO:
+		return stick
+	var move: Vector2 = get_move_input()
+	return move.normalized() if move.length() > 0.1 else facing
+
+
+## Where sword hits go: the right stick, else the facing (keyboard: always the facing).
+func get_attack_direction() -> Vector2:
+	var stick: Vector2 = get_stick_aim()
+	return stick if stick != Vector2.ZERO else facing
 
 
 func is_action_held() -> bool:
@@ -149,6 +204,24 @@ func burst(new_velocity: Vector2, duration: float) -> void:
 
 func _action(action_name: String) -> String:
 	return input_prefix + action_name
+
+
+func _is_own_key(event: InputEvent) -> bool:
+	for action_name: String in ["move_left", "move_right", "move_up", "move_down", "action", "skill"]:
+		if InputMap.has_action(_action(action_name)) and event.is_action(_action(action_name)):
+			return true
+	return false
+
+
+## The device of the first gamepad event bound to this player's move actions.
+func _find_joypad_device() -> int:
+	var move_action: String = _action("move_left")
+	if not InputMap.has_action(move_action):
+		return -1
+	for event: InputEvent in InputMap.action_get_events(move_action):
+		if event is InputEventJoypadMotion or event is InputEventJoypadButton:
+			return event.device
+	return -1
 
 
 func _apply_leash() -> void:

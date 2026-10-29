@@ -1011,6 +1011,13 @@ def make_shard_hum(rng):
     return _norm(_reverb(glass, 1.5, 0.4, rng, circular=True), PEAK_SOFT * 0.6)
 
 
+def make_skill_ready(rng):
+    """Soft two-note chime: an ability (pulse, active skill) is ready again."""
+    out = _chord([1318.5, 1975.5], 0.6, 0.004, 0.16, ((1.0, 1.0), (2.0, 0.12)), stagger=0.07)
+    out = _filter(out, "lowpass", 5000.0)
+    return _norm(_trim_tail(_reverb(out, 1.0, 0.3, rng)), PEAK_SOFT * 0.8)
+
+
 def make_shard_pickup(rng):
     out = _chord([1046.5, 1568.0, 2093.0, 2637.0], 1.0, 0.002, 0.3, ((1.0, 1.0), (2.0, 0.2)), stagger=0.05)
     return _norm(_trim_tail(_reverb(out, 1.8, 0.35, rng)), PEAK_SFX * 0.75)
@@ -1122,6 +1129,7 @@ def _preview_list():
         ("player_low_health", make_low_health, False),
         ("world_shard_hum", make_shard_hum, True),
         ("world_shard_pickup", make_shard_pickup, False),
+        ("skill_ready", make_skill_ready, False),
         ("world_barrier_close", make_barrier_close, False),
         ("world_barrier_open", make_barrier_open, False),
         ("world_collapse_rumble", make_collapse_rumble, True),

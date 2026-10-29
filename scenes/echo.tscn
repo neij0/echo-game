@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1_base"]
 [ext_resource type="Script" path="res://scripts/pulse_ability.gd" id="2_pulse"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/echo_visual.gd" id="5_visual"]
 [ext_resource type="Script" path="res://scripts/distress_pulse.gd" id="6_distress"]
 [ext_resource type="Script" path="res://scripts/occluded_outline.gd" id="7_outline"]
+[ext_resource type="Script" path="res://scripts/ready_cue.gd" id="8_cue"]
 
 [node name="Echo" instance=ExtResource("1_base")]
 player_number = 1
@@ -17,9 +18,10 @@ light_reveal_radius = 115.0
 [node name="Body" parent="." index="1"]
 script = ExtResource("5_visual")
 
-[node name="Pulse" type="Node" parent="." node_paths=PackedStringArray("player")]
+[node name="Pulse" type="Node" parent="." node_paths=PackedStringArray("player", "ready_cue")]
 script = ExtResource("2_pulse")
 player = NodePath("..")
+ready_cue = NodePath("../UnlitLayer/PulseReadyCue")
 pulse_ring_scene = ExtResource("3_ring")
 
 [node name="DistressPulse" type="Node" parent="." node_paths=PackedStringArray("player")]
@@ -34,3 +36,10 @@ player = NodePath("../..")
 [node name="OccludedOutline" type="Node" parent="Body"]
 script = ExtResource("7_outline")
 color = Color(0.3, 0.95, 1, 1)
+
+[node name="PulseReadyCue" type="Node2D" parent="UnlitLayer" node_paths=PackedStringArray("player")]
+script = ExtResource("8_cue")
+player = NodePath("../..")
+energy = 1.6
+end_radius = 36.0
+volume_offset_db = -8.0

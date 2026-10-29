@@ -14,7 +14,7 @@ const GAME_SCENE: String = "res://scenes/game.tscn"
 const PHYSICS_FPS: float = 60.0
 const REQUIRED_SOUNDS: Array[String] = [
 	"sword_whoosh_1", "sword_whoosh_2", "sword_whoosh_3", "sword_impact", "sword_impact_heavy", "sword_finisher",
-	"pulse_ping", "pulse_distress",
+	"pulse_ping", "pulse_distress", "skill_ready",
 	"creature_click", "creature_investigate_chitter", "creature_investigate_call", "creature_screech", "creature_hiss", "creature_death",
 	"sentinel_click", "sentinel_investigate_creak", "sentinel_screech", "sentinel_hiss", "sentinel_death",
 	"boss_click", "boss_investigate_chitter", "boss_investigate_creak", "boss_investigate_call", "boss_screech", "boss_hiss", "boss_death",
