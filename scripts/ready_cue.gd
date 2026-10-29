@@ -15,7 +15,7 @@ extends Node2D
 @export var width: float = 2.5
 ## Seconds the ring grows and fades.
 @export var time: float = 0.45
-## AudioDirector sound name and its volume offset.
+## AudioDirector sound name (empty = silent, e.g. the Echo's pulse) and its volume offset.
 @export var sound: String = "skill_ready"
 @export var volume_offset_db: float = 0.0
 

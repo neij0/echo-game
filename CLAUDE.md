@@ -163,8 +163,8 @@ value per rank), name / description / co-op tip in EN + AR, `available_from_worl
 - **Cooldown readability**: `SkillIcon.set_state` (also the Echo's pulse in the HUD,
   `setup_custom`): recharging = dimmed + desaturated, a dark radial fill, a thin progress ring;
   ready = full colour, glowing edge; becoming ready = a short flash. In the world a `ReadyCue`
-  (ring out of the character + the soft `skill_ready` chime) plays once when an active skill or
-  the pulse (`PulseAbility.ready_cue`, quieter) is ready again (`became_ready`). A hold skill
+  (ring out of the character + the soft `skill_ready` chime) plays once when an active skill is
+  ready again (`became_ready`); the pulse (`PulseAbility.ready_cue`) gets the ring only, no chime. A hold skill
   without a cooldown (Shield) only lights up while held.
 - **Offers** (`SkillOffer`, no UI): own + shared pool, available in this world, below max rank
   (higher ranks come back), weighted, no repeats; once an active is owned no active is
@@ -231,7 +231,7 @@ numbered variant) replaces one without code changes.
   **`PlayerAudio`**: swishes while swimming, hurt, downed, revive. Also: sword whoosh per combo
   hit + impact (heavier on the finisher), pulse ping with echoes, distress ping, shard hum loop
   + chime, mending hum, low oxygen beep, low-health heartbeat, barrier close / open, collapse
-  rumble + falling rocks, `skill_ready` (soft two-note chime: pulse / active skill ready).
+  rumble + falling rocks, `skill_ready` (soft two-note chime: an active skill is ready).
 - Loops carry a WAV "smpl" loop chunk (Godot: "Detect From WAV").
 - Tools: `tools/sound_test.tscn` (every sound, the music crossfades, ambience),
   `tools/test_audio.tscn` (headless checks).
