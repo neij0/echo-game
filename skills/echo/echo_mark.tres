@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "echo_mark"
+owner = 0
+category = 0
+kind = 0
+max_rank = 1
+values = Dictionary[String, PackedFloat32Array]({
+"mark_time_add": PackedFloat32Array(4)
+})
+name_en = "Echo Mark"
+name_ar = "علامة الصدى"
+description_en = "Creatures hit by your pulse keep a faint outline for 4 s. The outline alone does not make them hittable."
+description_ar = "المخلوقات التي تصيبها نبضتكِ يبقى حولها خط خافت لمدة 4 ث. الخط وحده لا يجعل ضربها ممكناً."
+tip_en = "The Guardian can follow marked creatures in the dark and wait for the right moment."
+tip_ar = "يستطيع الحارس تتبّع المخلوقات المعلَّمة في الظلام وانتظار اللحظة المناسبة."
+icon_shape = 4
+icon_color = Color(0.75, 0.55, 1, 1)

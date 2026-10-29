@@ -46,6 +46,10 @@ levels = Array[ExtResource("3_level")]([ExtResource("level_1_1"), ExtResource("l
 ambient_color = Color(0.18, 0.26, 0.31, 1)
 deep_ambient_color = Color(0.16, 0.235, 0.285, 1)
 light_shaft_strength = 0.3
+skill_offer_count = 2
+skill_pick_count = 1
+boss_skill_offer_count = 2
+boss_skill_pick_count = 1
 
 [sub_resource type="Resource" id="Stage2"]
 script = ExtResource("2_stage")

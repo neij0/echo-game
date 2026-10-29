@@ -1,4 +1,4 @@
-[gd_scene load_steps=32 format=3]
+[gd_scene load_steps=34 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_builder.gd" id="1_level"]
 [ext_resource type="Resource" path="res://worlds/ocean.tres" id="2_world"]
@@ -30,6 +30,8 @@
 [ext_resource type="AudioStream" path="res://assets/audio/music/music_chase.wav" id="29_chase"]
 [ext_resource type="AudioStream" path="res://assets/audio/music/music_intense.wav" id="30_intense"]
 [ext_resource type="AudioStream" path="res://assets/audio/music/music_boss.wav" id="31_boss"]
+[ext_resource type="Script" path="res://scripts/skill_choice_screen.gd" id="32_skills"]
+[ext_resource type="Script" path="res://scripts/pause_menu.gd" id="33_pause"]
 
 [node name="Game" type="Node2D"]
 y_sort_enabled = true
@@ -96,13 +98,14 @@ script = ExtResource("8_sonar")
 [node name="GlowEnvironment" type="WorldEnvironment" parent="."]
 script = ExtResource("9_glow")
 
-[node name="StageManager" type="Node" parent="." node_paths=PackedStringArray("level_builder", "awareness", "end_screen", "escape_event")]
+[node name="StageManager" type="Node" parent="." node_paths=PackedStringArray("level_builder", "awareness", "end_screen", "escape_event", "skill_choice_screen")]
 script = ExtResource("15_stage")
 world = ExtResource("2_world")
 level_builder = NodePath("../LevelBuilder")
 awareness = NodePath("../DepthAwareness")
 end_screen = NodePath("../EndScreen")
 escape_event = NodePath("../EnvironmentLayer/EscapeEvent")
+skill_choice_screen = NodePath("../SkillChoiceScreen")
 
 [node name="SonarAudio" type="Node" parent="." node_paths=PackedStringArray("stage_manager", "sonar_overlay")]
 script = ExtResource("10_audio")
@@ -172,3 +175,12 @@ boss_stream = ExtResource("31_boss")
 [node name="EndScreen" type="CanvasLayer" parent="."]
 layer = 3
 script = ExtResource("16_end")
+
+[node name="SkillChoiceScreen" type="CanvasLayer" parent="."]
+layer = 4
+script = ExtResource("32_skills")
+
+[node name="PauseMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("stage_manager")]
+layer = 5
+script = ExtResource("33_pause")
+stage_manager = NodePath("../StageManager")

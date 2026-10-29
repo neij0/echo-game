@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "iron_lungs"
+owner = 1
+category = 1
+kind = 0
+max_rank = 2
+values = Dictionary[String, PackedFloat32Array]({
+"pressure_drain_mult": PackedFloat32Array(0.8, 0.65)
+})
+name_en = "Iron Lungs"
+name_ar = "رئتان من حديد"
+description_en = "Your oxygen drains slower: -20% (rank 2: -35%)."
+description_ar = "أكسجينك ينفد أبطأ: -20% (المستوى 2: -35%)."
+tip_en = "You last longer: let the Echo use the oxygen stations first."
+tip_ar = "تصمد مدة أطول: دع إيكو تستخدم محطات الأكسجين أولاً."
+icon_shape = 2
+icon_color = Color(1, 0.75, 0.4, 1)

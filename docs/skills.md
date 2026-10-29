@@ -1,6 +1,7 @@
 # Skills (ideas for later)
 
-Ideas only. Nothing here is implemented yet.
+Ideas only. Lure Pulse is implemented (`skills/echo/lure_pulse.tres`); the rest is not.
+The skill system itself is described in CLAUDE.md ("Skills").
 
 ## Echo
 

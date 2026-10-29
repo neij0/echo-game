@@ -158,7 +158,8 @@ signal lunge_started
 ## Seconds it stays revealed (hittable) after a pulse front passed over it.
 @export var pulse_reveal_time: float = 1.5
 ## Seconds it stays Exposed after a pulse front passed over it. A Guardian
-## finisher landing in that time kills it instantly.
+## finisher landing in that time kills it instantly. Longer with the Echo's
+## skills (PlayerSkills stat "exposed_time_add"); it stays hittable while Exposed.
 @export var exposed_time: float = 1.5
 ## Seconds of the white flash when hit.
 @export var hit_flash_time: float = 0.12
@@ -250,6 +251,11 @@ var _flash_left: float = 0.0
 var _dying: bool = false
 var _was_in_light: bool = false
 var _exposed_left: float = 0.0
+## Exposed time of the last pulse hit (base + skill bonus), for the ring.
+var _exposed_total: float = 0.0
+## Echo Mark skill: seconds the outline stays after a pulse hit ("mark_time_add").
+var _marked_left: float = 0.0
+var _marked_total: float = 0.0
 ## 0 = no silhouette, 1 = full silhouette (see the Silhouette group).
 var silhouette_ratio: float = 0.0
 ## 0-1: how strongly a CloseSense (the Guardian) feels it right now. Keeps the
@@ -338,7 +344,7 @@ func set_frenzy(enabled: bool) -> void:
 ## shortly after a pulse front passed over it, or fully inside a CloseSense
 ## (melee self-defence; only a pulse makes it Exposed for the instant kill).
 func is_revealed() -> bool:
-	return _revealed_left > 0.0 or is_in_echo_light() or sense_ratio >= 1.0
+	return _revealed_left > 0.0 or is_exposed() or is_in_echo_light() or sense_ratio >= 1.0
 
 
 ## How much of the body is drawn (1 = full, the silhouette share outside the
@@ -376,7 +382,22 @@ func is_exposed() -> bool:
 
 ## 1 right after the pulse front hit, 0 when Exposed runs out.
 func get_exposed_ratio() -> float:
-	return _exposed_left / exposed_time if exposed_time > 0.0 else 0.0
+	return _exposed_left / _exposed_total if _exposed_total > 0.0 else 0.0
+
+
+## Echo Mark: an outline only (not hittable on its own), 1 right after the
+## pulse hit, 0 when it runs out.
+func get_mark_ratio() -> float:
+	return _marked_left / _marked_total if _marked_total > 0.0 else 0.0
+
+
+## Pushed back without damage (a blocked touch on the Guardian's Shield).
+func repel(direction: Vector2, speed: float, stagger_time: float) -> void:
+	if _dying:
+		return
+	_end_lunge()
+	velocity = direction.normalized() * speed
+	_stagger_left = maxf(_stagger_left, stagger_time * stagger_scale)
 
 
 ## Applies a sword hit. Returns true if it was an Exposed kill (a finisher on an
@@ -650,7 +671,12 @@ func _hurt_overlapping_players() -> void:
 func on_sonar_hit(_origin: Vector2) -> void:
 	_revealed_left = pulse_reveal_time
 	if not unkillable and exposed_finisher_kills:
-		_exposed_left = exposed_time
+		_exposed_total = exposed_time + PlayerSkills.team_bonus(get_tree(), "exposed_time_add")
+		_exposed_left = _exposed_total
+	var mark_time: float = PlayerSkills.team_bonus(get_tree(), "mark_time_add")
+	if mark_time > 0.0:
+		_marked_total = mark_time
+		_marked_left = mark_time
 	if hidden_until_pinged:
 		_echo.flash(self, body_radius)
 
@@ -993,6 +1019,7 @@ func _is_player_safe(player: Player) -> bool:
 func _update_reveal(delta: float) -> void:
 	_revealed_left = maxf(_revealed_left - delta, 0.0)
 	_exposed_left = maxf(_exposed_left - delta, 0.0)
+	_marked_left = maxf(_marked_left - delta, 0.0)
 	var in_light: bool = is_in_echo_light()
 	if in_light != _was_in_light or _flash_left > 0.0:
 		_was_in_light = in_light
@@ -1055,7 +1082,7 @@ func _on_hitbox_body_entered(body: Node2D) -> void:
 	if _dying or _stagger_left > 0.0:
 		return
 	if player and _can_hurt(player) and not _is_player_safe(player):
-		player.health.take_hit(global_position)
+		player.health.take_hit(global_position, self)
 
 
 func _draw() -> void:

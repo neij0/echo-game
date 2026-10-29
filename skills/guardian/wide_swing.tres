@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "wide_swing"
+owner = 1
+category = 0
+kind = 0
+max_rank = 2
+values = Dictionary[String, PackedFloat32Array]({
+"sword_arc_mult": PackedFloat32Array(1.3, 1.6)
+})
+name_en = "Wide Swing"
+name_ar = "ضربة واسعة"
+description_en = "Your sword arc is wider: +30% (rank 2: +60%)."
+description_ar = "قوس سيفك أوسع: +30% (المستوى 2: +60%)."
+tip_en = "Stand between the Echo and a group: one swing reaches more of them."
+tip_ar = "قف بين إيكو ومجموعة مخلوقات: ضربة واحدة تصل إلى عدد أكبر منها."
+icon_shape = 5
+icon_color = Color(1, 0.8, 0.35, 1)

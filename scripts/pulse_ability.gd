@@ -2,7 +2,7 @@ class_name PulseAbility
 extends Node
 ## The Echo's sonar pulse: on the action button, spawns a PulseRing and emits
 ## the player's pulse_emitted signal (pressure cost, awareness, creatures, sound
-## and camera shake all listen to that signal).
+## and camera shake all listen to that signal). Skills: "pulse_radius_mult".
 
 @export var player: Player
 @export var pulse_ring_scene: PackedScene
@@ -34,11 +34,17 @@ func is_ready() -> bool:
 	return cooldown_left <= 0.0
 
 
+## The world's pulse radius with the Echo's skills.
+func get_radius() -> float:
+	var skills: PlayerSkills = PlayerSkills.of(player)
+	return pulse_radius * (skills.get_multiplier("pulse_radius_mult") if skills else 1.0)
+
+
 func emit_pulse() -> void:
 	cooldown_left = pulse_cooldown
 	if pulse_ring_scene:
 		var ring := pulse_ring_scene.instantiate() as PulseRing
-		ring.max_radius = pulse_radius
+		ring.max_radius = get_radius()
 		ring.expand_time = pulse_expand_time
 		ring.position = player.position
 		player.get_parent().add_child(ring)

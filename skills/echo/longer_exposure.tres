@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "longer_exposure"
+owner = 0
+category = 0
+kind = 0
+max_rank = 2
+values = Dictionary[String, PackedFloat32Array]({
+"exposed_time_add": PackedFloat32Array(1, 1.7)
+})
+name_en = "Longer Exposure"
+name_ar = "انكشاف أطول"
+description_en = "Creatures hit by your pulse stay Exposed longer: 1.5 s -> 2.5 s (rank 2: 3.2 s)."
+description_ar = "المخلوقات التي تصيبها نبضتكِ تبقى مكشوفة مدة أطول: من 1.5 ث إلى 2.5 ث (المستوى 2: 3.2 ث)."
+tip_en = "Pulse right before the Guardian's finisher: he gets more time to land it."
+tip_ar = "أطلقي النبضة قبل الضربة القاضية للحارس: سيجد وقتاً أطول لإصابة المخلوق."
+icon_shape = 1
+icon_color = Color(1, 0.8, 0.35, 1)

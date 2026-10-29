@@ -4,7 +4,8 @@ extends Node
 ## hold the action button for revive_time seconds. Letting go (or stepping away)
 ## does not lose the progress: it pauses, and only after decay_delay seconds it
 ## slowly decays. It resets once the partner is up again. Values per mode
-## ("mode_listeners" group, set by the StageManager).
+## ("mode_listeners" group, set by the StageManager). Skills: the reviver's
+## "revive_time_mult".
 
 signal revived_partner(partner: Player)
 
@@ -46,7 +47,13 @@ func has_target() -> bool:
 
 
 func get_progress_ratio() -> float:
-	return progress / revive_time
+	return progress / get_revive_time()
+
+
+## Seconds of holding needed, with this player's skills.
+func get_revive_time() -> float:
+	var skills: PlayerSkills = PlayerSkills.of(player)
+	return revive_time * (skills.get_multiplier("revive_time_mult") if skills else 1.0)
 
 
 func get_target() -> Player:
@@ -67,14 +74,14 @@ func _process(delta: float) -> void:
 	if _is_reviving_now():
 		_paused_left = challenge_decay_delay if challenge_mode else calm_decay_delay
 		progress += delta
-		if progress >= revive_time:
+		if progress >= get_revive_time():
 			_finish()
 		return
 	if _paused_left > 0.0:
 		_paused_left -= delta
 		return
 	var decay: float = challenge_decay_per_second if challenge_mode else calm_decay_per_second
-	progress = maxf(progress - decay * revive_time * delta, 0.0)
+	progress = maxf(progress - decay * get_revive_time() * delta, 0.0)
 
 
 func _is_reviving_now() -> bool:

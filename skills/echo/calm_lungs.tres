@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "calm_lungs"
+owner = 0
+category = 1
+kind = 0
+max_rank = 2
+values = Dictionary[String, PackedFloat32Array]({
+"pulse_cost_mult": PackedFloat32Array(0.7, 0.5)
+})
+name_en = "Calm Lungs"
+name_ar = "رئتان هادئتان"
+description_en = "Each pulse costs less oxygen: -30% (rank 2: -50%)."
+description_ar = "كل نبضة تستهلك أكسجيناً أقل: -30% (المستوى 2: -50%)."
+tip_en = "More pulses for the same oxygen: keep the Guardian's targets lit."
+tip_ar = "نبضات أكثر بنفس الأكسجين: أبقي أهداف الحارس مكشوفة."
+icon_shape = 2
+icon_color = Color(0.4, 0.75, 1, 1)

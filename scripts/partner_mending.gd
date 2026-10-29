@@ -6,7 +6,8 @@ extends Node2D
 ## link is drawn between them while it mends. Must live on a CanvasLayer with
 ## follow_viewport_enabled at the origin, so it draws in world coordinates and
 ## the darkness does not dim it. A soft hum loops while it mends, fading with
-## the link.
+## the link. Skills: each player mends at their own "mend_rate_mult"; the
+## range uses the larger "mend_distance_mult" of the two.
 
 ## Emitted when mending starts / stops (for sounds or effects later).
 signal mending_changed(is_mending: bool)
@@ -61,8 +62,8 @@ func _process(delta: float) -> void:
 		mending_changed.emit(is_mending)
 	if is_mending:
 		var rate: float = 1.0 / maxf(_seconds_per_segment(), 0.01)
-		_a.health.heal(rate * delta)
-		_b.health.heal(rate * delta)
+		_a.health.heal(rate * _skill_multiplier(_a, "mend_rate_mult") * delta)
+		_b.health.heal(rate * _skill_multiplier(_b, "mend_rate_mult") * delta)
 	var fade_step: float = delta / maxf(fade_time, 0.01)
 	_strength = move_toward(_strength, 1.0 if is_mending else 0.0, fade_step)
 	_update_hum()
@@ -93,6 +94,22 @@ func is_humming() -> bool:
 	return _hum != null and _hum.playing
 
 
+## The players' distance limit, with the better of their skills.
+func get_mend_distance() -> float:
+	if _a == null or _b == null:
+		_pick_players()
+	var best: float = 1.0
+	for each: Player in [_a, _b]:
+		if each:
+			best = maxf(best, _skill_multiplier(each, "mend_distance_mult"))
+	return mend_distance * best
+
+
+static func _skill_multiplier(target: Player, stat: String) -> float:
+	var skills: PlayerSkills = PlayerSkills.of(target)
+	return skills.get_multiplier(stat) if skills else 1.0
+
+
 func _seconds_per_segment() -> float:
 	var challenge: bool = stage_manager != null and stage_manager.mode == SaveData.Mode.CHALLENGE
 	return challenge_seconds_per_segment if challenge else calm_seconds_per_segment
@@ -112,7 +129,7 @@ func _can_mend() -> bool:
 	# Nothing to mend.
 	if _a.health.is_full() and _b.health.is_full():
 		return false
-	if _a.global_position.distance_to(_b.global_position) > mend_distance:
+	if _a.global_position.distance_to(_b.global_position) > get_mend_distance():
 		return false
 	for node: Node in get_tree().get_nodes_in_group("creatures"):
 		var creature := node as Creature

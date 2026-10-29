@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+[ext_resource type="PackedScene" path="res://scenes/skills/dash.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "dash"
+owner = 1
+category = 0
+kind = 1
+max_rank = 1
+values = Dictionary[String, PackedFloat32Array]({
+"speed": PackedFloat32Array(900),
+"time": PackedFloat32Array(0.16),
+"invulnerable_time": PackedFloat32Array(0.3),
+"cooldown": PackedFloat32Array(4)
+})
+active_scene = ExtResource("2_scene")
+name_en = "Dash"
+name_ar = "اندفاع"
+description_en = "Skill button: a short fast dash where you are moving, briefly invulnerable. 4 s cooldown."
+description_ar = "زر المهارة: اندفاعة قصيرة سريعة في اتجاه حركتك، مع حماية قصيرة من الضرر. الانتظار 4 ث."
+tip_en = "Dash to the Echo when a creature lunges at her."
+tip_ar = "اندفع نحو إيكو عندما ينقضّ عليها مخلوق."
+icon_shape = 8
+icon_color = Color(0.6, 0.75, 1, 1)

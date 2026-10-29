@@ -1,7 +1,8 @@
 extends SceneTree
 ## Headless save/load test: writes a SaveData to a test file, reads it back,
 ## checks defaults for old/broken files, and walks the Game progress through a
-## whole world (3 completed stages -> next world unlocked). Uses its own files
+## whole world (3 completed stages -> next world unlocked), with the skills
+## (saved with each stage, reset when the next world starts). Uses its own files
 ## in user://, so the real save is never touched.
 ##
 ## Run from the project folder:
@@ -31,7 +32,9 @@ func _test_round_trip() -> void:
 	save.stage_index = 2
 	save.unlocked_worlds = PackedStringArray(["ocean", "caves"])
 	save.mode = SaveData.Mode.CHALLENGE
-	save.skills = PackedStringArray(["lure_pulse"])
+	save.skills = SkillLoadout.new("caves")
+	save.skills.set_rank("echo", "lure_pulse", 1)
+	save.skills.set_rank("guardian", "wide_swing", 2)
 	_expect(save.write(TEST_SAVE) == OK, "write the save file")
 	var loaded: SaveData = SaveData.read(TEST_SAVE)
 	_expect(loaded != null, "read the save file back")
@@ -41,7 +44,10 @@ func _test_round_trip() -> void:
 	_expect(loaded.stage_index == 2, "stage survives the round trip")
 	_expect(loaded.unlocked_worlds == PackedStringArray(["ocean", "caves"]), "unlocked worlds survive the round trip")
 	_expect(loaded.mode == SaveData.Mode.CHALLENGE, "mode survives the round trip")
-	_expect(loaded.skills == PackedStringArray(["lure_pulse"]), "skills survive the round trip")
+	_expect(loaded.skills.get_rank("echo", "lure_pulse") == 1, "an Echo skill survives the round trip")
+	_expect(loaded.skills.get_rank("guardian", "wide_swing") == 2, "a Guardian skill and its rank survive the round trip")
+	_expect(loaded.skills.get_rank("echo", "wide_swing") == 0, "skills stay with their character")
+	_expect(loaded.skills.world_id == "caves", "the skills remember their world")
 	print("  file content: " + FileAccess.get_file_as_string(TEST_SAVE).replace("\n", " ").replace("\t", ""))
 
 
@@ -49,6 +55,10 @@ func _test_defaults_and_broken_files() -> void:
 	var partial: SaveData = SaveData.from_dict({"world": "ocean"})
 	_expect(partial.stage_index == 0 and partial.mode == SaveData.Mode.CALM and partial.skills.is_empty(), "missing fields get defaults")
 	_expect("ocean" in partial.unlocked_worlds, "the current world is always unlocked")
+	var old_format: SaveData = SaveData.from_dict({"version": 1, "world": "ocean", "skills": []})
+	_expect(old_format.skills != null and old_format.skills.is_empty(), "a version 1 save (skills list) loads without skills")
+	var other_world: SaveData = SaveData.from_dict({"world": "caves", "skills": {"world": "ocean", "echo": {"far_echo": 2}}})
+	_expect(other_world.skills.is_empty() and other_world.skills.world_id == "caves", "skills of another world are dropped")
 	var file := FileAccess.open(TEST_SAVE, FileAccess.WRITE)
 	file.store_string("{ not json")
 	file.close()
@@ -66,10 +76,19 @@ func _test_world_progress() -> void:
 	game.save = game._fresh_save()
 	_expect(game.get_current_world() != null, "the Ocean config is found by id")
 
-	_expect(not game.complete_stage(), "stage 1 done: the world goes on")
+	var skills := SkillLoadout.new("ocean")
+	skills.set_rank("echo", "far_echo", 1)
+	skills.set_rank("guardian", "dash", 1)
+	_expect(not game.complete_stage(skills), "stage 1 done: the world goes on")
 	_expect(game.save.world_id == "ocean" and game.save.stage_index == 1, "saved at Ocean stage 2")
+	_expect(game.save.skills.get_rank("echo", "far_echo") == 1 and game.save.skills.get_rank("guardian", "dash") == 1, "the stage's skills are saved")
+	skills.set_rank("echo", "far_echo", 2)
+	_expect(game.save.skills.get_rank("echo", "far_echo") == 1, "the save keeps its own copy of the skills")
+	var reloaded: SaveData = SaveData.read(TEST_SAVE)
+	_expect(reloaded != null and reloaded.skills.get_rank("guardian", "dash") == 1, "the skills were written to disk")
 	_expect(not game.complete_stage(), "stage 2 done: the world goes on")
-	_expect(game.complete_stage(), "stage 3 done: the world is finished")
+	_expect(game.complete_stage(skills), "stage 3 done: the world is finished")
+	_expect(game.save.skills.is_empty() and game.save.skills.world_id == "caves", "a new world starts without skills")
 	_expect(game.finished_world_id == "ocean", "story screen will be the Ocean's")
 	_expect(game.save.world_id == "caves" and game.save.stage_index == 0, "moved to Caves stage 1")
 	_expect(game.is_world_unlocked("caves") and not game.is_world_unlocked("forest"), "Caves unlocked, Forest still locked")

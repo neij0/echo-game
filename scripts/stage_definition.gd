@@ -17,6 +17,15 @@ extends Resource
 ## 0 = no light shafts from above. 1 = the world's full shaft brightness.
 @export_range(0.0, 1.0) var light_shaft_strength: float = 0.0
 
+@export_group("Skill Choice")
+## After a normal level of this stage: cards offered to each player, and how
+## many they pick (SkillOffer).
+@export var skill_offer_count: int = 3
+@export var skill_pick_count: int = 1
+## After the stage's boss (not after the world's final boss: no choice there).
+@export var boss_skill_offer_count: int = 3
+@export var boss_skill_pick_count: int = 2
+
 
 func get_level_count() -> int:
 	return levels.size()

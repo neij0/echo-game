@@ -14,6 +14,7 @@ extends Node2D
 ## and the sword hangs lowered beside him, rest_angle_degrees below horizontal
 ## on that side. Flips and the return after a combo blend over rest_transition_time.
 ## Attacks are unchanged: each hit aims along player.facing.
+## Skills: "sword_arc_mult" widens both arcs (at most a full circle).
 ## Look: a dark blade whose edge glows gold inside the Echo's light, a bright
 ## slash arc that trails the swing, and a small body lunge per hit (visual
 ## only, read by GuardianVisual; the finisher pulls back first, then lunges further).
@@ -275,7 +276,7 @@ func _update_hit(delta: float) -> void:
 func _apply_damage() -> void:
 	var is_finisher: bool = hit_index == 2
 	var reach: float = finisher_range if is_finisher else quick_range
-	var half_arc: float = deg_to_rad(finisher_arc_degrees if is_finisher else quick_arc_degrees) * 0.5
+	var half_arc: float = get_arc_radians(is_finisher) * 0.5
 	for node: Node in get_tree().get_nodes_in_group("creatures"):
 		var creature := node as Creature
 		if creature == null or creature.is_dying():
@@ -338,6 +339,13 @@ func _make_noise() -> void:
 	get_tree().call_group("creatures", "hear_noise", player.global_position, noise_radius)
 
 
+## The full arc of a hit in radians, with the skills.
+func get_arc_radians(is_finisher: bool) -> float:
+	var skills: PlayerSkills = PlayerSkills.of(player)
+	var multiplier: float = skills.get_multiplier("sword_arc_mult") if skills else 1.0
+	return minf(deg_to_rad(finisher_arc_degrees if is_finisher else quick_arc_degrees) * multiplier, TAU)
+
+
 func _windup(index: int) -> float:
 	return finisher_windup if index == 2 else 0.0
 
@@ -363,7 +371,7 @@ func _draw() -> void:
 	if hit_index >= 0:
 		var is_finisher: bool = hit_index == 2
 		var reach: float = finisher_range if is_finisher else quick_range
-		var half_arc: float = deg_to_rad(finisher_arc_degrees if is_finisher else quick_arc_degrees) * 0.5
+		var half_arc: float = get_arc_radians(is_finisher) * 0.5
 		var windup: float = _windup(hit_index)
 		var swing_time: float = _elapsed - windup
 		var duration: float = finisher_duration if is_finisher else quick_duration

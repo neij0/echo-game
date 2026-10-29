@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+[ext_resource type="PackedScene" path="res://scenes/skills/lure_pulse.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "lure_pulse"
+owner = 0
+category = 0
+kind = 1
+max_rank = 1
+values = Dictionary[String, PackedFloat32Array]({
+"range": PackedFloat32Array(350),
+"noise_radius": PackedFloat32Array(500),
+"cooldown": PackedFloat32Array(10),
+"cost": PackedFloat32Array(0.02),
+"travel_time": PackedFloat32Array(0.35),
+"pings": PackedFloat32Array(2),
+"ping_interval": PackedFloat32Array(1.2)
+})
+active_scene = ExtResource("2_scene")
+name_en = "Lure Pulse"
+name_ar = "نبضة الطُّعم"
+description_en = "Skill button: throw a decoy echo where you are moving (about 350 px). Creatures within about 500 px come to investigate it. Costs a little oxygen, 10 s cooldown."
+description_ar = "زر المهارة: ترمين صدىً خادعاً في اتجاه حركتكِ (حوالي 350 بكسل). المخلوقات القريبة منه (حوالي 500 بكسل) تأتي لتتفحّصه. يستهلك قليلاً من الأكسجين، والانتظار 10 ث."
+tip_en = "Throw it away from your path, then slip past together while they look."
+tip_ar = "ارميه بعيداً عن طريقكما، ثم تسلّلا معاً بينما تتفحّصه المخلوقات."
+icon_shape = 3
+icon_color = Color(0.45, 0.95, 1, 1)

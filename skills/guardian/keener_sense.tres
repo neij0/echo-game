@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "keener_sense"
+owner = 1
+category = 0
+kind = 0
+max_rank = 2
+values = Dictionary[String, PackedFloat32Array]({
+"close_sense_add": PackedFloat32Array(40, 70)
+})
+name_en = "Keener Sense"
+name_ar = "حسّ أدق"
+description_en = "Your close sense reaches further: 90 -> 130 px (rank 2: 160 px)."
+description_ar = "حسّك القريب يصل أبعد: من 90 إلى 130 بكسل (المستوى 2: 160 بكسل)."
+tip_en = "You notice creatures sooner in the dark: warn the Echo before they reach her."
+tip_ar = "تلاحظ المخلوقات في الظلام أسرع: نبّه إيكو قبل أن تصل إليها."
+icon_shape = 7
+icon_color = Color(0.6, 0.8, 1, 1)

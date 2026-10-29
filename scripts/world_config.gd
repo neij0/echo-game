@@ -155,6 +155,18 @@ extends Resource
 ## 0-1: share of a full pressure meter each pulse costs.
 @export_range(0.0, 1.0) var pulse_cost_ratio: float = 0.03
 
+@export_group("Skills")
+## This world's own names / texts for some skills (e.g. the pressure skills:
+## cold instead of oxygen). Skills without an entry keep their own text.
+@export var skill_text_overrides: Array[SkillTextOverride] = []
+
+
+func get_skill_text_override(skill_id: String) -> SkillTextOverride:
+	for override: SkillTextOverride in skill_text_overrides:
+		if override and override.skill_id == skill_id:
+			return override
+	return null
+
 
 func get_stage_count() -> int:
 	return stages.size()

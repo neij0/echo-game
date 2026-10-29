@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "quick_revive"
+owner = 2
+category = 0
+kind = 0
+max_rank = 2
+values = Dictionary[String, PackedFloat32Array]({
+"revive_time_mult": PackedFloat32Array(0.7, 0.5)
+})
+name_en = "Quick Revive"
+name_ar = "إنعاش سريع"
+description_en = "You revive your partner faster: 2.0 s -> 1.4 s (rank 2: 1.0 s)."
+description_ar = "تُنعش شريكك أسرع: من 2.0 ث إلى 1.4 ث (المستوى 2: 1.0 ث)."
+tip_en = "Each of you owns your own copy: it speeds up whoever is reviving."
+tip_ar = "لكلٍّ منكما نسخته الخاصة: تُسرّع من يقوم بالإنعاش."
+icon_shape = 9
+icon_color = Color(0.5, 1, 0.75, 1)

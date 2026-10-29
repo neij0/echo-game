@@ -13,6 +13,8 @@ signal language_changed
 ## The WorldConfig of each world that exists so far. A world id without a
 ## config shows "coming soon" on the World Map.
 @export var worlds: Array[WorldConfig] = []
+## Every skill of the game (offered between levels, see SkillOffer).
+@export var skill_catalog: SkillCatalog
 
 @export_group("Scenes")
 @export_file("*.tscn") var main_menu_scene: String = "res://scenes/main_menu.tscn"
@@ -187,11 +189,14 @@ func play_current() -> void:
 
 
 ## Called by the StageManager when a stage's boss is beaten. Moves the save to
-## the next stage (or the next world) and writes it. Returns true when that was
-## the world's last stage.
-func complete_stage() -> bool:
+## the next stage (or the next world) and writes it, with the skills owned now
+## (null = keep the saved ones). A new world starts without skills. Returns
+## true when that was the world's last stage.
+func complete_stage(skills: SkillLoadout = null) -> bool:
 	var world: WorldConfig = get_current_world()
 	finished_world_id = ""
+	if skills:
+		save.skills = skills.copy()
 	save.stage_index += 1
 	var world_finished: bool = world == null or save.stage_index >= world.get_stage_count()
 	if world_finished:
@@ -200,6 +205,7 @@ func complete_stage() -> bool:
 		if next < world_ids.size():
 			save.world_id = world_ids[next]
 			save.stage_index = 0
+			save.skills = SkillLoadout.new(save.world_id)
 			if not save.world_id in save.unlocked_worlds:
 				save.unlocked_worlds.append(save.world_id)
 	write_save()
@@ -215,6 +221,12 @@ func get_world_config(world_id: String) -> WorldConfig:
 
 func get_current_world() -> WorldConfig:
 	return get_world_config(save.world_id)
+
+
+## Position of a world in play order (0 = Ocean), for
+## SkillDefinition.available_from_world.
+func get_world_index(world_id: String) -> int:
+	return maxi(world_ids.find(world_id), 0)
 
 
 func is_world_unlocked(world_id: String) -> bool:
@@ -283,6 +295,7 @@ func _fresh_save() -> SaveData:
 	fresh.world_id = world_ids[0]
 	fresh.unlocked_worlds = PackedStringArray([world_ids[0]])
 	fresh.mode = preferred_mode
+	fresh.skills = SkillLoadout.new(fresh.world_id)
 	return fresh
 
 

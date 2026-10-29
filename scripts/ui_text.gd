@@ -74,6 +74,51 @@ const STRINGS: Dictionary = {
 	"distress_cooldown": {"en": "Distress pulse in %.1f s", "ar": "نبضة الاستغاثة بعد %.1f ث"},
 	"arena_open": {"en": "The arena door is open", "ar": "انفتح باب الساحة"},
 
+	# Characters
+	"char_echo": {"en": "Echo", "ar": "إيكو"},
+	"char_guardian": {"en": "Guardian", "ar": "الحارس"},
+
+	# Skill choice (between levels) and the HUD
+	"skill_choice_title": {"en": "Choose your skills", "ar": "اختارا مهاراتكما"},
+	"skill_pick": {"en": "Pick %d of %d", "ar": "اختر %d من %d"},
+	"skill_new": {"en": "New", "ar": "جديدة"},
+	"skill_rank": {"en": "Rank %d / %d", "ar": "المستوى %d من %d"},
+	"skill_active": {"en": "Active: skill button", "ar": "نشطة: زر المهارة"},
+	"skill_passive": {"en": "Passive", "ar": "دائمة"},
+	"skill_shared": {"en": "Shared", "ar": "مشتركة"},
+	"skill_fallback": {"en": "Nothing new left", "ar": "لم يبقَ شيء جديد"},
+	"skill_hint_echo": {
+		"en": "W / S: choose    Space: pick    (gamepad 1: stick + A)",
+		"ar": "W / S: تنقّل    Space: اختيار    (يد التحكم 1: العصا + A)",
+	},
+	"skill_hint_guardian": {
+		"en": "Up / Down arrows: choose    Enter: pick    (gamepad 2: stick + A)",
+		"ar": "السهمان أعلى / أسفل: تنقّل    Enter: اختيار    (يد التحكم 2: العصا + A)",
+	},
+	"skill_waiting": {"en": "Ready! Waiting for your partner...", "ar": "جاهز! بانتظار شريكك..."},
+	"skill_summary_title": {"en": "Your new skills", "ar": "مهاراتكما الجديدة"},
+	"skill_key_echo": {"en": "L-Shift / X", "ar": "L-Shift / X"},
+	"skill_key_guardian": {"en": "R-Ctrl / X", "ar": "R-Ctrl / X"},
+
+	# Pause menu
+	"pause_title": {"en": "Paused", "ar": "إيقاف مؤقت"},
+	"pause_resume": {"en": "Resume", "ar": "متابعة اللعب"},
+	"pause_restart": {"en": "Restart level", "ar": "إعادة المستوى"},
+	"pause_world_map": {"en": "Quit to World Map", "ar": "الخروج إلى خريطة العوالم"},
+	"pause_main_menu": {"en": "Quit to Main Menu", "ar": "الخروج إلى القائمة الرئيسية"},
+	"pause_confirm_restart": {"en": "Restart this level?", "ar": "إعادة هذا المستوى؟"},
+	"pause_confirm_world_map": {"en": "Quit to the World Map?", "ar": "الخروج إلى خريطة العوالم؟"},
+	"pause_confirm_main_menu": {"en": "Quit to the main menu?", "ar": "الخروج إلى القائمة الرئيسية؟"},
+	"pause_restart_warning": {
+		"en": "Your progress in this level is lost (you start it again with what you had when it began).",
+		"ar": "سيضيع تقدّمكما في هذا المستوى (تبدآنه من جديد بما كان معكما عند بدايته).",
+	},
+	"pause_quit_warning": {
+		"en": "Your progress in this stage is lost (its levels and skills since the last save). Completed stages stay saved.",
+		"ar": "سيضيع تقدّمكما في هذه المرحلة (مستوياتها ومهاراتها منذ آخر حفظ). المراحل المكتملة تبقى محفوظة.",
+	},
+	"pause_no_skills": {"en": "No skills yet", "ar": "لا مهارات بعد"},
+
 	# World map
 	"world_map": {"en": "World Map", "ar": "خريطة العوالم"},
 	"main_menu": {"en": "Main Menu", "ar": "القائمة الرئيسية"},

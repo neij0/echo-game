@@ -105,21 +105,85 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   downed at the same time, it depends on the mode (main menu, changeable later):
   **Calm** = restart the current level (and the meter drains slower);
   **Challenge** = restart the current stage from level 1.
-- **Save** (`user://save.json`, `SaveData`): current world, current stage, unlocked worlds,
-  mode, chosen skills. Settings (`user://settings.json`): language (English/Arabic), mode,
-  brightness, one volume per audio bus (Options sliders).
-- **Screens**: main menu (Continue if a save exists, New Game, Mode, Language, Quit) →
+- **Save** (`user://save.json`, `SaveData`, version 2): current world, current stage, unlocked
+  worlds, mode, the skills (`SkillLoadout` as owned at the end of the last completed stage).
+  Settings (`user://settings.json`): language (English/Arabic), mode, brightness, one volume
+  per audio bus (Options sliders).
+- **Screens**: main menu (Continue if a save exists, New Game, Mode, Language, Options, Quit) →
   stage (`game.tscn`) → stage summary → next stage, or story screen → World Map.
-- **Skill choice hook**: `StageManager._between_levels()` runs between two levels (paused);
-  the skill choice screen goes there and stores the picks in `Game.save.skills`.
+- **Skills** (see "Skills" below): after every completed level both players pick at the same
+  time (`SkillChoiceScreen`), then the next level starts.
+- **Pause menu** (`PauseMenu`, `pause` action: Esc / Start on any gamepad, only while a level is
+  played: `StageManager.can_pause`): pauses the whole tree (players, creatures, oxygen, the
+  escape timer, stage time). Resume, Options (`OptionsPanel`, shared with the main menu),
+  Restart level (`StageManager.restart_level`: meters, health and skills of the level start),
+  Quit to World Map, Quit to Main Menu (the last three with a confirmation; quitting loses the
+  stage's progress since the last save). Shows the mode and both players' skills (read-only).
+  Navigated with the `ui_*` actions (keyboard + every gamepad).
 - **Testing one stage**: run `game.tscn` on its own (F6). The `StageManager` then uses its
-  `world`, `test_stage_index` and `test_mode` exports and never writes the save.
+  `world`, `test_stage_index`, `test_mode` and `test_skills` (`"far_echo:2"`, `"shield"`...)
+  exports and never writes the save.
+
+## Skills
+Data-driven: every skill is a `SkillDefinition` (.tres in `skills/<echo|guardian|shared>/`,
+listed in `skills/skill_catalog.tres`, set on the `Game` autoload). Fields: `id` (saved, never
+rename), `owner` (Echo / Guardian / Shared: each character owns their own copy), `category`
+(core / pressure / world), `kind` (passive / active), `max_rank` (1-2), `values` (key -> one
+value per rank), name / description / co-op tip in EN + AR, `available_from_world` (index in
+`Game.world_ids`), `offer_weight`, icon (`SkillIcon.Shape` + colour, drawn in code).
+- **Passive = stats.** Every `values` key is a stat the systems read through `PlayerSkills`
+  (the `Skills` node on every player): `*_mult` keys multiply (product over owned skills),
+  others add (`get_bonus`); creatures use `PlayerSkills.team_bonus`. Stats so far:
+  `pulse_radius_mult` (PulseAbility), `pulse_cost_mult` / `pressure_drain_mult`
+  (PlayerPressure), `exposed_time_add` / `mark_time_add` (Creature: Exposed longer, Echo Mark
+  outline `EchoMarkOutline`; Exposed always counts as revealed), `sword_arc_mult`
+  (SwordAbility), `close_sense_add` (CloseSense), `revive_time_mult` (the reviver's
+  ReviveHelper), `mend_rate_mult` (own rate) / `mend_distance_mult` (best of both,
+  PartnerMending), `shard_heal_add` (StageManager).
+- **Active = a node.** `active_scene` (an `ActiveSkill`: `scenes/skills/`) is added to the
+  player's UnlitLayer while owned; its numbers are `value(key)` from the definition, its look
+  and sounds are its own exports. One active slot per character. Ocean: `LurePulseSkill`
+  (decoy echo, creatures within `noise_radius` investigate, costs oxygen), `ShieldSkill`
+  (hold; `hit_blockers` group: `PlayerHealth.take_hit` asks `blocks_hit`; repels the creature,
+  slows him, no sword; protects the Echo behind him), `DashSkill` (burst + short
+  invulnerability). Skill button: `p1_skill` (Left Shift / gamepad 1 X), `p2_skill`
+  (Right Ctrl / gamepad 2 X): `Player.try_skill_pressed` / `is_skill_held`.
+- **Offers** (`SkillOffer`, no UI): own + shared pool, available in this world, below max rank
+  (higher ranks come back), weighted, no repeats; once an active is owned no active is
+  offered, and one offer never holds two new actives; empty places get a fallback
+  (`SkillCatalog.fallbacks`, e.g. `deep_breath` = full oxygen, applied once, not kept).
+  Cards / picks per stage in `StageDefinition` (`skill_offer_count`, `skill_pick_count`,
+  `boss_skill_*`; Ocean: stage 1 = 1 of 2, stages 2-3 = 1 of 3, 2 of 3 after a boss); none
+  after the world's final level.
+- **Screen** (`SkillChoiceScreen`): Echo left / Guardian right (not mirrored in Arabic, the text
+  inside is), each with their own move up / down + action; both ready -> the picks + tips for
+  `summary_time` (2 s).
+- **Lifetime**: `StageManager.loadout` (a `SkillLoadout`: character -> {id: rank}); a Calm retry
+  restores the skills of the level start, a Challenge retry those of the stage start; saved
+  with every completed stage (`Game.complete_stage(loadout)`); cleared when the next world
+  starts. HUD (`PlayerStatus`): the active skill with its cooldown sweep and button, small icons
+  for the passives (rank dots).
+
+### Adding a new skill
+1. Only existing stats (e.g. another drain or radius bonus): duplicate a `.tres` in `skills/`,
+   give it a new `id`, owner, ranks, `values`, texts (EN + AR), icon, `available_from_world`,
+   and add it to `skills/skill_catalog.tres`. No code.
+2. A new stat: read it where it matters with `PlayerSkills.of(player).get_multiplier("x_mult")`
+   (or `get_bonus("x_add")`), list it in the `PlayerSkills` header, then step 1.
+3. A new active skill: a script extending `ActiveSkill` (override `_update`, maybe
+   `is_in_use`, `blocks_actions`, `_draw`), a scene in `scenes/skills/`, then step 1 with
+   `kind` = active and `active_scene` set.
+4. A world skill (only in one world): `category` = world, `available_from_world` = that world's
+   index. A pressure skill that should read differently in a world (cold instead of oxygen):
+   add a `SkillTextOverride` (skill id + texts) to that `WorldConfig.skill_text_overrides`.
+5. Add checks to `tools/test_skills.gd` and run it.
 
 The game will have 5 worlds, each with its own chunks, colours, creatures, survival pressure
 and pulse behaviour. Only the Ocean exists so far.
 
-Controls: P1 Echo = WASD + Space (pulse) or gamepad 1. P2 Guardian = arrow keys + Enter
-(attack) or gamepad 2. Holding the action button next to a downed partner revives them.
+Controls: P1 Echo = WASD + Space (pulse) + Left Shift (skill) or gamepad 1 (A / X). P2 Guardian =
+arrow keys + Enter (attack) + Right Ctrl (skill) or gamepad 2 (A / X). Holding the action button
+next to a downed partner revives them. Esc / Start = pause.
 
 ## Audio
 Everything is procedural (`tools/generate_sounds.py`, the `preview` section; no AI tools).
@@ -362,8 +426,14 @@ The world is tilted to match the characters, still 2D:
     the harmless life, and checks the
     structure, lighting and the generator:
     `godot --headless --path . -s res://tools/check_levels.gd`
-  - `test_save.gd`: save/load test (uses its own test files in `user://`):
+  - `test_save.gd`: save/load test (uses its own test files in `user://`), with the skills
+    (round trip, old version 1 files, saved per stage, reset on a new world):
     `godot --headless --path . -s res://tools/test_save.gd`
+  - `test_skills.tscn`: skills and pause, run as a scene: offer sizes per stage, offer rules
+    (pools, ranks, active slot, worlds, fallback), a data-only skill, every Ocean skill's
+    effect value, the choice flow, retries keeping the level / stage start skills, the pause
+    menu freezing creatures / oxygen / escape timer and its Restart level:
+    `godot --headless --path . --fixed-fps 60 res://tools/test_skills.tscn`
   - `test_creatures.tscn`: creature + shard test, run as a scene (needs the `Game` autoload):
     chase speeds per mode/awareness, lunge, alerting, search, downed Echo (ignored, distress
     pulse, close sense, revive decay), Sentinels, lockdown, collapse escape, pathing on every
@@ -382,7 +452,9 @@ The world is tilted to match the characters, still 2D:
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it
     and saves it as `worlds/<world>/proposed_<seed>.tres` to edit by hand.
   - Note: `-s` tools run without autoloads, so they must not load scripts that use `Game`.
-- `docs/` — design notes (e.g. `skills.md`: skill ideas for later, not implemented)
+- `skills/` — `SkillDefinition`s (`echo/`, `guardian/`, `shared/`, `fallback/`) and
+  `skill_catalog.tres`; `scenes/skills/` — the active skill scenes
+- `docs/` — design notes (e.g. `skills.md`: more skill ideas for later)
 
 ## Adding a new world
 All world-specific values live in its `WorldConfig` (`scripts/world_config.gd`); scripts get

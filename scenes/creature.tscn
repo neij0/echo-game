@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/creature.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/creature_echo.gd" id="2_echo"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/creature_voice.gd" id="8_voice"]
 [ext_resource type="Script" path="res://scripts/creature_stuck_watch.gd" id="9_stuck"]
 [ext_resource type="Script" path="res://scripts/drop_shadow.gd" id="10_shadow"]
+[ext_resource type="Script" path="res://scripts/echo_mark_outline.gd" id="11_echo_mark"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 20.0
@@ -51,6 +52,10 @@ creature = NodePath("..")
 
 [node name="ExposedMark" type="Node2D" parent="EchoLayer" node_paths=PackedStringArray("creature")]
 script = ExtResource("7_mark")
+creature = NodePath("../..")
+
+[node name="EchoMark" type="Node2D" parent="EchoLayer" node_paths=PackedStringArray("creature")]
+script = ExtResource("11_echo_mark")
 creature = NodePath("../..")
 
 [node name="StuckWatch" type="Node" parent="." node_paths=PackedStringArray("creature")]

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="SkillCatalog" load_steps=17 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_catalog.gd" id="1_catalog"]
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="2_skill"]
+[ext_resource type="Resource" path="res://skills/echo/far_echo.tres" id="s0"]
+[ext_resource type="Resource" path="res://skills/echo/longer_exposure.tres" id="s1"]
+[ext_resource type="Resource" path="res://skills/echo/calm_lungs.tres" id="s2"]
+[ext_resource type="Resource" path="res://skills/echo/lure_pulse.tres" id="s3"]
+[ext_resource type="Resource" path="res://skills/echo/echo_mark.tres" id="s4"]
+[ext_resource type="Resource" path="res://skills/guardian/wide_swing.tres" id="s5"]
+[ext_resource type="Resource" path="res://skills/guardian/shield.tres" id="s6"]
+[ext_resource type="Resource" path="res://skills/guardian/keener_sense.tres" id="s7"]
+[ext_resource type="Resource" path="res://skills/guardian/iron_lungs.tres" id="s8"]
+[ext_resource type="Resource" path="res://skills/guardian/dash.tres" id="s9"]
+[ext_resource type="Resource" path="res://skills/shared/quick_revive.tres" id="s10"]
+[ext_resource type="Resource" path="res://skills/shared/stronger_bond.tres" id="s11"]
+[ext_resource type="Resource" path="res://skills/shared/shard_resonance.tres" id="s12"]
+[ext_resource type="Resource" path="res://skills/fallback/deep_breath.tres" id="s13"]
+
+[resource]
+script = ExtResource("1_catalog")
+skills = Array[ExtResource("2_skill")]([ExtResource("s0"), ExtResource("s1"), ExtResource("s2"), ExtResource("s3"), ExtResource("s4"), ExtResource("s5"), ExtResource("s6"), ExtResource("s7"), ExtResource("s8"), ExtResource("s9"), ExtResource("s10"), ExtResource("s11"), ExtResource("s12")])
+fallbacks = Array[ExtResource("2_skill")]([ExtResource("s13")])

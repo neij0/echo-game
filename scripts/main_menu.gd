@@ -1,8 +1,8 @@
 class_name MainMenu
 extends Control
 ## The main menu: Continue (only if a save exists), New Game, Mode
-## (Calm / Challenge), Language (English / Arabic), Options (Brightness and
-## one volume slider per audio bus), Quit. Builds its UI in code
+## (Calm / Challenge), Language (English / Arabic), Options (OptionsPanel:
+## Brightness and one volume slider per audio bus), Quit. Builds its UI in code
 ## (grey-box) and rebuilds the text when the language changes. Arabic lays the
 ## menu out right-to-left.
 
@@ -14,10 +14,6 @@ extends Control
 @export var info_font_size: int = 18
 @export var button_width: float = 340.0
 @export var spacing: int = 14
-## Step of the Brightness slider (the range comes from the Game autoload).
-@export var brightness_step: float = 0.05
-## Step of the volume sliders (0-1).
-@export var volume_step: float = 0.05
 
 var _column: VBoxContainer
 var _title: Label
@@ -29,13 +25,7 @@ var _mode_info: Label
 var _language_button: Button
 var _options_button: Button
 var _quit_button: Button
-var _options_column: VBoxContainer
-var _brightness_label: Label
-var _brightness_slider: HSlider
-var _brightness_info: Label
-var _back_button: Button
-## Bus name -> its volume Label (the sliders are built from Game.volume_buses).
-var _volume_labels: Dictionary = {}
+var _options: OptionsPanel
 var _confirm: ConfirmationDialog
 
 
@@ -96,11 +86,7 @@ func _refresh() -> void:
 	_language_button.text = Game.text("language")
 	_options_button.text = Game.text("options")
 	_quit_button.text = Game.text("quit")
-	_brightness_label.text = Game.text("brightness") % roundi(Game.brightness * 100.0)
-	_brightness_info.text = Game.text("brightness_desc")
-	for bus: String in _volume_labels:
-		_update_volume_label(bus)
-	_back_button.text = Game.text("back")
+	_options.refresh()
 	_confirm.dialog_text = Game.text("confirm_new_game")
 	_confirm.ok_button_text = Game.text("yes")
 	_confirm.cancel_button_text = Game.text("no")
@@ -108,64 +94,24 @@ func _refresh() -> void:
 
 ## The Options page replaces the main buttons (same place on screen).
 func _build_options(parent: Control) -> void:
-	_options_column = VBoxContainer.new()
-	_options_column.add_theme_constant_override("separation", spacing)
-	_options_column.visible = false
-	parent.add_child(_options_column)
-	_brightness_label = _make_label(button_font_size, text_color)
-	_options_column.add_child(_brightness_label)
-	_brightness_slider = HSlider.new()
-	_brightness_slider.custom_minimum_size.x = button_width
-	_brightness_slider.min_value = Game.min_brightness
-	_brightness_slider.max_value = Game.max_brightness
-	_brightness_slider.step = brightness_step
-	_brightness_slider.value = Game.brightness
-	_brightness_slider.value_changed.connect(_on_brightness_changed)
-	_options_column.add_child(_brightness_slider)
-	_brightness_info = _make_label(info_font_size, text_color)
-	_brightness_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_brightness_info.custom_minimum_size.x = button_width
-	_options_column.add_child(_brightness_info)
-	for bus: String in Game.volume_buses:
-		var label: Label = _make_label(info_font_size + 4, text_color)
-		_options_column.add_child(label)
-		_volume_labels[bus] = label
-		var slider := HSlider.new()
-		slider.custom_minimum_size.x = button_width
-		slider.min_value = 0.0
-		slider.max_value = 1.0
-		slider.step = volume_step
-		slider.value = Game.get_volume(bus)
-		slider.value_changed.connect(_on_volume_changed.bind(bus))
-		_options_column.add_child(slider)
-	_back_button = Button.new()
-	_back_button.custom_minimum_size.x = button_width
-	_back_button.add_theme_font_size_override("font_size", button_font_size)
-	_back_button.pressed.connect(_show_options.bind(false))
-	_options_column.add_child(_back_button)
+	_options = OptionsPanel.new()
+	_options.text_color = text_color
+	_options.button_font_size = button_font_size
+	_options.info_font_size = info_font_size
+	_options.width = button_width
+	_options.spacing = spacing
+	_options.visible = false
+	_options.back_pressed.connect(_show_options.bind(false))
+	parent.add_child(_options)
 
 
 func _show_options(open: bool) -> void:
 	_column.visible = not open
-	_options_column.visible = open
+	_options.visible = open
 	if open:
-		_brightness_slider.grab_focus()
+		_options.focus_first()
 	else:
 		_options_button.grab_focus()
-
-
-func _on_brightness_changed(value: float) -> void:
-	Game.set_brightness(value)
-	_brightness_label.text = Game.text("brightness") % roundi(Game.brightness * 100.0)
-
-
-func _on_volume_changed(value: float, bus: String) -> void:
-	Game.set_volume(bus, value)
-	_update_volume_label(bus)
-
-
-func _update_volume_label(bus: String) -> void:
-	(_volume_labels[bus] as Label).text = Game.text("volume_" + bus) % roundi(Game.get_volume(bus) * 100.0)
 
 
 func _on_new_game_pressed() -> void:

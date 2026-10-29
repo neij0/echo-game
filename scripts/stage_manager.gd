@@ -20,6 +20,13 @@ extends Node
 ## - Every player downed at the same time: Calm restarts the current level,
 ##   Challenge restarts the stage from level 1. Every retry reshuffles the
 ##   creatures, corals and stations (new spawn seed).
+## - Skills: after every level each player picks from an offer (SkillOffer,
+##   SkillChoiceScreen); the picks go into the SkillLoadout, which every
+##   player's PlayerSkills reads. A retry restores the skills owned at the start
+##   of the level it restarts; the loadout is saved with the stage
+##   (Game.complete_stage) and reset when a new world starts.
+## - Pause (PauseMenu): only while playing (can_pause); restart_level() is its
+##   "Restart level".
 
 signal player_registered(player: Player)
 signal level_started(level_index: int)
@@ -32,6 +39,8 @@ signal shards_changed(collected: int, total: int)
 ## Emitted the moment a level is won (the ancient light wakes or the boss
 ## falls), before the level-cleared screen (music stinger).
 signal level_won
+## Emitted after the skill choice: Player -> Array[SkillDefinition] picked.
+signal skills_chosen(picks: Dictionary)
 
 ## Used when game.tscn runs on its own (F6). Started from the menus, the Game
 ## autoload's current world and stage are used instead.
@@ -44,6 +53,10 @@ signal level_won
 @export var awareness: DepthAwareness
 @export var end_screen: EndScreen
 @export var escape_event: EscapeEvent
+@export var skill_choice_screen: SkillChoiceScreen
+## Skills owned when game.tscn runs on its own (F6), for playtesting:
+## "skill_id" or "skill_id:rank" (a shared skill goes to both players).
+@export var test_skills: PackedStringArray = PackedStringArray()
 ## Seconds between activating the ancient light (or the boss falling) and the
 ## next screen.
 @export var victory_delay: float = 3.0
@@ -81,6 +94,11 @@ var _is_changing_level: bool = false
 var _level_start_pressure: Dictionary = {}
 ## Each player's health (segments) when the current level started (Calm retries).
 var _level_start_health: Dictionary = {}
+## The skills owned right now, and copies for retries (level / stage start).
+var loadout: SkillLoadout = SkillLoadout.new()
+var _level_start_loadout: SkillLoadout = SkillLoadout.new()
+var _stage_start_loadout: SkillLoadout = SkillLoadout.new()
+var _skill_rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
@@ -120,6 +138,10 @@ func _start_stage() -> void:
 		player.health.set_challenge_mode(mode == SaveData.Mode.CHALLENGE)
 	# DistressPulse, CloseSense, ReviveHelper: their values depend on the mode.
 	get_tree().call_group("mode_listeners", "set_challenge_mode", mode == SaveData.Mode.CHALLENGE)
+	_skill_rng.randomize()
+	loadout = _initial_loadout()
+	_stage_start_loadout = loadout.copy()
+	_apply_loadout()
 	_start_level(0)
 
 
@@ -155,6 +177,7 @@ func _start_level(index: int) -> void:
 			player.health.revive()
 		_level_start_pressure[player] = player.pressure.get_ratio()
 		_level_start_health[player] = player.health.value
+	_level_start_loadout = loadout.copy()
 	if awareness:
 		awareness.reset()
 	if escape_event:
@@ -191,7 +214,7 @@ func _on_level_built(_index: int) -> void:
 func _on_shard_collected(_shard: EchoShard) -> void:
 	shards_collected += 1
 	for player: Player in players:
-		player.health.heal(shard_heal_segments)
+		player.health.heal(shard_heal_segments + player.skills.get_bonus("shard_heal_add"))
 	_update_exit_lock()
 	if shards_collected >= shards_total:
 		level_builder.open_exit()
@@ -260,13 +283,38 @@ func _retry() -> void:
 			player.pressure.ensure_ratio(retry_min_pressure)
 			var start_health: float = float(_level_start_health.get(player, player.health.get_max_value()))
 			player.health.set_segments(maxf(start_health, retry_min_health_segments))
+		loadout = _level_start_loadout.copy()
+		_apply_loadout()
 		_start_level(level_index)
 	else:
 		for player: Player in players:
 			player.pressure.refill()
 			player.health.refill()
+		loadout = _stage_start_loadout.copy()
+		_apply_loadout()
 		_start_level(0)
 	get_tree().paused = false
+
+
+## The pause menu's "Restart level": the current level again, with the meters,
+## health and skills every player had when it started.
+func restart_level() -> void:
+	is_over = false
+	_is_changing_level = false
+	Engine.time_scale = 1.0
+	for player: Player in players:
+		player.pressure.value = player.pressure.max_value * float(_level_start_pressure.get(player, 1.0))
+		player.pressure.ensure_ratio(0.0)
+		player.health.set_segments(float(_level_start_health.get(player, player.health.get_max_value())))
+	loadout = _level_start_loadout.copy()
+	_apply_loadout()
+	_start_level(level_index)
+	get_tree().paused = false
+
+
+## True while a level is being played (no defeat / summary / level change).
+func can_pause() -> bool:
+	return not is_over and not _is_changing_level and not get_tree().paused
 
 
 # --- Clearing levels and the stage ------------------------------------------
@@ -281,6 +329,8 @@ func _on_ancient_light_activated() -> void:
 	await get_tree().create_timer(victory_delay).timeout
 	if level_index + 1 >= get_level_count():
 		# A stage without a boss level ends on its last ancient light.
+		get_tree().paused = true
+		await _offer_skills()
 		_complete_stage(false)
 		return
 	get_tree().paused = true
@@ -304,6 +354,8 @@ func _on_boss_killed() -> void:
 	_is_changing_level = true
 	level_won.emit()
 	await get_tree().create_timer(victory_delay).timeout
+	get_tree().paused = true
+	await _offer_skills()
 	_complete_stage(true)
 
 
@@ -312,7 +364,7 @@ func _complete_stage(beat_boss: bool) -> void:
 	get_tree().paused = true
 	var saved: bool = false
 	if Game.started_from_menu:
-		Game.complete_stage()
+		Game.complete_stage(loadout)
 		saved = true
 	stage_completed.emit(stage_index)
 	if end_screen:
@@ -331,10 +383,74 @@ func _on_continue_pressed() -> void:
 		Game.play_current()
 
 
-## HOOK for the next step: the skill choice screen goes here. It should show the
-## choice while the game is paused and return once both players picked, e.g.
-## `await skill_screen.choose(players)`, then store the picks in
-## Game.save.skills. Nothing to choose yet.
+## Runs between two levels (paused): the skill choice.
 func _between_levels(next_level_index: int) -> void:
 	between_levels.emit(next_level_index)
+	await _offer_skills()
 	await get_tree().process_frame
+
+
+# --- Skills -----------------------------------------------------------------
+
+## The skill choice after the current level (paused). Nothing after the world's
+## final level, or without a catalog / screen.
+func _offer_skills() -> void:
+	var catalog: SkillCatalog = Game.skill_catalog
+	var size: Vector2i = SkillOffer.get_offer_size(world, stage_index, level_index)
+	if catalog == null or skill_choice_screen == null or size.x <= 0 or size.y <= 0:
+		return
+	var world_index: int = Game.get_world_index(world.world_id)
+	var offers: Dictionary = {}
+	var pick_counts: Dictionary = {}
+	for player: Player in players:
+		var offer: Array[SkillDefinition] = SkillOffer.build(catalog, loadout, player.get_character_key(), world_index, size.x, _skill_rng)
+		offers[player] = offer
+		pick_counts[player] = mini(size.y, offer.size())
+	var picks: Dictionary = await skill_choice_screen.choose(players, offers, pick_counts, world)
+	apply_picks(picks)
+
+
+## Adds the picked skills to the loadout (fallbacks are applied once instead).
+func apply_picks(picks: Dictionary) -> void:
+	for player: Player in picks:
+		for definition: SkillDefinition in picks[player]:
+			if definition.is_fallback:
+				_apply_fallback(player, definition)
+			else:
+				loadout.add_rank(player.get_character_key(), definition)
+	_apply_loadout()
+	skills_chosen.emit(picks)
+
+
+## A fallback's values: "pressure_refill" (share of a full meter), "heal_add"
+## (health segments).
+func _apply_fallback(player: Player, definition: SkillDefinition) -> void:
+	player.pressure.add_ratio(definition.get_value("pressure_refill", 1))
+	player.health.heal(definition.get_value("heal_add", 1))
+
+
+## Gives every player the skills of the current loadout.
+func _apply_loadout() -> void:
+	for player: Player in players:
+		player.skills.set_skills(loadout.get_entries(player.get_character_key()), Game.skill_catalog)
+
+
+## Started from the menus: the saved skills (if they belong to this world).
+## Run on its own (F6): test_skills.
+func _initial_loadout() -> SkillLoadout:
+	var world_id: String = world.world_id if world else ""
+	if Game.started_from_menu:
+		var saved: SkillLoadout = Game.save.skills
+		return saved.copy() if saved and saved.world_id == world_id else SkillLoadout.new(world_id)
+	var result := SkillLoadout.new(world_id)
+	for entry: String in test_skills:
+		var parts: PackedStringArray = entry.split(":")
+		var definition: SkillDefinition = Game.skill_catalog.find(parts[0].strip_edges()) if Game.skill_catalog else null
+		if definition == null:
+			push_warning("StageManager: unknown test skill " + entry)
+			continue
+		var rank: int = clampi(int(parts[1]) if parts.size() > 1 else 1, 1, definition.max_rank)
+		for character: String in SkillLoadout.CHARACTERS:
+			if definition.is_for(character):
+				result.set_rank(character, definition.id, rank)
+	return result

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "shard_resonance"
+owner = 2
+category = 0
+kind = 0
+max_rank = 1
+values = Dictionary[String, PackedFloat32Array]({
+"shard_heal_add": PackedFloat32Array(1)
+})
+name_en = "Shard Resonance"
+name_ar = "رنين الشظايا"
+description_en = "Each Echo Shard restores 2 health segments instead of 1."
+description_ar = "كل شظية صدى تُعيد لك جزأين من الصحة بدلاً من جزء واحد."
+tip_en = "Save a shard pickup for when you are hurt."
+tip_ar = "أجّلا التقاط الشظية حتى تحتاجا إلى الصحة."
+icon_shape = 11
+icon_color = Color(0.55, 0.95, 1, 1)

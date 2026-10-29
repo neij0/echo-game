@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+[ext_resource type="PackedScene" path="res://scenes/skills/shield.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "shield"
+owner = 1
+category = 0
+kind = 1
+max_rank = 1
+values = Dictionary[String, PackedFloat32Array]({
+"arc_degrees": PackedFloat32Array(120),
+"speed_scale": PackedFloat32Array(0.55),
+"protect_distance": PackedFloat32Array(120),
+"repel_speed": PackedFloat32Array(320),
+"repel_stagger": PackedFloat32Array(0.5),
+"cooldown": PackedFloat32Array(0)
+})
+active_scene = ExtResource("2_scene")
+name_en = "Shield"
+name_ar = "الدرع"
+description_en = "Hold the skill button: block creature hits from the front (120°). You move slower and cannot swing while holding it. It also protects the Echo right behind you."
+description_ar = "اضغط زر المهارة مطوّلاً: تصدّ هجمات المخلوقات من الأمام (120°). تتحرك أبطأ ولا تستطيع الضرب أثناء رفعه. ويحمي إيكو إذا وقفت خلفك مباشرة."
+tip_en = "Echo: stay right behind him while he holds the shield, and pulse safely."
+tip_ar = "إيكو: ابقَي خلفه مباشرة وهو يرفع الدرع، وأطلقي النبضة بأمان."
+icon_shape = 6
+icon_color = Color(0.75, 0.85, 1, 1)

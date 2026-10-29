@@ -17,6 +17,8 @@ enum Cause { CREATURE, PRESSURE, COLLAPSE }
 signal hit_taken
 ## Emitted on a non-downing hit (used for the red screen-edge flash).
 signal hurt
+## Emitted when a hit was stopped by a blocker (the Guardian's Shield).
+signal hit_blocked
 signal downed(cause: Cause)
 signal revived
 ## Emitted whenever the health value changes (damage, regeneration, healing).
@@ -109,8 +111,18 @@ func get_hit_damage() -> float:
 	return challenge_hit_damage if challenge_mode else calm_hit_damage
 
 
-func take_hit(from_position: Vector2) -> void:
+## Gives at least this many seconds of invulnerability (Dash).
+func make_invulnerable(seconds: float) -> void:
+	_invulnerable_left = maxf(_invulnerable_left, seconds)
+
+
+## A creature touch. Nodes in the "hit_blockers" group (the Shield) can stop it:
+## blocks_hit(target: Player, from_position: Vector2, source: Node2D) -> bool.
+func take_hit(from_position: Vector2, source: Node2D = null) -> void:
 	if is_downed or is_invulnerable():
+		return
+	if player and _is_blocked(from_position, source):
+		hit_blocked.emit()
 		return
 	hit_taken.emit()
 	_since_damage = 0.0
@@ -159,6 +171,13 @@ func revive() -> void:
 	_set_value(maxf(value, revive_segments))
 	_invulnerable_left = revive_invulnerable_time
 	revived.emit()
+
+
+func _is_blocked(from_position: Vector2, source: Node2D) -> bool:
+	for blocker: Node in player.get_tree().get_nodes_in_group("hit_blockers"):
+		if blocker.call("blocks_hit", player, from_position, source):
+			return true
+	return false
 
 
 func _partial_regen_delay() -> float:

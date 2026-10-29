@@ -13,8 +13,10 @@ signal pulse_emitted(origin: Vector2)
 ## 1 = Echo (P1), 2 = Guardian (P2). Used for spawn points and HUD order.
 @export var player_number: int = 1
 @export var display_name: String = "Echo"
-## Input actions are "<prefix>move_left", ..., "<prefix>action".
+## Input actions are "<prefix>move_left", ..., "<prefix>action", "<prefix>skill".
 @export var input_prefix: String = "p1_"
+## Which skills this character can own (SkillDefinition.owner): Echo or Guardian.
+@export var skill_owner: SkillDefinition.Owner = SkillDefinition.Owner.ECHO
 ## Creatures within this distance of this player count as revealed (lit).
 ## 0 = this player's light does not reveal anything (Guardian).
 @export var light_reveal_radius: float = 115.0
@@ -42,11 +44,14 @@ signal pulse_emitted(origin: Vector2)
 @export var leash_pull: float = 6.0
 
 var facing: Vector2 = Vector2.DOWN
+## Share of max_speed / acceleration allowed right now (a raised Shield: < 1).
+var speed_scale: float = 1.0
 var _knockback_left: float = 0.0
 
 @onready var health: PlayerHealth = $Health
 @onready var pressure: PlayerPressure = $Pressure
 @onready var light: PlayerLight = $PlayerLight
+@onready var skills: PlayerSkills = $Skills
 
 
 func _ready() -> void:
@@ -59,7 +64,7 @@ func _physics_process(delta: float) -> void:
 		input_dir = Input.get_vector(_action("move_left"), _action("move_right"), _action("move_up"), _action("move_down"))
 	if input_dir != Vector2.ZERO:
 		facing = input_dir.normalized()
-	velocity += input_dir * acceleration * delta
+	velocity += input_dir * acceleration * speed_scale * delta
 
 	# Frame-rate independent drag: weaker drag when gliding.
 	var current_drag: float = drag if input_dir != Vector2.ZERO else glide_drag
@@ -67,7 +72,7 @@ func _physics_process(delta: float) -> void:
 	if _knockback_left > 0.0:
 		_knockback_left -= delta
 	else:
-		velocity = velocity.limit_length(max_speed)
+		velocity = velocity.limit_length(max_speed * speed_scale)
 	_apply_leash()
 
 	move_and_slide()
@@ -81,17 +86,43 @@ func get_partner() -> Player:
 	return null
 
 
-## True when this player's action button was just pressed and may be used by an
-## ability (not downed, and not busy reviving the partner).
 ## How far this player's own light reaches (0 if it has none).
 func get_light_radius() -> float:
 	return light.radius if light else 0.0
 
 
+## "echo" or "guardian": this player's entry in the SkillLoadout.
+func get_character_key() -> String:
+	return SkillDefinition.owner_key(skill_owner)
+
+
+## True when this player's action button was just pressed and may be used by an
+## ability (not downed, not busy reviving the partner, no active skill such as
+## a raised shield holding it).
 func try_action_pressed() -> bool:
 	if health.is_downed or is_reviving():
 		return false
+	if skills and skills.active and skills.active.blocks_actions():
+		return false
 	return Input.is_action_just_pressed(_action("action"))
+
+
+## The skill button (active skills), same rules as the action button.
+func try_skill_pressed() -> bool:
+	if health.is_downed or is_reviving():
+		return false
+	return Input.is_action_just_pressed(_action("skill"))
+
+
+func is_skill_held() -> bool:
+	return not health.is_downed and Input.is_action_pressed(_action("skill"))
+
+
+## The current move input (zero while downed).
+func get_move_input() -> Vector2:
+	if health.is_downed:
+		return Vector2.ZERO
+	return Input.get_vector(_action("move_left"), _action("move_right"), _action("move_up"), _action("move_down"))
 
 
 func is_action_held() -> bool:
@@ -106,8 +137,14 @@ func is_reviving() -> bool:
 
 
 func knock_back(impulse: Vector2) -> void:
-	velocity = impulse
-	_knockback_left = knockback_time
+	burst(impulse, knockback_time)
+
+
+## Sets the velocity and lets it go above max_speed for `duration` seconds
+## (knockback, Dash). Drag still slows it down.
+func burst(new_velocity: Vector2, duration: float) -> void:
+	velocity = new_velocity
+	_knockback_left = duration
 
 
 func _action(action_name: String) -> String:

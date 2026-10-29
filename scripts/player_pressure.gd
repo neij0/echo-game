@@ -5,7 +5,8 @@ extends Node
 ## pulse costs a share of it. Refilled by pressure stations and partly at every
 ## new level of a stage. Plays a repeating alarm while low; at zero the player is downed
 ## (PlayerHealth). Does not drain while the player is downed. All
-## world-specific values come from the WorldConfig (apply_world).
+## world-specific values come from the WorldConfig (apply_world). Skills:
+## "pressure_drain_mult" (passive drain), "pulse_cost_mult" (pulse cost).
 
 signal low_changed(is_low: bool)
 
@@ -64,12 +65,27 @@ func apply_world(world: WorldConfig) -> void:
 func _process(delta: float) -> void:
 	if health and health.is_downed:
 		return
-	value = maxf(value - max_value / (drain_seconds * drain_multiplier) * drain_scale * delta, 0.0)
+	value = maxf(value - get_drain_per_second() * delta, 0.0)
 	_update_low()
 	if _is_low:
 		_update_alarm(delta)
 	if value <= 0.0 and health:
 		health.down(PlayerHealth.Cause.PRESSURE)
+
+
+## Passive drain right now (mode, lockdown and skills included).
+func get_drain_per_second() -> float:
+	return max_value / (drain_seconds * drain_multiplier) * drain_scale * _skill_multiplier("pressure_drain_mult")
+
+
+## Share (0-1) of a full meter one pulse costs, with the skills.
+func get_pulse_cost_ratio() -> float:
+	return pulse_cost_ratio * _skill_multiplier("pulse_cost_mult")
+
+
+func _skill_multiplier(stat: String) -> float:
+	var skills: PlayerSkills = PlayerSkills.of(player)
+	return skills.get_multiplier(stat) if skills else 1.0
 
 
 func get_ratio() -> float:
@@ -81,7 +97,12 @@ func is_low() -> bool:
 
 
 func _on_pulse_emitted(_origin: Vector2) -> void:
-	value = maxf(value - max_value * pulse_cost_ratio, 0.0)
+	spend_ratio(get_pulse_cost_ratio())
+
+
+## Removes a share (0-1) of a full meter (pulses, the Lure Pulse).
+func spend_ratio(ratio: float) -> void:
+	value = maxf(value - max_value * ratio, 0.0)
 	_update_low()
 
 

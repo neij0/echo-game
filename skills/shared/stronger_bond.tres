@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="SkillDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/skill_definition.gd" id="1_skill"]
+
+[resource]
+script = ExtResource("1_skill")
+id = "stronger_bond"
+owner = 2
+category = 0
+kind = 0
+max_rank = 2
+values = Dictionary[String, PackedFloat32Array]({
+"mend_rate_mult": PackedFloat32Array(1.5, 2),
+"mend_distance_mult": PackedFloat32Array(1.35, 1.7)
+})
+name_en = "Stronger Bond"
+name_ar = "رابط أقوى"
+description_en = "Partner mending heals you faster (+50%, rank 2: +100%) and works from further apart (+35%, rank 2: +70%)."
+description_ar = "الترميم المشترك يشفيك أسرع (+50%، المستوى 2: +100%) ويعمل من مسافة أبعد (+35%، المستوى 2: +70%)."
+tip_en = "Stay close after a fight: you heal faster together."
+tip_ar = "ابقيا قريبين بعد القتال: تُشفيان أسرع معاً."
+icon_shape = 10
+icon_color = Color(0.55, 1, 0.8, 1)

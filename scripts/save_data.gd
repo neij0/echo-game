@@ -7,7 +7,8 @@ extends RefCounted
 enum Mode { CALM, CHALLENGE }
 
 ## Bump when the format changes, so old files can be upgraded in from_dict.
-const VERSION: int = 1
+## 2: skills became a SkillLoadout (version 1 only had an empty list).
+const VERSION: int = 2
 
 ## World the players are in (or will start next).
 var world_id: String = "ocean"
@@ -17,8 +18,9 @@ var unlocked_worlds: PackedStringArray = PackedStringArray(["ocean"])
 ## Calm: both downed = restart the current level (and a bit more oxygen).
 ## Challenge: both downed = restart the current stage from level 1.
 var mode: Mode = Mode.CALM
-## Skills picked between levels (empty until the skill choice screen exists).
-var skills: PackedStringArray = PackedStringArray()
+## The skills owned at the end of the last completed stage (picked between
+## levels; cleared when a new world starts).
+var skills: SkillLoadout = SkillLoadout.new("ocean")
 
 
 func to_dict() -> Dictionary:
@@ -28,7 +30,7 @@ func to_dict() -> Dictionary:
 		"stage": stage_index,
 		"unlocked_worlds": Array(unlocked_worlds),
 		"mode": "challenge" if mode == Mode.CHALLENGE else "calm",
-		"skills": Array(skills),
+		"skills": skills.to_dict(),
 	}
 
 
@@ -40,7 +42,11 @@ static func from_dict(data: Dictionary) -> SaveData:
 	if not save.world_id in save.unlocked_worlds:
 		save.unlocked_worlds.append(save.world_id)
 	save.mode = Mode.CHALLENGE if str(data.get("mode", "calm")) == "challenge" else Mode.CALM
-	save.skills = _strings(data.get("skills", []))
+	# Version 1 saved an (always empty) list: start without skills.
+	var saved_skills: Variant = data.get("skills", {})
+	save.skills = SkillLoadout.from_dict(saved_skills as Dictionary) if saved_skills is Dictionary else SkillLoadout.new(save.world_id)
+	if save.skills.world_id != save.world_id:
+		save.skills = SkillLoadout.new(save.world_id)
 	return save
 
 

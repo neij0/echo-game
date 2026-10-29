@@ -7,6 +7,7 @@ extends Node
 ## visibility rules apply. Fully sensed creatures are hittable with normal
 ## sword damage (melee self-defence); only the Echo's pulse makes them Exposed
 ## for the instant-kill finisher. Values per mode ("mode_listeners" group).
+## Skills: "close_sense_add" (pixels added to the radius).
 
 @export var player: Player
 @export var calm_radius: float = 90.0
@@ -28,7 +29,9 @@ func set_challenge_mode(enabled: bool) -> void:
 
 
 func get_radius() -> float:
-	return challenge_radius if challenge_mode else calm_radius
+	var skills: PlayerSkills = PlayerSkills.of(player)
+	var bonus: float = skills.get_bonus("close_sense_add") if skills else 0.0
+	return (challenge_radius if challenge_mode else calm_radius) + bonus
 
 
 ## 1 inside the radius (measured to the creature's edge), fading to 0 over
