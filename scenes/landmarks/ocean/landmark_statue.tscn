@@ -6,6 +6,7 @@
 script = ExtResource("1_script")
 tint = Color(0.46, 0.46, 0.44, 1)
 tint_strength = 0.45
+top_lift = 0.06
 glow_color = Color(1, 0.8, 0.45, 1)
 glow_energy = 1.4
 light_radius = 90.0

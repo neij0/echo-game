@@ -124,21 +124,37 @@ quarter_turns = 0
 
 [sub_resource type="Resource" id="Landmark_0"]
 script = ExtResource("lm_script")
-cell = Vector2i(1, 2)
-scene = ExtResource("lm_arch")
-offset = Vector2(1080, 880)
+cell = Vector2i(2, 1)
+scene = ExtResource("lm_wreck")
+offset = Vector2(1000, 1120)
+mirrored = false
+size_scale = 1
+floor_turn_degrees = -25
+damage = 0.9
+variant = 3
 
 [sub_resource type="Resource" id="Landmark_1"]
 script = ExtResource("lm_script")
-cell = Vector2i(2, 1)
-scene = ExtResource("lm_wreck")
-offset = Vector2(480, 800)
+cell = Vector2i(1, 2)
+scene = ExtResource("lm_arch")
+offset = Vector2(1040, 760)
+mirrored = true
+size_scale = 1.05
+floor_turn_degrees = 0
+damage = 0.8
+variant = 3
 
 [sub_resource type="Resource" id="Landmark_2"]
 script = ExtResource("lm_script")
-cell = Vector2i(0, 2)
+cell = Vector2i(0, 0)
 scene = ExtResource("lm_coral_tree")
-offset = Vector2(640, 800)
+offset = Vector2(880, 680)
+mirrored = false
+size_scale = 1.15
+floor_turn_degrees = 0
+damage = 0.5
+variant = 3
+accent_color = Color(0.1, 0.36, 0.3, 0.38)
 
 [resource]
 script = ExtResource("1_level")

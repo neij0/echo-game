@@ -100,15 +100,25 @@ quarter_turns = 3
 
 [sub_resource type="Resource" id="Landmark_0"]
 script = ExtResource("lm_script")
-cell = Vector2i(1, 3)
+cell = Vector2i(0, 1)
 scene = ExtResource("lm_arch")
-offset = Vector2(800, 560)
+offset = Vector2(800, 600)
+mirrored = false
+size_scale = 1
+floor_turn_degrees = 0
+damage = 0.3
+variant = 1
 
 [sub_resource type="Resource" id="Landmark_1"]
 script = ExtResource("lm_script")
-cell = Vector2i(0, 1)
+cell = Vector2i(2, 1)
 scene = ExtResource("lm_vent")
 offset = Vector2(720, 680)
+mirrored = false
+size_scale = 1
+floor_turn_degrees = 0
+damage = 0.5
+variant = 1
 
 [resource]
 script = ExtResource("1_level")

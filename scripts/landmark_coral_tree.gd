@@ -34,7 +34,8 @@ func _footprint_heights() -> PackedFloat32Array:
 
 func _build_parts() -> void:
 	_branches.clear()
-	_grow(Vector2.ZERO, -PI * 0.5, trunk_length, trunk_width, 0, tree_seed)
+	# Every variant grows a different tree, leaning a little.
+	_grow(Vector2.ZERO, -PI * 0.5 + (rand(2.0) - 0.5) * 0.3, trunk_length * lerpf(0.85, 1.15, rand(3.0)), trunk_width, 0, tree_seed + variant * 2.7)
 	var base_y: float = foot_radii.y + 1.0
 	add_part(Vector2(0.0, base_y), _draw_tree.bind(material_color(), base_y), true)
 	for branch: Array in _branches:

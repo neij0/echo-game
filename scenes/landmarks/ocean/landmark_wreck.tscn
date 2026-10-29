@@ -6,3 +6,4 @@
 script = ExtResource("1_script")
 tint = Color(0.3, 0.24, 0.2, 1)
 tint_strength = 0.55
+top_lift = 0.04

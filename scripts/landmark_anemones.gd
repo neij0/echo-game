@@ -40,12 +40,15 @@ func _ready() -> void:
 func _build_parts() -> void:
 	_spots.clear()
 	_heights.clear()
+	# Every variant has its own field (no footprint, parts only).
+	anemone_count = roundi(anemone_count * lerpf(0.7, 1.3, rand(1.0)))
+	field_radii *= lerpf(0.85, 1.15, rand(2.0))
 	for i: int in anemone_count:
 		# Spread over the ellipse (square root: even density).
-		var angle: float = TAU * Landmark.hash01(i * 3.17 + 0.5)
-		var distance: float = sqrt(Landmark.hash01(i * 7.31 + 1.1))
+		var angle: float = TAU * rand(i * 3.17 + 0.5)
+		var distance: float = sqrt(rand(i * 7.31 + 1.1))
 		_spots.append(Vector2(cos(angle) * field_radii.x, sin(angle) * field_radii.y) * distance)
-		_heights.append(lerpf(stalk_height_min, stalk_height_max, Landmark.hash01(i * 1.93)))
+		_heights.append(lerpf(stalk_height_min, stalk_height_max, rand(i * 1.93)))
 	_shrink_start.resize(anemone_count)
 	_shrink_start.fill(-INF)
 	for i: int in anemone_count:

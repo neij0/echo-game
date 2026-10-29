@@ -74,6 +74,17 @@ signal level_built(level_index: int)
 @export var floor_pebble_count: int = 60
 @export var floor_texture_size: int = 256
 @export var floor_texture_seed: int = 5
+## The same room type looks different in every level: its floor texture is
+## picked from this many seeds and ripple periods (by level and cell), ...
+@export var floor_texture_variants: int = 4
+@export var floor_ripple_period_jitter: float = 6.0
+## ... its rock heights scale by up to this share (+ or -), ...
+@export_range(0.0, 0.5) var room_height_jitter: float = 0.2
+## ... and small things lie on its floor (FloorScatter: this many per room).
+@export var scatter_min: int = 14
+@export var scatter_max: int = 30
+## Open floor needed around a scattered thing (pixels).
+@export var scatter_free_radius: float = 12.0
 ## The outer rock around the level: the rock colour lightened by this much,
 ## so it continues the (lighter) rock tops at the level's edge.
 @export_range(0.0, 1.0) var outer_rock_lift: float = 0.28
@@ -143,6 +154,8 @@ class Layout:
 	var landmarks: Array[Landmark] = []
 	var landmark_cells: Array[Vector2i] = []
 	var landmark_polygons: Array[PackedVector2Array] = []
+	## Floor scatter spots per room (Vector2i -> PackedVector2Array).
+	var scatter: Dictionary = {}
 	## Harmless life: scene and spot of each.
 	var life_scenes: Array[PackedScene] = []
 	var life_positions: Array[Vector2] = []
@@ -320,6 +333,7 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 			return layout
 		var landmark := placement.scene.instantiate() as Landmark
 		landmark.position = Vector2(placement.cell) * size + placement.offset
+		landmark.configure(placement)
 		layout.landmarks.append(landmark)
 		layout.landmark_cells.append(placement.cell)
 		layout.landmark_polygons.append_array(landmark.get_placed_footprints())
@@ -527,6 +541,7 @@ func _pick_life(layout: Layout, rng: RandomNumberGenerator) -> void:
 	var size: float = world.room_size
 	for cell: Vector2i in layout.rooms:
 		var room := Rect2(Vector2(cell) * size, Vector2.ONE * size).grow(-world.room_wall_band * 0.5)
+		layout.scatter[cell] = _scatter_spots(layout, cell, room)
 		var taken: Array[Vector2] = []
 		for spawn: AmbientLifeSpawn in world.ambient_life:
 			if spawn.scene == null:
@@ -544,6 +559,27 @@ func _pick_life(layout: Layout, rng: RandomNumberGenerator) -> void:
 					layout.life_scenes.append(spawn.scene)
 					layout.life_positions.append(spot)
 					break
+
+
+## Open-floor spots for a room's FloorScatter, picked by the level and the
+## cell (the same level always looks the same; another level differs).
+func _scatter_spots(layout: Layout, cell: Vector2i, room: Rect2) -> PackedVector2Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = absi(hash([global_level_index, cell, "scatter"]))
+	var spots := PackedVector2Array()
+	var wanted: int = rng.randi_range(scatter_min, scatter_max)
+	for attempt: int in wanted * 3:
+		if spots.size() >= wanted:
+			break
+		var spot := Vector2(rng.randf_range(room.position.x, room.end.x), rng.randf_range(room.position.y, room.end.y))
+		if layout.validator.is_open(spot, scatter_free_radius):
+			spots.append(spot)
+	return spots
+
+
+## Same value for the same level and cell, in [0, 1).
+func _room_pick(cell: Vector2i, key: String) -> float:
+	return float(absi(hash([global_level_index, cell, key])) % 10007) / 10007.0
 
 
 static func _nearest(points: Array[Vector2], to: Vector2) -> Vector2:
@@ -588,6 +624,7 @@ func _instantiate(layout: Layout) -> void:
 		_level.add_child(landmark)
 		_landmarks.append(landmark)
 	_add_accents(layout)
+	_add_scatter(layout, floor_color)
 	_build_rock_faces(layout)
 	_player_spawns = layout.player_spawns
 	shard_spots = layout.shards
@@ -627,6 +664,16 @@ func _instantiate(layout: Layout) -> void:
 	_add_navigation(layout)
 	# The sonar overlay samples the new rock outlines.
 	get_tree().call_group("sonar_overlay", "rebuild_samples")
+
+
+func _add_scatter(layout: Layout, floor_color: Color) -> void:
+	for cell: Vector2i in layout.scatter:
+		var scatter := FloorScatter.new()
+		scatter.name = "FloorScatter"
+		scatter.spots = layout.scatter[cell]
+		scatter.floor_color = floor_color
+		scatter.scatter_seed = absi(hash([global_level_index, cell, "kinds"]))
+		_level.add_child(scatter)
 
 
 ## One shared unlit layer for the small glows of landmarks and harmless life.
@@ -822,30 +869,35 @@ func _spawn(scene: PackedScene, at: Vector2) -> Node2D:
 func _apply_palette(chunk: LevelChunk, floor_color: Color) -> void:
 	# Its tall rocks' faces join the level's y-sort through the chunk.
 	chunk.y_sort_enabled = true
+	var cell := Vector2i((chunk.position / world.room_size).round())
+	var texture_seed: int = floor_texture_seed + int(_room_pick(cell, "floor") * floor_texture_variants)
+	var ripple_period: float = floor_ripple_period + roundf((_room_pick(cell, "ripple") - 0.5) * 2.0) * floor_ripple_period_jitter
 	for node: Node in chunk.find_children("*", "", true, false):
 		if node is RockWall:
 			var wall := node as RockWall
 			wall.color = floor_color.lightened(world.rock_fill_lift)
-			_apply_height(wall, chunk)
+			_apply_height(wall, chunk, cell)
 		elif node is Polygon2D:
 			var floor_shape := node as Polygon2D
 			floor_shape.color = floor_color
 			floor_shape.z_index = floor_z_index
-			floor_shape.texture = SurfaceTextures.floor_detail(floor_texture_size, floor_ripple_strength, floor_ripple_period, floor_pebble_strength, floor_pebble_count, floor_texture_seed)
+			floor_shape.texture = SurfaceTextures.floor_detail(floor_texture_size, floor_ripple_strength, ripple_period, floor_pebble_strength, floor_pebble_count, texture_seed)
 			floor_shape.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 
 
 ## A rock's middle height and spread from its room's range (the same rock
-## gets the same height on every attempt).
-func _apply_height(wall: RockWall, chunk: LevelChunk) -> void:
+## gets the same height on every attempt of a level, but other heights in
+## another level, and the whole room is a little taller or lower there).
+func _apply_height(wall: RockWall, chunk: LevelChunk, cell: Vector2i) -> void:
 	var middle := Vector2.ZERO
 	for point: Vector2 in wall.polygon:
 		middle += point / wall.polygon.size()
 	middle += chunk.position
-	var pick: float = fposmod(sin(middle.x * 0.0173 + middle.y * 0.0291) * 43758.5453, 1.0)
+	var pick: float = fposmod(sin(middle.x * 0.0173 + middle.y * 0.0291 + global_level_index * 1.618) * 43758.5453, 1.0)
 	var share: float = lerpf(rock_middle_low, rock_middle_high, pick)
-	wall.height = lerpf(chunk.rock_height_min, chunk.rock_height_max, share)
-	wall.height_spread = (chunk.rock_height_max - chunk.rock_height_min) * rock_height_spread
+	var room_scale: float = 1.0 + (_room_pick(cell, "height") - 0.5) * 2.0 * room_height_jitter
+	wall.height = lerpf(chunk.rock_height_min, chunk.rock_height_max, share) * room_scale
+	wall.height_spread = (chunk.rock_height_max - chunk.rock_height_min) * rock_height_spread * room_scale
 
 
 ## Top surfaces and front faces of the tall rocks (rooms with a rock height range).

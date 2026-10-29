@@ -15,9 +15,11 @@ extends SceneTree
 ##   lockdown room has Creature markers for it), and for collapse-escape levels
 ##   the timer per mode against the longest walk from any shard to the exit at
 ##   the slower player's full speed (must be at least ESCAPE_MIN_RATIO times it);
-## - landmarks: 1-3 per level, every level its own mix; each one clear of the
-##   room's rock, its markers and the doorway corridors (the level checks above
-##   already include their footprints as rock);
+## - landmarks: 1-3 per level, every level its own mix, no kind twice in a
+##   stage, and two placements of a kind never in the same room type with the
+##   same turn close to the same spot (so they never look alike); each one
+##   clear of the room's rock, its markers and the doorway corridors (the
+##   level checks above already include their footprints as rock);
 ## - ambient life: every creature is placed on open floor and none of it is a
 ##   creature (a node in the "creatures" group);
 ## - the level generator (tools/propose_level.gd) still proposes valid levels.
@@ -48,6 +50,8 @@ const LANDMARKS_MAX: int = 3
 const LANDMARK_ROCK_MARGIN: float = 40.0
 const LANDMARK_MARKER_DISTANCE: float = 60.0
 const LANDMARK_DOORWAY_MARGIN: float = 40.0
+## Two placements of a kind in the same room type and turn must be this far apart.
+const LANDMARK_REPEAT_DISTANCE: float = 400.0
 
 
 func _initialize() -> void:
@@ -90,7 +94,7 @@ func _initialize() -> void:
 				all_ok = false
 			if not _check_level(builder, definition, label, seeds_per_level, rng):
 				all_ok = false
-			if not _check_landmarks(builder, definition, label, mixes):
+			if not _check_landmarks(builder, definition, label, mixes, stage_index):
 				all_ok = false
 
 	if not _check_lighting(world):
@@ -226,7 +230,7 @@ func _check_level(builder: LevelBuilder, definition: LevelDefinition, label: Str
 ## The level's landmarks: how many, a mix no other level has, each one clear
 ## of the room's rock, markers and doorway corridors; and the ambient life of
 ## one layout on open floor, never a creature.
-func _check_landmarks(builder: LevelBuilder, definition: LevelDefinition, label: String, mixes: Dictionary) -> bool:
+func _check_landmarks(builder: LevelBuilder, definition: LevelDefinition, label: String, mixes: Dictionary, stage_index: int) -> bool:
 	var ok: bool = true
 	var count: int = definition.landmarks.size()
 	if count < LANDMARKS_MIN or count > LANDMARKS_MAX:
@@ -240,6 +244,20 @@ func _check_landmarks(builder: LevelBuilder, definition: LevelDefinition, label:
 	if mixes.has(mix):
 		ok = _fail("%s: same landmarks as %s (%s)" % [label, mixes[mix], mix])
 	mixes[mix] = label
+	for i: int in definition.landmarks.size():
+		var placement: LandmarkPlacement = definition.landmarks[i]
+		var stage_key: String = "stage %d %s" % [stage_index, names[i]]
+		if mixes.has(stage_key):
+			ok = _fail("%s: a %s again in the same stage (%s)" % [label, names[i], mixes[stage_key]])
+		mixes[stage_key] = label
+		var room_placement: RoomPlacement = definition.get_placement(placement.cell)
+		var spot: Array = [room_placement.room.resource_path if room_placement else "", room_placement.quarter_turns if room_placement else 0, placement.offset, label]
+		for earlier: Array in mixes.get("spots " + names[i], []):
+			if earlier[0] == spot[0] and earlier[1] == spot[1] and (earlier[2] as Vector2).distance_to(placement.offset) < LANDMARK_REPEAT_DISTANCE:
+				ok = _fail("%s: the %s stands where it stands in %s (same room type and spot)" % [label, names[i], earlier[3]])
+		if not mixes.has("spots " + names[i]):
+			mixes["spots " + names[i]] = []
+		(mixes["spots " + names[i]] as Array).append(spot)
 	var layout: LevelBuilder.Layout = builder.find_valid_layout(definition, 1)
 	if layout == null:
 		return _fail("%s: no valid layout for the landmark check" % label)

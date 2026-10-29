@@ -25,6 +25,9 @@ func _footprint_heights() -> PackedFloat32Array:
 
 func _build_parts() -> void:
 	var shell: Color = material_color()
+	# Every variant opens its upper shell differently (not in the footprint).
+	lid_height *= lerpf(0.7, 1.15, rand(1.0))
+	lid_width *= lerpf(0.9, 1.1, rand(2.0))
 	# The upper shell stands at the back (behind the lower shell's top).
 	var hinge_y: float = -shell_radii.y + 1.0
 	add_part(Vector2(0.0, hinge_y), _draw_lid.bind(shell, hinge_y))

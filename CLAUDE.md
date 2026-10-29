@@ -230,14 +230,29 @@ linear float data and look much darker than the screen; convert each pixel with
   (`add_part`) are y-sorted on their own base point; extra sonar lines (`add_sonar_line`,
   group `sonar_shapes`, the line of sight may pass through the landmark's own walls).
   Glow stays small and dim (optional weak light, dots on the level's `GlowLayer`).
-  Never rotated. `check_levels` checks count, unique mix, distance to rock / markers /
-  doorways.
+  Never rotated as a node. `check_levels` checks count, unique mix, no kind twice in a
+  stage, no two placements of a kind in the same room type + turn within 400 px, and the
+  distance to rock / markers / doorways.
+- **Variation per placement** (`LandmarkPlacement`: `mirrored`, `size_scale`,
+  `floor_turn_degrees`, `damage`, `variant`, `accent_color`; `Landmark.configure`): mirror and
+  size apply to everything (`variation()`); the floor turn, damage and variant are read by
+  each kind (`rand(key)` mixes in the variant). Wreck: bow half tilted out of the sand
+  (`RockWall.height_slope`), gap with frames, stern piece (gone when wrecked), bowsprit,
+  fallen mast, barrels, cabin fragment, planks. Whale: big skull, bending spine, rib pairs
+  arching out and curving back in (3D curves projected with `Landmark.project`), some
+  broken / fallen, loose vertebrae, jaw. Columns (`LandmarkColumn`, statue + arch): fluted,
+  chipped, cracked, leaning, capital or jagged broken top, fallen drums (collision only:
+  `RockWall.draw_flat` false).
 - **Harmless life** (`AmbientLife`: `FishSchool`, `Jellyfish`, `Crab`, `SeaPlant` kelp /
   anemone, scenes in `scenes/life/<world>/`, `WorldConfig.ambient_life` = `AmbientLifeSpawn`
   per kind and room, on open floor from the validator flood, with the seed). Fish scatter
   from players and pulses, crabs scuttle sideways, plants / anemones shrink on a pulse
   (`sonar_targets`), jellyfish flare. Never creature-like: no eyes, cool soft colours, no
   sounds, no collision, not in `creatures`; creatures ignore it and the music stays calm.
+- **Room variation between levels** (`LevelBuilder`, picked by level + cell, the same on
+  every attempt of a level): floor texture seed / ripple period, rock heights (another pick
+  per rock and a room scale, `room_height_jitter`), the accent, and a `FloorScatter`
+  (pebbles, stone clusters, shell fragments, dead coral bits on open floor).
 - **Cost**: far from the camera they skip updates (`GlowLayer.near_camera`); slow motion
   redraws at `redraw_rate` (30/s); every moving shape goes through `ShapeBatch` (one
   `canvas_item_add_triangle_array` per draw, no per-shape triangulation or anti-aliasing:

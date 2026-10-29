@@ -16,8 +16,8 @@
 [ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_1"]
 [ext_resource type="PackedScene" path="res://scenes/boss_placeholder.tscn" id="boss"]
 [ext_resource type="Script" path="res://scripts/landmark_placement.gd" id="lm_script"]
-[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_arch.tscn" id="lm_arch"]
-[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_clam.tscn" id="lm_clam"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_statue.tscn" id="lm_statue"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_whale.tscn" id="lm_whale"]
 
 [sub_resource type="Resource" id="Spawn_0"]
 script = ExtResource("2_spawn")
@@ -91,15 +91,25 @@ quarter_turns = 0
 
 [sub_resource type="Resource" id="Landmark_0"]
 script = ExtResource("lm_script")
-cell = Vector2i(1, 2)
-scene = ExtResource("lm_arch")
-offset = Vector2(560, 800)
+cell = Vector2i(0, 1)
+scene = ExtResource("lm_whale")
+offset = Vector2(760, 560)
+mirrored = true
+size_scale = 0.77
+floor_turn_degrees = -14
+damage = 0.6
+variant = 2
 
 [sub_resource type="Resource" id="Landmark_1"]
 script = ExtResource("lm_script")
-cell = Vector2i(0, 0)
-scene = ExtResource("lm_clam")
-offset = Vector2(1120, 760)
+cell = Vector2i(1, 2)
+scene = ExtResource("lm_statue")
+offset = Vector2(600, 760)
+mirrored = true
+size_scale = 0.95
+floor_turn_degrees = 0
+damage = 0.8
+variant = 2
 
 [resource]
 script = ExtResource("1_level")

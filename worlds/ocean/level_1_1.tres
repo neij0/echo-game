@@ -76,15 +76,25 @@ quarter_turns = 3
 
 [sub_resource type="Resource" id="Landmark_0"]
 script = ExtResource("lm_script")
-cell = Vector2i(2, 0)
+cell = Vector2i(0, 1)
 scene = ExtResource("lm_wreck")
-offset = Vector2(720, 1000)
+offset = Vector2(560, 440)
+mirrored = false
+size_scale = 1
+floor_turn_degrees = 0
+damage = 0.3
+variant = 1
 
 [sub_resource type="Resource" id="Landmark_1"]
 script = ExtResource("lm_script")
-cell = Vector2i(0, 1)
+cell = Vector2i(2, 0)
 scene = ExtResource("lm_anemones")
-offset = Vector2(1040, 800)
+offset = Vector2(840, 960)
+mirrored = false
+size_scale = 1
+floor_turn_degrees = 0
+damage = 0.5
+variant = 1
 
 [resource]
 script = ExtResource("1_level")

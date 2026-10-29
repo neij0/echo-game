@@ -29,6 +29,11 @@ func _footprint_heights() -> PackedFloat32Array:
 
 func _build_parts() -> void:
 	var rock: Color = material_color()
+	# Every variant has its own chimney heights (not in the footprint).
+	var heights := PackedFloat32Array(chimney_heights)
+	for i: int in heights.size():
+		heights[i] *= lerpf(0.7, 1.25, rand(i * 2.9))
+	chimney_heights = heights
 	# On the mound's top, in front of it (they stand on it).
 	var base_y: float = mound_radii.y + 2.0
 	add_part(Vector2(0.0, base_y), _draw_chimneys.bind(rock, base_y))

@@ -21,6 +21,9 @@ extends StaticBody2D
 @export var color: Color = Color(0.45, 0.42, 0.40)
 ## Blocks shadow-casting lights (the pulse glow), creating hidden areas behind the rock.
 @export var casts_shadow: bool = true
+## A flat rock (height 0) is drawn as its polygon; false = collision only
+## (a landmark draws that solid part itself, e.g. a fallen column drum).
+@export var draw_flat: bool = true
 
 @export_group("Height (3/4 view)")
 ## Pixels the rock rises above its base (its middle height). 0 = flat rock.
@@ -29,6 +32,9 @@ extends StaticBody2D
 @export var height_spread: float = 0.0
 ## Size of one rise or dip of the height, in pixels along the rock.
 @export var height_wave: float = 200.0
+## A steady tilt: the height changes by this much per pixel (global x / y)
+## away from slope_origin (a wreck's bow raised, its stern sunk in the sand).
+@export var height_slope: Vector2 = Vector2.ZERO
 ## The top is drawn this much inside the base (the base is a little wider).
 ## Not where the rock touches other rock, so touching tops stay joined.
 @export var top_inset: float = 5.0
@@ -141,6 +147,8 @@ extends StaticBody2D
 ## of them the rock drops to clear_height, so its top never hides a doorway or
 ## the players walking through it.
 var clear_zones: Array[Rect2] = []
+## Global point where height_slope adds nothing.
+var slope_origin: Vector2 = Vector2.ZERO
 var clear_height: float = 10.0
 var clear_distance: float = 140.0
 
@@ -163,7 +171,7 @@ func _ready() -> void:
 	z_index = flat_z_index
 
 	# A tall rock is drawn by its pieces (build_faces), not by the base.
-	if height <= 0.0:
+	if height <= 0.0 and draw_flat:
 		var visual := Polygon2D.new()
 		visual.polygon = polygon
 		visual.color = color
@@ -259,7 +267,7 @@ func build_faces(others: Array[PackedVector2Array], room: Rect2, other_bounds: A
 ## Height of the rock above base point p (global): its middle height with a
 ## slow rise and fall along the rock, dropping to clear_height near a doorway.
 func height_at(p: Vector2) -> float:
-	var h: float = height + height_spread * _noise2(p / maxf(height_wave, 1.0))
+	var h: float = height + height_spread * _noise2(p / maxf(height_wave, 1.0)) + height_slope.dot(p - slope_origin)
 	if not clear_zones.is_empty():
 		var distance: float = INF
 		for zone: Rect2 in clear_zones:

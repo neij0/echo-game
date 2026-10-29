@@ -15,7 +15,12 @@ extends Node2D
 ## - Any glow is small and dim: an optional weak light (light_radius) and
 ##   small glowing dots drawn on the level's glow layer (_draw_glow).
 ## Subclasses override _footprint_shapes, _footprint_heights, _build_parts
-## and, if they glow, _has_glow / _draw_glow. Never rotated (3/4 view).
+## and, if they glow, _has_glow / _draw_glow. Never rotated as a node (3/4
+## view: upright parts must stay upright).
+## Variation (configure, from the LandmarkPlacement): mirrored and size_scale
+## apply to everything (footprints, parts, sonar lines, glow); floor_turn,
+## damage and variant are read by each kind (rand() mixes in the variant), so
+## no two placements of a kind look the same.
 
 ## The rock colour is pulled towards this colour (wood, bone, pale stone...).
 @export var tint: Color = Color(0.3, 0.36, 0.4)
@@ -47,6 +52,14 @@ extends Node2D
 
 ## The level's rock colour (set by the LevelBuilder before _ready).
 var rock_color: Color = Color(0.27, 0.36, 0.42)
+## Per placement (configure): mirrored left-right, size, a turn on the floor
+## (radians, for kinds lying on the floor), damage 0 (intact) - 1 (wrecked),
+## and the variant that picks the details.
+var mirrored: bool = false
+var size_scale: float = 1.0
+var floor_turn: float = 0.0
+var damage: float = 0.5
+var variant: int = 0
 
 var _time: float = 0.0
 var _parts: Array[Node2D] = []
@@ -60,17 +73,52 @@ var _batch := ShapeBatch.new()
 var _redraw_wait: float = 0.0
 
 
-## The solid footprints (local, pixels around the landmark's base point).
+## Takes the placement's variation (before the landmark enters the tree).
+func configure(placement: LandmarkPlacement) -> void:
+	mirrored = placement.mirrored
+	size_scale = placement.size_scale
+	floor_turn = deg_to_rad(placement.floor_turn_degrees)
+	damage = placement.damage
+	variant = placement.variant
+	if placement.accent_color.a > 0.0:
+		accent_color = placement.accent_color
+
+
+## Mirror and size of this placement (local design space -> node space).
+func variation() -> Transform2D:
+	return Transform2D.IDENTITY.scaled(variation_scale())
+
+
+## The same as a scale (x negative when mirrored; Transform2D.get_scale()
+## would put the sign on y).
+func variation_scale() -> Vector2:
+	return Vector2(-size_scale if mirrored else size_scale, size_scale)
+
+
+## The solid footprints (node space, pixels around the landmark's base point).
 func get_footprints() -> Array[PackedVector2Array]:
-	return _footprint_shapes()
+	var result: Array[PackedVector2Array] = []
+	for shape: PackedVector2Array in _footprint_shapes():
+		result.append(variation() * shape)
+	return result
 
 
 ## The footprints in the parent's space (works before entering the tree).
 func get_placed_footprints() -> Array[PackedVector2Array]:
 	var result: Array[PackedVector2Array] = []
-	for shape: PackedVector2Array in _footprint_shapes():
+	for shape: PackedVector2Array in get_footprints():
 		result.append(transform * shape)
 	return result
+
+
+## Stable value in [0, 1) for key, different for every variant.
+func rand(key: float) -> float:
+	return Landmark.hash01(key * 1.37 + variant * 31.71 + 0.53)
+
+
+## A point of the 3/4 view: a floor point raised by z pixels.
+static func project(floor_point: Vector2, z: float) -> Vector2:
+	return floor_point - Vector2(0.0, z)
 
 
 ## The colour of this landmark's material (rock colour pulled to the tint).
@@ -81,13 +129,21 @@ func material_color() -> Color:
 func _ready() -> void:
 	add_to_group("landmarks")
 	y_sort_enabled = true
-	var shapes: Array[PackedVector2Array] = _footprint_shapes()
+	var shapes: Array[PackedVector2Array] = get_footprints()
 	var heights: PackedFloat32Array = _footprint_heights()
+	var slopes: PackedVector2Array = _footprint_slopes()
 	for i: int in shapes.size():
 		var wall := RockWall.new()
 		wall.polygon = shapes[i]
 		wall.color = material_color()
-		wall.height = heights[i] if i < heights.size() else 40.0
+		wall.height = (heights[i] if i < heights.size() else 40.0) * size_scale
+		# Height 0: collision only, the landmark draws that part itself.
+		wall.draw_flat = wall.height > 0.0
+		if i < slopes.size():
+			# Per local pixel = per global pixel (the size scales both); a
+			# mirror turns the x tilt around.
+			wall.height_slope = Vector2(-slopes[i].x if mirrored else slopes[i].x, slopes[i].y)
+			wall.slope_origin = global_position
 		wall.top_lift = top_lift
 		wall.detail_chance = detail_chance
 		wall.grain_strength = grain_strength
@@ -99,12 +155,13 @@ func _ready() -> void:
 		light.texture_scale = LightTextures.scale_for_radius(light.texture, light_radius)
 		light.color = light_color
 		light.energy = light_energy
-		light.position = light_offset
+		light.position = variation() * light_offset
 		light.add_to_group("falloff_lights")
 		add_child(light)
 	if _has_glow():
 		_glow = Node2D.new()
 		_glow.position = global_position
+		_glow.scale = variation_scale()
 		GlowLayer.add(self, _glow)
 		_glow.draw.connect(func() -> void: _draw_glow(_glow))
 	if not _sonar_lines.is_empty():
@@ -134,7 +191,7 @@ func _process(delta: float) -> void:
 func get_sonar_shape_lines() -> Array[PackedVector2Array]:
 	var result: Array[PackedVector2Array] = []
 	for line: PackedVector2Array in _sonar_lines:
-		result.append(global_transform * line)
+		result.append(global_transform * (variation() * line))
 	return result
 
 
@@ -153,7 +210,7 @@ func get_sonar_exclude() -> Array:
 func get_sonar_shape_sights() -> Array[PackedVector2Array]:
 	var result: Array[PackedVector2Array] = []
 	for sights: PackedVector2Array in _sonar_sights:
-		result.append(global_transform * sights)
+		result.append(global_transform * (variation() * sights))
 	return result
 
 
@@ -165,6 +222,11 @@ func _footprint_shapes() -> Array[PackedVector2Array]:
 
 func _footprint_heights() -> PackedFloat32Array:
 	return PackedFloat32Array()
+
+
+## Optional tilt per footprint (height change per local pixel, x / y).
+func _footprint_slopes() -> PackedVector2Array:
+	return PackedVector2Array()
 
 
 func _build_parts() -> void:
@@ -181,11 +243,13 @@ func _draw_glow(_canvas: Node2D) -> void:
 	pass
 
 
-## A decorative part sorted on base (local): drawer(part) draws it in the
-## part's space (base = origin). animated = redrawn every frame.
+## A decorative part sorted on base (local design space): drawer(part) draws
+## it in the part's space (base = origin, mirrored and scaled with the
+## landmark). animated = redrawn every frame.
 func add_part(base: Vector2, drawer: Callable, animated: bool = false) -> Node2D:
 	var part := Node2D.new()
-	part.position = base
+	part.position = variation() * base
+	part.scale = variation_scale()
 	part.material = TopLightFalloff.material()
 	part.draw.connect(func() -> void: drawer.call(part))
 	add_child(part)

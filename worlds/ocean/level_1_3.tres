@@ -72,13 +72,23 @@ quarter_turns = 0
 script = ExtResource("lm_script")
 cell = Vector2i(0, 0)
 scene = ExtResource("lm_whale")
-offset = Vector2(840, 400)
+offset = Vector2(880, 400)
+mirrored = false
+size_scale = 0.95
+floor_turn_degrees = 0
+damage = 0.2
+variant = 1
 
 [sub_resource type="Resource" id="Landmark_1"]
 script = ExtResource("lm_script")
 cell = Vector2i(0, 1)
 scene = ExtResource("lm_clam")
 offset = Vector2(840, 640)
+mirrored = false
+size_scale = 1
+floor_turn_degrees = 0
+damage = 0.5
+variant = 1
 
 [resource]
 script = ExtResource("1_level")
