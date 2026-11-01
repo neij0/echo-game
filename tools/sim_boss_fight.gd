@@ -11,9 +11,12 @@ extends Node
 ##   the safe distance);
 ## - the Guardian notices an opening (recovery, stun, Exposed) after a reaction
 ##   delay and misses miss_chance of them altogether; he keeps some distance
-##   otherwise, swings at orbs coming at him (deflect_chance);
-## - the Echo stays by him (her light reveals it), pulses when ready after a
-##   human delay (sooner when orbs come close: the pulse pops them), and with
+##   otherwise, steps between the Echo and an orb homing on her
+##   (orb_guard_distance) and swings at orbs coming at him (deflect_chance);
+## - the Echo stays by him (her light reveals it; behind him while an orb homes
+##   on her), pulses when ready after a human delay (sooner when a cyan orb
+##   comes: she pops it once it is within its pulse_pop_radius; armored orbs
+##   ignore the pulse), and with
 ##   the Lure ready sometimes baits a charge at a pillar or a mine (bait_chance,
 ##   aim off by up to bait_error);
 ## - mines are only known once a pulse showed them or their warning ring shows;
@@ -68,6 +71,10 @@ var sweep_dodge: float = 300.0
 var slam_dodge_margin: float = 100.0
 var mine_dodge_margin: float = 40.0
 var bait_min: float = 250.0
+## An orb homing on the Echo this close to her: he covers her, she hides behind him.
+var orb_guard_distance: float = 260.0
+## He stands this far from her, towards the orb.
+var orb_guard_offset: float = 45.0
 var bait_max: float = 800.0
 
 var _game: Node2D
@@ -400,6 +407,14 @@ func _move_bot(player: Player, delta: float) -> bool:
 		side = Vector2.UP
 	var attacking: bool = _opening_ready()
 	var guardian_spot: Vector2 = center + side * (minf(guardian_distance, _boss.body_radius + 50.0) if attacking else guardian_wait_distance)
+	var hunting_echo: AnglerOrb = _nearest_orb(_echo.global_position, orb_guard_distance, false, _echo)
+	if hunting_echo and float(_react_left.get(player, 0.0)) <= 0.0 and not _guardian.health.is_downed:
+		var toward_orb: Vector2 = _echo.global_position.direction_to(hunting_echo.global_position)
+		if player == _guardian:
+			_move(player, _echo.global_position + toward_orb * orb_guard_offset, delta)
+		else:
+			_move(player, _guardian.global_position - toward_orb * orb_guard_offset, delta)
+		return false
 	if player == _guardian:
 		# A summon chasing her (or him): he steps in to cut it down.
 		var pest: Creature = _nearest_small_creature(_echo.global_position, 220.0)
@@ -500,11 +515,14 @@ func _echo_pulse(delta: float) -> void:
 		Input.action_release("p1_action")
 		_pulse_wait = -1.0
 		return
-	var orb_near: bool = _nearest_orb(_echo.global_position, 260.0) != null or _nearest_orb(_guardian.global_position, 260.0) != null
+	# A cyan orb coming: she pops it once it is close enough (armored ones ignore the pulse).
+	var orb_coming: bool = _nearest_orb(_echo.global_position, orb_guard_distance, true) != null
+	var cyan: AnglerOrb = _nearest_orb(_echo.global_position, INF, true)
+	var orb_close: bool = cyan != null and cyan.can_pulse_pop(_echo.global_position)
 	if _pulse_wait < 0.0:
-		_pulse_wait = randf_range(reaction.x, reaction.y) if orb_near else randf_range(pulse_delay.x, pulse_delay.y)
+		_pulse_wait = randf_range(reaction.x, reaction.y) if orb_coming else randf_range(pulse_delay.x, pulse_delay.y)
 	_pulse_wait -= delta
-	if _pulse_wait <= 0.0 and (_boss.can_be_hurt() or orb_near):
+	if _pulse_wait <= 0.0 and (_boss.can_be_hurt() or orb_close):
 		Input.action_press("p1_action")
 		_pulse_wait = -1.0
 	else:
@@ -617,11 +635,15 @@ func _on_damage(info: Dictionary) -> void:
 
 # --- Helpers -----------------------------------------------------------------------
 
-func _nearest_orb(from: Vector2, within: float) -> AnglerOrb:
+## The nearest homing orb within reach (only cyan ones / only those homing on
+## a player if asked).
+func _nearest_orb(from: Vector2, within: float, cyan_only: bool = false, homing_on: Player = null) -> AnglerOrb:
 	var best: AnglerOrb = null
 	for node: Node in get_tree().get_nodes_in_group("deflectables"):
 		var orb := node as AnglerOrb
-		if orb and orb.is_homing() and orb.global_position.distance_to(from) <= within:
+		if orb == null or (cyan_only and orb.armored) or (homing_on and orb.target != homing_on):
+			continue
+		if orb.is_homing() and orb.global_position.distance_to(from) <= within:
 			if best == null or orb.global_position.distance_to(from) < best.global_position.distance_to(from):
 				best = orb
 	return best

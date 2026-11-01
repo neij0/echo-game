@@ -40,7 +40,7 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   "Bosses"); stages 2-3 use "The Hollow Brute" (`PlaceholderBoss`,
   `scenes/boss_placeholder.tscn`: the plain round creature on the boss framework, with a
   telegraphed lunge (a dashed line shows the path) and a slam (a ring shows its reach); faster
-  each phase; HP 48 / 50, Challenge x1.25 per level via `LevelDefinition.boss_challenge_health_scale`) until they get their own bosses. `test_stuck` uses `tools/large_creature.tscn`
+  each phase; HP 54 / 50, Challenge x1.11 / x1.25 per level via `LevelDefinition.boss_challenge_health_scale`) until they get their own bosses. `test_stuck` uses `tools/large_creature.tscn`
   (a plain creature of boss size) instead.
   **Mending in a boss fight** (`Boss.allows_mending`): allowed while the boss is stunned or
   recovering, or farther than `mend_safe_distance` (400 px) from both players; never during a
@@ -71,7 +71,14 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   Exposed; transitions last 2.0 s. Damage log: `Boss.damage_log_enabled` / `log_damage`
   prints every hit (source, base, multipliers, HP before / after, phase, mode, distance) and
   `damage_taken` carries it; one damage per swing and target (same attacker + same physics
-  frame = ignored). **Charge** (telegraph: lure
+  frame = ignored). **Hurtbox** = the drawn shape (`AnglerBody.get_hurt_polygon`: back, head,
+  jaw, 3/4 flank, tilted / flipped like the look; `get_hurtbox`, cached per frame): the sword
+  (`Creature.is_in_swing`: the swing's slice overlaps it), the soft push, charge hits, returning
+  orbs and mines measure to it (`_contact_distance`, `HitShapes.signed_distance`). Attack
+  hitboxes match the drawing: bite = the mouth with the jaw fully open (`get_bite_zone`), sweep =
+  the circle its arc draws (`get_sweep_zone`: `AnglerGlow.get_sweep_center`,
+  `AnglerVisual.sweep_arc_radius`), charge = touching the hurtbox; a player counts by their
+  circle (`player_hit_radius` 14). **Charge** (telegraph: lure
   flares, body coils; the aim locks `charge_aim_lock` before the dash): an `ArenaPillar` in the
   way stuns it `pillar_stun_time` (3 s, Exposed) and takes a blow (cracks after 2, breaks after
   3: rubble, dust, no collision, navigation rebaked); a wall ends the dash; the raised Shield
@@ -80,16 +87,20 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   near the head): jaw opens, 2 snaps. **Tail sweep** (every phase, weight 0 = only as a
   punish): a player within `sweep_trigger_distance` of its body for `*_sweep_trigger_time`
   (Calm 3.5 s / Challenge 3 s) -> it coils with flared, glowing fins (telegraph ~0.8 s), then
-  spins its tail round (a glowing arc, half a turn = a flip): everyone within `sweep_reach`
+  spins its tail round (a glowing arc, half a turn = a flip): everyone inside the arc's circle
   is hit once and knocked away. **Vents**: a player lingering at a `BubbleVent` may become its
   prey (`*_vent_punish_chance`): its next charge goes at them. Phase 2: charges x1.3, the
   lure now and then goes dark and glows at a fake spot (its light moves), and **homing orbs**
-  (`AnglerOrb`, `orbs` attack: 2 / 3 slow electric orbs, ~8 s, slow turn; the pulse pops them
-  (`sonar_targets`); the sword (`deflectables` group, `SwordAbility` calls `deflect`) or a
-  Shield block (`PlayerHealth.last_hit_blocked`) sends them home: a returning orb stuns it
-  `orb_stun_time` (Exposed)). Phase 3: summons (`calm_summon_count` 1,
+  (`AnglerOrb`, `orbs` attack: 2 / 3 slow electric orbs, ~8 s, slow turn; mostly at the Echo:
+  `orb_echo_preference` 0.75). Each volley mixes two kinds (`orb_armored_share_phase2` /
+  `_phase3`, a volley of 2+ always holds both): **cyan** = the pulse pops it, but only within
+  `AnglerOrb.pulse_pop_radius` (140 px) of the pulse's origin; **amber armored** (a turning
+  shell) = immune to the pulse. Either kind: the sword (`deflectables` group, `SwordAbility`
+  calls `deflect`) or a Shield block (`PlayerHealth.last_hit_blocked`) sends it home: a
+  returning orb stuns it `orb_stun_time` (Exposed)). Phase 3: summons (`calm_summon_count` 1,
   `challenge_summon_count` 2), a darker arena (`Darkness.set_extra_darkness`, lifted when it
-  dies), orbs less often (`orb_phase3_cooldown_scale`) and **lure mines** (`AnglerMine`,
+  dies), orbs less often (`orb_phase3_cooldown_scale`) but one more per volley
+  (`orb_phase3_extra`, more armored) and **lure mines** (`AnglerMine`,
   `mines` attack: 4 / 5 lobbed round the arena; dim, the pulse reveals them; a fuse with a
   speeding blink and the blast ring just before it; touching one or the fuse = a blast
   (`mine_blast_radius` 110, one hit each); charging over one blows it up on the Angler:
@@ -181,6 +192,11 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   damage only (`PlayerHealth.hit_taken`: not blocked, not invulnerable, never a push); a retry
   rolls the counts back to the level start (Calm) / zero (Challenge), so failed attempts are
   not added up.
+- **Hitbox view** (`HitboxDebugDraw`, F2, editor runs only): every node in the
+  `HitShapes.DEBUG_GROUP` group answers `get_debug_shapes()` (`HitShapes.debug_shape`):
+  hurtboxes blue, attack hitboxes red (bright while they can hit), plus each player's body
+  circle: creatures (circle + contact hitbox), the Angler (hurtbox, bite, charge, sweep), the
+  sword's last swing, orbs, mines (touch + blast ring).
 - **Debug HUD lines** (`Hud`, F1 = `debug_toggle_key`): stage / seed / creature states;
   hidden in normal play, shown when running from the editor (`OS.has_feature("editor")`).
 - **Pause menu** (`PauseMenu`, `pause` action: Esc / Start on any gamepad, only while a level is
@@ -283,6 +299,11 @@ partner revives them. Esc / Start = pause.
 Everything is procedural (`tools/generate_sounds.py`, the `preview` section; no AI tools).
 Sounds are found **by file name**, so a better recording with the same name (or an extra
 numbered variant) replaces one without code changes.
+**New sounds wait for approval**: `python tools/generate_sounds.py preview <name>` writes them to
+`assets/audio/preview/` (same names as the files they would replace; the game never reads
+that folder); the Sound Test lists them first, each beside the current version. Once approved
+they are copied over the files in `sfx/` (pending: the soft orb set `boss_angler_orb_*`, plus
+an `orb_hum` loop not wired in yet).
 - **Buses** (`default_bus_layout.tres`): Master, Music (a "Duck" amplify), SFX and Ambience
   (a "Gate" amplify + the world's underwater low-pass + reverb), UI. Volumes: `Game.volumes`
   (Options sliders, saved).

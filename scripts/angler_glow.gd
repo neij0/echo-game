@@ -77,6 +77,9 @@ extends Node2D
 @export var sweep_width: float = 9.0
 ## How much of the circle trails behind the arc's head (radians).
 @export var sweep_trail: float = 2.4
+## The arc circles this point of the body (0 = head centre .. 1 = tail root);
+## AnglerBoss hits whoever is inside that circle (get_sweep_center).
+@export_range(0.0, 1.0) var sweep_center_at: float = 0.35
 
 @export_group("Bubbles")
 @export var bubble_color: Color = Color(0.6, 0.8, 0.95)
@@ -142,6 +145,11 @@ func step(delta: float) -> void:
 			_bubble_ages.remove_at(i)
 			_bubbles.remove_at(i)
 	queue_redraw()
+
+
+## The centre of the sweep's circle (world), following the body.
+func get_sweep_center() -> Vector2:
+	return body.point_at(sweep_center_at, 0.0)
 
 
 ## The sweep's arc: once round in duration seconds (turn = +1 / -1 direction).
@@ -267,7 +275,7 @@ func _draw_sweep() -> void:
 	if _sweep_age < 0.0:
 		return
 	# Round its middle, following it.
-	_sweep_center = body.point_at(0.35, 0.0)
+	_sweep_center = get_sweep_center()
 	var t: float = clampf(_sweep_age / _sweep_time, 0.0, 1.0)
 	var fade: float = 1.0 - clampf((_sweep_age - _sweep_time) / 0.2, 0.0, 1.0)
 	var head_angle: float = -PI * 0.5 + _sweep_turn * t * TAU

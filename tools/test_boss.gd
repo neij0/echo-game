@@ -70,6 +70,7 @@ func _run() -> void:
 	await _test_placeholder()
 	await _test_hit_count()
 	await _test_playtest_start()
+	await _test_hitboxes()
 	await _test_sweep()
 	await _test_orbs()
 	await _test_mines()
@@ -578,6 +579,62 @@ func _to_phase(target_phase: int) -> void:
 	_freeze(_boss)
 
 
+func _test_hitboxes() -> void:
+	print("== Hurtbox and hitboxes follow the drawn shape ==")
+	await _build_fighting()
+	_freeze(_boss)
+	_boss.move_speed = 0.0
+	await _frames(5)
+	var body: AnglerBody = _boss.visual.body
+	var hurtbox: PackedVector2Array = _boss.get_hurtbox()
+	var heading: Vector2 = body.heading
+	var head_front: Vector2 = body.get_head_center() + heading * (body.head_front - 4.0)
+	var tail_root: Vector2 = body.point_at(1.0, 0.0)
+	_check(Geometry2D.is_point_in_polygon(head_front, hurtbox), "the front of the head is in the hurtbox")
+	_check(Geometry2D.is_point_in_polygon(body.point_at(0.95, 0.0), hurtbox), "the tail root is in the hurtbox")
+	_check(Geometry2D.is_point_in_polygon(body.point_at(0.3, 0.0) + Vector2(0.0, body.flank_depth * 0.5), hurtbox), "so is the 3/4 flank below the back")
+	_check(not Geometry2D.is_point_in_polygon(_boss.global_position + Vector2(0.0, -body.head_half_width * 2.5), hurtbox), "open water above it is not")
+	# The sword: a swing at the tail lands; the old circle (body_radius) missed it.
+	var sword: SwordAbility = _guardian.find_children("*", "SwordAbility", true, false)[0] as SwordAbility
+	var reach: float = sword.quick_range
+	var half_arc: float = sword.get_arc_radians(false) * 0.5
+	var behind_tail: Vector2 = tail_root - heading * (reach - 10.0)
+	_check(_boss.is_in_swing(behind_tail, heading, reach, half_arc), "a swing at the tail lands")
+	_check(behind_tail.distance_to(_boss.global_position) > reach + _boss.body_radius, "(out of reach of the old circle: %.0f px)" % behind_tail.distance_to(_boss.global_position))
+	var in_front: Vector2 = head_front + heading * (reach - 10.0)
+	_check(_boss.is_in_swing(in_front, -heading, reach, half_arc), "a swing at the face lands")
+	_check(not _boss.is_in_swing(in_front, heading, reach, half_arc), "a swing away from it does not")
+	_check(not _boss.is_in_swing(in_front + heading * reach, -heading, reach, half_arc), "nor one from too far away")
+	# Contact (push, charge hits, returning orbs) is measured to the drawn shape.
+	_check(_boss._contact_distance(head_front) < 0.0 and _boss._contact_distance(in_front) > 0.0, "contact distance: inside < 0 < outside")
+	# The bite reaches the drawn mouth with the jaw fully open, the sweep the arc's circle.
+	var mouth: PackedVector2Array = body.get_mouth_polygon(1.0)
+	_check(_boss.get_bite_zone() == mouth, "the bite zone is the drawn mouth, jaw fully open")
+	var jaw_tip: Vector2 = mouth[mouth.size() / 2]
+	for point: Vector2 in mouth:
+		if (point - body.get_head_center()).dot(heading) > (jaw_tip - body.get_head_center()).dot(heading):
+			jaw_tip = point
+	var sweep: PackedVector2Array = _boss.get_sweep_zone()
+	var sweep_center: Vector2 = _boss.visual.glow.get_sweep_center()
+	_check(absf(sweep[0].distance_to(sweep_center) - _boss.visual.sweep_arc_radius) < 0.5, "the sweep zone is the drawn arc's circle (%.0f px)" % _boss.visual.sweep_arc_radius)
+	# A bite: just in front of the open jaw's tip (it follows the head) is safe.
+	var safe_reach: float = (jaw_tip - body.get_head_center()).dot(heading) + _boss.player_hit_radius + 18.0
+	_teleport(_guardian, _entrance())
+	_teleport(_echo, body.get_head_center() + heading * safe_reach)
+	_echo.health._invulnerable_left = 0.0
+	var full: float = _echo.health.value
+	_boss.target_player = _echo
+	_boss.start_attack(_boss.get_attack(&"bite"))
+	for i: int in int(3.0 * PHYSICS_FPS):
+		await _frames(1)
+		_teleport(_echo, body.get_head_center() + heading * safe_reach)
+		if _boss.mode == Boss.Mode.IDLE or _boss.mode == Boss.Mode.RECOVERY:
+			break
+	_check(_echo.health.value == full, "a player just past the open jaw is not bitten")
+	_protect_players()
+	_freeze(_boss)
+
+
 func _test_sweep() -> void:
 	print("== Tail sweep (players stay close) ==")
 	await _build_fighting()
@@ -623,16 +680,52 @@ func _test_orbs() -> void:
 	var orbs: Array[AnglerOrb] = _orbs()
 	_check(orbs.size() == _boss.challenge_orb_count and _boss.orbs_fired == _boss.challenge_orb_count, "it fires %d orbs (Challenge)" % orbs.size())
 	_check(_boss.get_attack(&"orbs").min_phase == 2, "orbs start in phase 2")
-	# The Echo's pulse pops them.
+	var armored_count: int = 0
+	for fired: AnglerOrb in orbs:
+		armored_count += 1 if fired.armored else 0
+	_check(armored_count >= 1 and armored_count < orbs.size(), "a volley mixes cyan and armored orbs (%d armored of %d)" % [armored_count, orbs.size()])
+	# Phase 3: one orb more per volley and more of them armored.
+	_boss.phase = 3
+	var phase3_count: int = _boss.get_orb_count()
+	_boss._plan_volley(phase3_count)
+	var phase3_armored: int = _boss._volley_armored.count(true)
+	_boss.phase = 2
+	_boss._plan_volley(_boss.get_orb_count())
+	var phase2_armored: int = _boss._volley_armored.count(true)
+	_boss._volley_armored.clear()
+	_check(phase3_count == _boss.challenge_orb_count + _boss.orb_phase3_extra and phase3_armored > phase2_armored
+		and phase3_armored < phase3_count, "phase 3: %d orbs, %d armored (phase 2: %d armored)" % [phase3_count, phase3_armored, phase2_armored])
+	# Orbs go for the Echo first.
+	var preference: float = _boss.orb_echo_preference
+	_boss.orb_echo_preference = 1.0
+	var echo_first: bool = _boss._pick_orb_prey() == _echo
+	_boss.orb_echo_preference = 0.0
+	var guardian_otherwise: bool = _boss._pick_orb_prey() == _guardian
+	_boss.orb_echo_preference = preference
+	_check(echo_first and guardian_otherwise and preference > 0.5, "orbs prefer the Echo (%.0f %%)" % (preference * 100.0))
+	# The pulse pops cyan orbs close to the Echo only; armored ones never.
+	for fired: AnglerOrb in orbs:
+		fired.set_physics_process(false)
+	var near_cyan: AnglerOrb = orbs[0]
+	var far_cyan: AnglerOrb = orbs[1]
+	var near_armored: AnglerOrb = orbs[2]
+	near_cyan.armored = false
+	far_cyan.armored = false
+	near_armored.armored = true
+	near_cyan.global_position = _echo.global_position + Vector2(near_cyan.pulse_pop_radius * 0.6, 0.0)
+	far_cyan.global_position = _echo.global_position + Vector2(-near_cyan.pulse_pop_radius * 1.8, 0.0)
+	near_armored.global_position = _echo.global_position + Vector2(0.0, near_cyan.pulse_pop_radius * 0.6)
 	var pulse: PulseAbility = _echo.find_children("*", "PulseAbility", true, false)[0] as PulseAbility
+	_check(far_cyan.global_position.distance_to(_echo.global_position) < pulse.get_radius(), "the far orb is inside the pulse's reach")
 	pulse.cooldown_left = 0.0
 	pulse.emit_pulse()
 	await _frames(int(1.6 * PHYSICS_FPS))
-	var homing: int = 0
-	for orb: AnglerOrb in orbs:
-		if is_instance_valid(orb) and orb.is_homing():
-			homing += 1
-	_check(homing == 0, "the Echo's pulse pops them")
+	_check(not near_cyan.is_homing(), "the pulse pops a cyan orb close to the Echo")
+	_check(far_cyan.is_homing(), "but not one farther than %.0f px" % near_cyan.pulse_pop_radius)
+	_check(near_armored.is_homing(), "an armored orb ignores the pulse")
+	for fired: AnglerOrb in orbs:
+		if is_instance_valid(fired):
+			fired.pop()
 	# The Guardian's sword sends one back: it stuns the Angler.
 	_freeze(_boss)
 	await _frames(int(2.0 * PHYSICS_FPS))
@@ -648,6 +741,8 @@ func _test_orbs() -> void:
 	for other: AnglerOrb in _orbs():
 		if other != orb:
 			other.pop()
+	# Armored: only the Guardian can stop it, and his blade sends it back.
+	orb.armored = true
 	orb.target = _guardian
 	var swung: bool = false
 	for i: int in int(6.0 * PHYSICS_FPS):
@@ -663,7 +758,7 @@ func _test_orbs() -> void:
 		if _boss.orb_stuns > 0:
 			break
 	Input.action_release("p2_action")
-	_check(_boss.orb_stuns == 1, "a sword hit sends it back: it stuns the Angler")
+	_check(_boss.orb_stuns == 1, "a sword hit sends an armored orb back: it stuns the Angler")
 	_check(_boss.mode == Boss.Mode.STUNNED and _boss.is_exposed(), "stunned counts as Exposed")
 	# The Shield sends one back too.
 	await _frames(int((_boss.orb_stun_time + 0.3) * PHYSICS_FPS))

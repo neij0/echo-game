@@ -1195,6 +1195,113 @@ def make_angler_orb_deflect(rng):
     return _norm(_trim_tail(_reverb(ping + zap, 0.9, 0.25, rng)), PEAK_SFX * 0.8)
 
 
+# --- Orbs, second pass: softer, underwater, muffled ------------------------------
+# A warm hum (sine partials only, no buzz) under a slow wobble, small soft
+# crackles (lowpassed clicks) and bubble pops, all through a low lowpass and a
+# wet reverb. Previewed under the same names (assets/audio/preview/); the old
+# makers above stay until these are approved.
+ORB_HUM_PARTIALS = ((1.0, 1.0), (2.0, 0.32), (3.0, 0.1))
+ORB_MUFFLE = 1300.0         # Hz, lowpass over the hum
+ORB_CRACKLE_LOW = 700.0     # Hz, the crackles' band...
+ORB_CRACKLE_HIGH = 2200.0   # ...and its top (no hiss above it)
+
+
+def _orb_hum(freq, t, wobble_hz: float = 6.5, wobble: float = 0.35):
+    """A soft electric hum: two slightly detuned warm tones beating slowly."""
+    freq = np.broadcast_to(np.asarray(freq, dtype=float), t.shape)
+    a = _osc(freq, partials=ORB_HUM_PARTIALS)
+    b = _osc(freq * 1.006, partials=ORB_HUM_PARTIALS)
+    trem = 1.0 - wobble * (0.5 + 0.5 * np.sin(2 * np.pi * wobble_hz * t))
+    return _filter((a + b) * 0.5 * trem, "lowpass", ORB_MUFFLE)
+
+
+def _orb_crackle(rng, gain: float = 1.0):
+    """One small, soft crackle: a few millisecond click, muffled."""
+    seconds = rng.uniform(0.006, 0.014)
+    t = _t(seconds)
+    click = _noise(seconds, rng) * np.exp(-t / (seconds * 0.3))
+    return _filter(click, "bandpass", [ORB_CRACKLE_LOW, ORB_CRACKLE_HIGH]) * gain
+
+
+def _orb_crackles(rng, out, count: int, start: float, end: float, gain: float, wrap: bool = False):
+    for i in range(count):
+        _place(out, _orb_crackle(rng, rng.uniform(0.3, 1.0) * gain), rng.uniform(start, end), wrap=wrap)
+    return out
+
+
+def make_orb_soft_hum(rng):
+    # A loop to sit under a homing orb: hum + sparse crackles, seamless.
+    length = 2.0
+    hum = _loop_tone(150.0, length, ORB_HUM_PARTIALS) + _loop_tone(151.0, length, ORB_HUM_PARTIALS)
+    hum *= _loop_lfo(13, length, 0.35)
+    hum = _circular_band(hum, 0.0, ORB_MUFFLE)
+    out = hum / np.max(np.abs(hum))
+    crackles = _orb_crackles(rng, np.zeros(len(out)), 9, 0.0, length, 0.9, wrap=True)
+    crackles = _circular_band(crackles, ORB_CRACKLE_LOW, ORB_CRACKLE_HIGH)
+    out = out * 0.7 + crackles / (np.max(np.abs(crackles)) + 1e-9) * 0.6
+    return _norm(_reverb(out, 1.0, 0.3, rng, circular=True), PEAK_SOFT)
+
+
+def make_orb_soft_charge(rng):
+    seconds = 1.0
+    t = _t(seconds)
+    k = np.clip(t / seconds, 0, 1)
+    # The lure gathers charge: the hum rises gently and opens up a little.
+    hum = _orb_hum(110.0 + 90.0 * k ** 1.3, t, 5.0 + 5.0 * k, 0.3)
+    hum = hum * (0.6 + 0.4 * k) + _filter(hum, "lowpass", 1400.0) * 0.3 * k
+    out = hum * (0.1 + 0.9 * k ** 1.5)
+    # Crackles come faster as it fills.
+    for i in range(14):
+        at = seconds * rng.uniform(0.2, 1.0) ** 0.6
+        _place(out, _orb_crackle(rng, rng.uniform(0.6, 1.4) * (at / seconds)), at)
+    return _norm(_trim_tail(_reverb(out, 1.0, 0.32, rng)), PEAK_SFX * 0.5)
+
+
+def make_orb_soft_fire(rng):
+    seconds = 0.5
+    t = _t(seconds)
+    # A soft "thoom": a low tone falling away, a puff of water and bubbles.
+    body = _osc(190.0 * np.exp(-t / 0.12) + 80.0, partials=((1.0, 1.0), (2.0, 0.25))) * _env(t, 0.006, 0.12)
+    puff = _filter(_noise(seconds, rng), "lowpass", 700.0) * _env(t, 0.004, 0.06) * 0.5
+    out = body + puff
+    _bubbles(rng, out, 5, 0.02, 0.25, 260.0, 600.0, 0.25)
+    _orb_crackles(rng, out, 4, 0.0, 0.2, 0.8)
+    return _norm(_trim_tail(_reverb(_filter(out, "lowpass", 2000.0), 0.9, 0.3, rng)), PEAK_SFX * 0.6)
+
+
+def make_orb_soft_crackle(rng):
+    seconds = 0.4
+    t = _t(seconds)
+    # A short swell of the hum with a few soft crackles on top.
+    swell = _orb_hum(150.0, t, 7.0, 0.3) * np.sin(np.pi * np.clip(t / seconds, 0, 1)) * 0.3
+    out = swell.copy()
+    _orb_crackles(rng, out, 6, 0.03, 0.33, 1.6)
+    return _norm(_trim_tail(_reverb(out, 0.7, 0.3, rng)), PEAK_SFX * 0.3)
+
+
+def make_orb_soft_pop(rng):
+    seconds = 0.6
+    out = np.zeros(int(seconds * SAMPLE_RATE))
+    # It bursts: a round, low bubble pop and a short fizz of crackles.
+    _place(out, _bubble(rng, 180.0, 320.0, 0.11) * 1.2, 0.0)
+    _bubbles(rng, out, 5, 0.02, 0.25, 300.0, 650.0, 0.3)
+    _orb_crackles(rng, out, 8, 0.0, 0.18, 0.9)
+    t = _t(0.25)
+    _place(out, _orb_hum(150.0 * np.exp(-t / 0.1) + 60.0, t, 9.0, 0.2) * _env(t, 0.002, 0.07) * 0.5, 0.0)
+    return _norm(_trim_tail(_reverb(_filter(out, "lowpass", 1800.0), 0.9, 0.3, rng)), PEAK_SFX * 0.6)
+
+
+def make_orb_soft_deflect(rng):
+    seconds = 0.6
+    t = _t(seconds)
+    # Struck back: a muffled, rounded knock that bends upwards, crackles round it.
+    knock = _osc(240.0 * (1.0 + 0.6 * np.clip(t / 0.2, 0, 1)), partials=((1.0, 1.0), (2.0, 0.3), (3.0, 0.08))) * _env(t, 0.003, 0.12)
+    thud = _filter(_noise(seconds, rng), "lowpass", 500.0) * _env(t, 0.002, 0.03) * 0.6
+    out = knock + thud
+    _orb_crackles(rng, out, 7, 0.0, 0.2, 1.0)
+    return _norm(_trim_tail(_reverb(_filter(out, "lowpass", 2200.0), 0.9, 0.3, rng)), PEAK_SFX * 0.7)
+
+
 def make_angler_mine_launch(rng):
     seconds = 0.7
     out = np.zeros(int(seconds * SAMPLE_RATE))
@@ -1380,11 +1487,13 @@ def _preview_list():
         ("boss_angler_death", make_angler_death, False),
         ("boss_angler_sweep_wind", make_angler_sweep_wind, False),
         ("boss_angler_sweep", make_angler_sweep, False),
-        ("boss_angler_orb_charge", make_angler_orb_charge, False),
-        ("boss_angler_orb_fire", make_angler_orb_fire, False),
-        ("boss_angler_orb_crackle", make_angler_orb_crackle, False),
-        ("boss_angler_orb_pop", make_angler_orb_pop, False),
-        ("boss_angler_orb_deflect", make_angler_orb_deflect, False),
+        # The orbs' second pass (soft, muffled); the game still uses the old files.
+        ("boss_angler_orb_charge", make_orb_soft_charge, False),
+        ("boss_angler_orb_fire", make_orb_soft_fire, False),
+        ("boss_angler_orb_crackle", make_orb_soft_crackle, False),
+        ("boss_angler_orb_pop", make_orb_soft_pop, False),
+        ("boss_angler_orb_deflect", make_orb_soft_deflect, False),
+        ("boss_angler_orb_hum", make_orb_soft_hum, True),
         ("boss_angler_mine_launch", make_angler_mine_launch, False),
         ("boss_angler_mine_tick", make_angler_mine_tick, False),
         ("boss_angler_mine_blast", make_angler_mine_blast, False),

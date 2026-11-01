@@ -5,7 +5,10 @@ extends Node2D
 ## crackling and lighting the floor under it, it reads in the dark.
 ## - Touching a standing player: one hit (PlayerHealth.take_hit: damage,
 ##   knockback, the normal invulnerability), then it bursts.
-## - The Echo's pulse front pops it ("sonar_targets": on_sonar_hit).
+## - The Echo's pulse front pops a cyan orb ("sonar_targets": on_sonar_hit),
+##   only within pulse_pop_radius of where the pulse started (close to her).
+## - An ARMORED orb (amber, a shell round it) ignores the pulse: only the
+##   Guardian can stop it.
 ## - The Guardian's sword ("deflectables": deflect) or his raised Shield (a
 ##   blocked hit) knocks it back: it flies home to the Angler fast and stuns it
 ##   when it arrives (AnglerBoss.on_orb_return). A deflected orb hurts nobody.
@@ -14,6 +17,10 @@ extends Node2D
 enum Phase { HOMING, DEFLECTED, GONE }
 
 @export var hit_radius: float = 20.0
+## A player whose centre comes this close (on top of hit_radius) is hit.
+@export var touch_margin: float = 12.0
+## The pulse pops a cyan orb only this close to the pulse's origin (the Echo).
+@export var pulse_pop_radius: float = 140.0
 @export var deflected_speed: float = 420.0
 @export var deflected_turn_rate: float = 540.0
 @export var fade_time: float = 0.35
@@ -22,6 +29,13 @@ enum Phase { HOMING, DEFLECTED, GONE }
 @export_group("Look")
 @export var color: Color = Color(0.55, 0.95, 1.0)
 @export var deflected_color: Color = Color(1.0, 0.85, 0.4)
+## The armored kind: amber, with a shell of shell_plates round the core.
+@export var armored_color: Color = Color(1.0, 0.62, 0.18)
+@export var shell_radius: float = 12.0
+@export var shell_plates: int = 6
+@export var shell_width: float = 2.2
+## Degrees per second the shell turns.
+@export var shell_spin: float = 90.0
 @export var core_energy: float = 4.0
 @export var core_radius: float = 6.0
 @export var halo_radius: float = 22.0
@@ -46,6 +60,8 @@ var turn_rate: float = 70.0
 var lifetime: float = 8.0
 var damage: float = 1.0
 var knockback: float = 280.0
+## Armored: the pulse cannot pop it.
+var armored: bool = false
 var velocity: Vector2 = Vector2.ZERO
 var _age: float = 0.0
 var _gone_age: float = 0.0
@@ -58,8 +74,9 @@ var _light: PointLight2D
 
 
 func setup(from_boss: AnglerBoss, prey: Player, start_direction: Vector2, orb_speed: float, orb_turn_rate: float,
-		orb_lifetime: float, orb_damage: float, orb_knockback: float) -> void:
+		orb_lifetime: float, orb_damage: float, orb_knockback: float, is_armored: bool = false) -> void:
 	boss = from_boss
+	armored = is_armored
 	target = prey
 	speed = orb_speed
 	turn_rate = orb_turn_rate
@@ -76,9 +93,10 @@ func _ready() -> void:
 	_light = PointLight2D.new()
 	_light.texture = LightTextures.radial(128, 0.2)
 	_light.texture_scale = LightTextures.scale_for_radius(_light.texture, light_radius)
-	_light.color = color
+	_light.color = _base_color()
 	_light.energy = light_energy
 	add_child(_light)
+	add_to_group(HitShapes.DEBUG_GROUP)
 	var layer := CanvasLayer.new()
 	layer.follow_viewport_enabled = true
 	add_child(layer)
@@ -125,7 +143,7 @@ func _home(point: Vector2, rate: float, delta: float) -> void:
 
 func _touch_players() -> void:
 	for player: Player in Players.all(get_tree()):
-		if player.health.is_downed or player.global_position.distance_to(global_position) > hit_radius + 12.0:
+		if player.health.is_downed or player.global_position.distance_to(global_position) > hit_radius + touch_margin:
 			continue
 		var before: float = player.health.value
 		player.health.take_hit(global_position, self, damage, knockback)
@@ -151,10 +169,23 @@ func deflect(_attacker: Player = null) -> bool:
 	return true
 
 
-## The Echo's pulse front pops it.
-func on_sonar_hit(_origin: Vector2) -> void:
-	if phase == Phase.HOMING:
+## The Echo's pulse front pops a cyan orb close to her; never an armored one.
+func on_sonar_hit(origin: Vector2) -> void:
+	if phase == Phase.HOMING and can_pulse_pop(origin):
 		pop()
+
+
+## True if a pulse from origin would pop it.
+func can_pulse_pop(origin: Vector2) -> bool:
+	return not armored and global_position.distance_to(origin) <= pulse_pop_radius
+
+
+## F2 debug view: where it hits a player.
+func get_debug_shapes() -> Array[Dictionary]:
+	if phase != Phase.HOMING:
+		return []
+	return [HitShapes.debug_shape(HitShapes.circle(global_position, hit_radius + touch_margin, 16), HitShapes.Kind.HIT, true,
+		"armored orb" if armored else "orb")]
 
 
 ## Bursts (fades out quickly).
@@ -208,14 +239,14 @@ func _update_look(delta: float) -> void:
 			_crackle_left = crackle_interval
 			_play(crackle_sound)
 	var fade: float = 1.0 - clampf(_gone_age / fade_time, 0.0, 1.0) if phase == Phase.GONE else 1.0
-	_light.color = deflected_color if phase == Phase.DEFLECTED else color
+	_light.color = deflected_color if phase == Phase.DEFLECTED else _base_color()
 	_light.energy = light_energy * fade * (0.8 + 0.2 * sin(_age * 31.0))
 	_glow.global_position = global_position
 	_glow.queue_redraw()
 
 
 func _draw_glow() -> void:
-	var base: Color = deflected_color if phase == Phase.DEFLECTED else color
+	var base: Color = deflected_color if phase == Phase.DEFLECTED else _base_color()
 	var fade: float = 1.0 - clampf(_gone_age / fade_time, 0.0, 1.0) if phase == Phase.GONE else 1.0
 	var burst: float = 1.0 + 1.5 * (1.0 - fade) if phase == Phase.GONE else 1.0
 	var hdr := Color(base.r * core_energy, base.g * core_energy, base.b * core_energy, fade)
@@ -229,6 +260,17 @@ func _draw_glow() -> void:
 		_glow.draw_polyline(arc, Color(hdr, 0.8 * fade), 1.4)
 	_glow.draw_circle(Vector2.ZERO, core_radius * burst, Color(hdr, fade))
 	_glow.draw_circle(Vector2.ZERO, core_radius * 0.5, Color(3.0, 3.0, 3.0, fade))
+	if armored and phase != Phase.GONE:
+		# The shell: plates with gaps, turning round the core.
+		var turn: float = deg_to_rad(shell_spin) * _age
+		var plate: float = TAU / float(maxi(shell_plates, 1))
+		for i: int in shell_plates:
+			var start: float = turn + plate * float(i)
+			_glow.draw_arc(Vector2.ZERO, shell_radius, start, start + plate * 0.7, 4, Color(hdr, 0.9 * fade), shell_width)
+
+
+func _base_color() -> Color:
+	return armored_color if armored else color
 
 
 func _play(sound_name: String) -> void:

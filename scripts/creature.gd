@@ -290,6 +290,7 @@ func _ready() -> void:
 	_hitbox.body_entered.connect(_on_hitbox_body_entered)
 	add_to_group("sonar_targets")
 	add_to_group("creatures")
+	add_to_group(HitShapes.DEBUG_GROUP)
 	health = max_health
 
 
@@ -338,6 +339,29 @@ func set_frenzy(enabled: bool) -> void:
 	is_frenzied = enabled
 	if enabled:
 		_update_frenzy()
+
+
+## Where the sword can hurt it (world polygon): a circle of body_radius.
+## Bigger bodies (the bosses) return their drawn shape.
+func get_hurtbox() -> PackedVector2Array:
+	return HitShapes.circle(global_position, body_radius)
+
+
+## True if a swing from `from` along `direction` (reach, half arc in radians)
+## reaches the hurtbox: within reach + body_radius and the centre inside the arc.
+func is_in_swing(from: Vector2, direction: Vector2, reach: float, half_arc: float) -> bool:
+	var offset: Vector2 = global_position - from
+	return offset.length() <= reach + body_radius and absf(direction.angle_to(offset)) <= half_arc
+
+
+## F2 debug view (HitboxDebugDraw): the hurtbox and the contact hitbox.
+func get_debug_shapes() -> Array[Dictionary]:
+	var contact := _hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
+	var shapes: Array[Dictionary] = [HitShapes.debug_shape(get_hurtbox(), HitShapes.Kind.HURT, true)]
+	if contact and contact.shape is CircleShape2D:
+		shapes.append(HitShapes.debug_shape(HitShapes.circle(contact.global_position, (contact.shape as CircleShape2D).radius),
+			HitShapes.Kind.HIT, _hitbox.monitoring))
+	return shapes
 
 
 ## True while the Guardian can hurt it: inside a revealing light (the Echo's),

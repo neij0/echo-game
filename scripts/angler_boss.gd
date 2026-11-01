@@ -15,25 +15,34 @@ extends Boss
 ##   recovery). A Lure Pulse decoy in its hearing baits the next charge at the
 ##   decoy ("decoy_listeners" group: hear_decoy).
 ## - Bite ("bite" attack, a player close to its head): the jaw opens wide
-##   (telegraph), then bite_snaps snaps, each one lunging a little.
+##   (telegraph), then bite_snaps snaps, each one lunging a little; a snap hits
+##   whoever touches the drawn mouth with the jaw fully open (get_bite_zone).
 ## - Tail sweep ("sweep", every phase, weight 0: only as a punish): a player
 ##   close to its body for sweep_trigger_time (per mode) makes it coil with
 ##   flared fins (telegraph), then it spins and sweeps its tail round: every
-##   player within sweep_reach of its body is hit once and knocked away.
+##   player inside the drawn arc's circle (AnglerGlow.get_sweep_center,
+##   AnglerVisual.sweep_arc_radius) is hit once and knocked away.
 ## - Bubble vents (BubbleVent) refill oxygen; a player standing at one for
 ##   vent_notice_time may become its "vent prey" (vent_punish_chance per stay,
 ##   per mode): its next charge goes at them.
 ## - Phase 2: faster charges; now and then the lure goes dark and glows at a
 ##   fake spot (its light moves there too). Homing orbs ("orbs"): the lure
-##   flares, then fires orb_count (per mode) slow electric AnglerOrbs at the
-##   players; the Echo's pulse pops them, the Guardian's sword or Shield sends
-##   them back: an orb that comes home stuns it (orb_stun_time, Exposed).
+##   flares, then fires orb_count (per mode) slow electric AnglerOrbs, most at
+##   the Echo (orb_echo_preference). Each volley mixes cyan orbs (the Echo's
+##   pulse pops them, only close to her: AnglerOrb.pulse_pop_radius) and amber
+##   ARMORED ones (immune to the pulse; orb_armored_share per phase, more in
+##   phase 3). The Guardian's sword or Shield sends either back: an orb that
+##   comes home stuns it (orb_stun_time, Exposed).
 ## - Phase 3: calls small creatures (summon_scene, per mode), the arena gets
 ##   darker (Darkness.set_extra_darkness), orbs come less often
 ##   (orb_phase3_cooldown_scale), and lure mines ("mines"): mine_count (per
 ##   mode) AnglerMines lobbed round the arena, dim until a pulse shows them,
 ##   each blowing up after its fuse or when touched; charging over one blows it
 ##   up on the Angler (mine_damage_ratio of its health + mine_stun_time).
+## Hurtbox: the drawn shape (AnglerBody.get_hurt_polygon: back, head, open jaw,
+## 3/4 flank; tilted / flipped like the look), for the sword (is_in_swing), the
+## soft push and charge hits (_contact_distance), returning orbs and mines.
+## F2 (HitboxDebugDraw, editor runs) draws it and the attack hitboxes.
 ## Touching it never hurts (Boss: soft push only).
 
 @export_group("Armor")
@@ -66,9 +75,6 @@ extends Boss
 @export var bite_snaps: int = 2
 @export var bite_snap_interval: float = 0.45
 @export var bite_lunge_speed: float = 240.0
-## The jaws reach a circle of bite_radius, bite_forward in front of the head.
-@export var bite_radius: float = 64.0
-@export var bite_forward: float = 40.0
 ## It edges closer while the jaw opens.
 @export var bite_approach_speed: float = 40.0
 
@@ -97,8 +103,6 @@ extends Boss
 @export var sweep_trigger_distance: float = 110.0
 @export var calm_sweep_trigger_time: float = 3.5
 @export var challenge_sweep_trigger_time: float = 3.0
-## The tail reaches this far from its body.
-@export var sweep_reach: float = 130.0
 @export var sweep_shake_strength: float = 6.0
 @export var sweep_shake_time: float = 0.3
 
@@ -126,8 +130,16 @@ extends Boss
 @export var orb_knockback: float = 280.0
 ## A deflected orb that reaches it stuns it this long (counts as Exposed).
 @export var orb_stun_time: float = 1.8
-## Phase 3 fires orbs less often (cooldown x this).
+## Phase 3 fires orbs less often (cooldown x this)...
 @export var orb_phase3_cooldown_scale: float = 1.7
+## ...but each volley has this many more.
+@export var orb_phase3_extra: int = 1
+## Share of ARMORED (amber, pulse-proof) orbs per volley in phase 2 / phase 3.
+## A volley of 2 or more always mixes both kinds.
+@export_range(0.0, 1.0) var orb_armored_share_phase2: float = 0.34
+@export_range(0.0, 1.0) var orb_armored_share_phase3: float = 0.67
+## Chance that an orb goes for the Echo (if she stands), else the Guardian.
+@export_range(0.0, 1.0) var orb_echo_preference: float = 0.75
 
 @export_group("Mines")
 @export var mine_scene: PackedScene
@@ -149,9 +161,10 @@ extends Boss
 @export var mine_damage_ratio: float = 0.05
 @export var mine_stun_time: float = 1.5
 
-@export_group("Body")
-## Half thickness of its body (contact push, charge hits).
-@export var body_half_width: float = 46.0
+@export_group("Hitboxes")
+## A player's body radius: the attack hitboxes (bite, sweep) hit a player
+## whose circle touches them.
+@export var player_hit_radius: float = 14.0
 
 var visual: AnglerVisual
 ## Debug / tests.
@@ -172,7 +185,11 @@ var _vent_rolled: Dictionary = {}
 var _vent_prey: Player
 var _shots_left: int = 0
 var _shot_left: float = 0.0
-var _volley_target: int = 0
+## The kinds of the orbs still to fire this volley (true = armored).
+var _volley_armored: Array[bool] = []
+## The hurtbox of the frame it was built in (Engine process frame).
+var _hurtbox: PackedVector2Array = PackedVector2Array()
+var _hurtbox_frame: int = -1
 var _mine_spots: Array[Vector2] = []
 var bait_point: Vector2 = Vector2.ZERO
 var _bait_left: float = 0.0
@@ -238,11 +255,58 @@ func get_charge_speed() -> float:
 	return speed * (fast_charge_scale if phase >= 2 else 1.0)
 
 
-## The jaws' centre (world).
-func get_bite_point() -> Vector2:
+## The bite's reach (world): the drawn mouth with the jaw fully open.
+func get_bite_zone() -> PackedVector2Array:
 	if visual == null or visual.body == null or visual.body.shape.is_empty():
-		return global_position + _aim * head_reach
-	return visual.body.get_head_center() + visual.heading * bite_forward
+		return HitShapes.circle(global_position + _aim * head_reach, player_hit_radius)
+	return visual.body.get_mouth_polygon(1.0)
+
+
+## The middle of the bite zone (world).
+func get_bite_point() -> Vector2:
+	var zone: PackedVector2Array = get_bite_zone()
+	var total := Vector2.ZERO
+	for point: Vector2 in zone:
+		total += point
+	return total / float(maxi(zone.size(), 1))
+
+
+## The tail sweep's reach (world): the circle its glowing arc draws.
+func get_sweep_zone() -> PackedVector2Array:
+	if visual == null or visual.glow == null or visual.body == null or visual.body.shape.is_empty():
+		return HitShapes.circle(global_position, body_radius)
+	return HitShapes.circle(visual.glow.get_sweep_center(), visual.sweep_arc_radius, 40)
+
+
+## The drawn shape (see the header), rebuilt once per frame.
+func get_hurtbox() -> PackedVector2Array:
+	if visual == null or visual.body == null or visual.body.shape.size() < 2:
+		return super()
+	var frame: int = Engine.get_process_frames()
+	if frame != _hurtbox_frame:
+		_hurtbox_frame = frame
+		_hurtbox = visual.body.get_hurt_polygon()
+	return _hurtbox
+
+
+## The swing's slice overlaps the drawn shape (or he stands inside it).
+func is_in_swing(from: Vector2, direction: Vector2, reach: float, half_arc: float) -> bool:
+	var hurtbox: PackedVector2Array = get_hurtbox()
+	if hurtbox.size() < 3:
+		return super(from, direction, reach, half_arc)
+	return Geometry2D.is_point_in_polygon(from, hurtbox) or HitShapes.overlaps(HitShapes.sector(from, direction, reach, half_arc), hurtbox)
+
+
+## F2 debug view: the hurtbox and each attack's hitbox (bright while it hits).
+func get_debug_shapes() -> Array[Dictionary]:
+	var attack: StringName = current_attack.id if current_attack and (mode == Mode.TELEGRAPH or mode == Mode.ACTIVE) else &""
+	var hitting: bool = mode == Mode.ACTIVE
+	return [
+		HitShapes.debug_shape(get_hurtbox(), HitShapes.Kind.HURT, can_be_hurt(), "hurtbox"),
+		HitShapes.debug_shape(get_bite_zone(), HitShapes.Kind.HIT, hitting and attack == &"bite", "bite"),
+		HitShapes.debug_shape(get_hurtbox(), HitShapes.Kind.HIT, hitting and attack == &"charge", "charge" if attack == &"charge" else ""),
+		HitShapes.debug_shape(get_sweep_zone(), HitShapes.Kind.HIT, hitting and attack == &"sweep", "sweep" if attack == &"sweep" else ""),
+	]
 
 
 # --- Boss hooks ------------------------------------------------------------------
@@ -255,7 +319,8 @@ func _damage_multipliers(is_finisher: bool) -> Dictionary:
 
 
 func _contact_distance(point: Vector2) -> float:
-	return point.distance_to(_closest_on_body(point)) - body_half_width
+	var hurtbox: PackedVector2Array = get_hurtbox()
+	return HitShapes.signed_distance(point, hurtbox) if hurtbox.size() >= 3 else super(point)
 
 
 func _push_direction(point: Vector2) -> Vector2:
@@ -356,8 +421,10 @@ func _on_attack_start(attack: BossAttack) -> void:
 		return
 	if attack.id == &"orbs" or attack.id == &"mines":
 		visual.set_state(AnglerVisual.State.SWIM)
-		_shots_left = (challenge_orb_count if challenge_mode else calm_orb_count) if attack.id == &"orbs" \
+		_shots_left = get_orb_count() if attack.id == &"orbs" \
 			else (challenge_mine_count if challenge_mode else calm_mine_count)
+		if attack.id == &"orbs":
+			_plan_volley(_shots_left)
 		_shot_left = 0.0
 		_mine_spots.clear()
 		velocity = Vector2.ZERO
@@ -541,25 +608,26 @@ func _update_bite(delta: float) -> void:
 	if _snap_check_left >= 0.0:
 		_snap_check_left -= delta
 		if _snap_check_left < 0.0:
-			# The jaw shuts: whoever is inside it is bitten (once per attack).
-			var jaws: Vector2 = get_bite_point()
+			# The jaw shuts: whoever touches the open mouth is bitten (once per attack).
+			var jaws: PackedVector2Array = get_bite_zone()
 			for player: Player in Players.all(get_tree()):
 				if mode != Mode.ACTIVE:
 					return
-				if player.global_position.distance_to(jaws) <= bite_radius:
+				if HitShapes.signed_distance(player.global_position, jaws) <= player_hit_radius:
 					strike(player)
 	if _snaps_done >= bite_snaps and _snap_left <= 0.0 and _snap_check_left < 0.0:
 		end_active()
 
 
-## The tail sweep: whoever is within sweep_reach of its body while it spins is
-## hit once (Boss.strike: one per attack and player, knockback, invulnerability).
+## The tail sweep: whoever touches the arc's circle while it spins is hit once
+## (Boss.strike: one per attack and player, knockback, invulnerability).
 func _update_sweep(delta: float) -> void:
 	velocity = velocity.lerp(Vector2.ZERO, 1.0 - exp(-steering * delta))
+	var zone: PackedVector2Array = get_sweep_zone()
 	for player: Player in Players.all(get_tree()):
 		if mode != Mode.ACTIVE:
 			return
-		if _contact_distance(player.global_position) <= sweep_reach:
+		if HitShapes.signed_distance(player.global_position, zone) <= player_hit_radius:
 			strike(player)
 
 
@@ -582,22 +650,55 @@ func _update_volley(attack: BossAttack, delta: float) -> void:
 func _fire_orb() -> void:
 	if orb_scene == null:
 		return
-	var prey: Array[Player] = _standing_players()
-	if prey.is_empty():
+	var chosen: Player = _pick_orb_prey()
+	if chosen == null:
 		return
-	var chosen: Player = prey[_volley_target % prey.size()]
-	_volley_target += 1
+	var armored: bool = _volley_armored.pop_back() if not _volley_armored.is_empty() else false
 	var orb := orb_scene.instantiate() as AnglerOrb
 	var from: Vector2 = visual.get_orb_position()
 	var spread: float = randf_range(-0.6, 0.6)
 	orb.setup(self, chosen, from.direction_to(chosen.global_position).rotated(spread),
 		challenge_orb_speed if challenge_mode else calm_orb_speed,
 		challenge_orb_turn_rate if challenge_mode else calm_orb_turn_rate, orb_lifetime,
-		challenge_orb_damage if challenge_mode else calm_orb_damage, orb_knockback)
+		challenge_orb_damage if challenge_mode else calm_orb_damage, orb_knockback, armored)
 	orb.position = get_parent().to_local(from)
 	get_parent().add_child(orb)
 	orbs_fired += 1
 	_play("boss_angler_orb_fire")
+
+
+## Orbs per volley: per mode, more in phase 3.
+func get_orb_count() -> int:
+	return (challenge_orb_count if challenge_mode else calm_orb_count) + (orb_phase3_extra if phase >= 3 else 0)
+
+
+func get_orb_armored_share() -> float:
+	return orb_armored_share_phase3 if phase >= 3 else orb_armored_share_phase2
+
+
+## The kinds of one volley, shuffled: a volley of 2 or more holds both.
+func _plan_volley(count: int) -> void:
+	var armored: int = roundi(float(count) * get_orb_armored_share())
+	if count >= 2:
+		armored = clampi(armored, 1, count - 1)
+	_volley_armored.clear()
+	for i: int in count:
+		_volley_armored.append(i < armored)
+	_volley_armored.shuffle()
+
+
+## Mostly the Echo (orb_echo_preference), so the Guardian has to cover her.
+func _pick_orb_prey() -> Player:
+	var echo: Player = null
+	var others: Array[Player] = []
+	for player: Player in _standing_players():
+		if player.skill_owner == SkillDefinition.Owner.ECHO:
+			echo = player
+		else:
+			others.append(player)
+	if echo and (others.is_empty() or randf() < orb_echo_preference):
+		return echo
+	return others.pick_random() if not others.is_empty() else null
 
 
 func _launch_mine() -> void:

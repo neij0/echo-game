@@ -75,6 +75,7 @@ func setup(from_boss: AnglerBoss, from: Vector2, to: Vector2, mine_fuse: float, 
 
 func _ready() -> void:
 	add_to_group("angler_projectiles")
+	add_to_group(HitShapes.DEBUG_GROUP)
 	_light = PointLight2D.new()
 	_light.texture = LightTextures.radial(128, 0.25)
 	_light.texture_scale = LightTextures.scale_for_radius(_light.texture, light_radius)
@@ -174,6 +175,17 @@ func is_revealed() -> bool:
 
 func get_fuse_left() -> float:
 	return _fuse_left if phase == Phase.ARMED else (fuse if phase == Phase.FLYING else 0.0)
+
+
+## F2 debug view: the touch circle and the blast ring (bright once the
+## warning ring shows).
+func get_debug_shapes() -> Array[Dictionary]:
+	if phase != Phase.ARMED:
+		return []
+	return [
+		HitShapes.debug_shape(HitShapes.circle(global_position, touch_radius, 16), HitShapes.Kind.HIT, true, "mine"),
+		HitShapes.debug_shape(HitShapes.circle(global_position, blast_radius, 32), HitShapes.Kind.HIT, _fuse_left <= warning_time),
+	]
 
 
 func _blink() -> float:

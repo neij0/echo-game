@@ -8,9 +8,13 @@ extends Control
 ## button runs Calm -> Tension -> Chase -> Calm. "Ambience" plays the ocean bed
 ## with random bubbles and whale groans. Files are found by name, so a better
 ## recording with the same name replaces a sound without code changes.
+## New sounds waiting for approval (preview_dir, `generate_sounds.py preview`)
+## come first: each one next to the version the game uses now.
 
 @export var sound_dirs: PackedStringArray = PackedStringArray([
 	"res://assets/audio/sfx", "res://assets/audio/music", "res://assets/audio/ambience"])
+## New sounds not in the game yet (same names as the ones they would replace).
+@export var preview_dir: String = "res://assets/audio/preview"
 
 @export_group("Variation")
 ## One-shots: random pitch within +- this share, volume within +- these dB.
@@ -60,6 +64,8 @@ const SECTION_TITLES: Dictionary = {
 	"boss": "Boss (deepest)", "player": "Players", "world": "World",
 }
 const POOL_SIZE: int = 12
+## Preview sounds are kept under this prefix (their names match the current ones).
+const PREVIEW_PREFIX: String = "preview/"
 
 var _streams: Dictionary = {}
 var _pool: Array[AudioStreamPlayer] = []
@@ -96,7 +102,20 @@ func _load_streams() -> void:
 			var stream := load(folder.path_join(file)) as AudioStream
 			if stream:
 				_streams[file.get_basename()] = stream
-	print("Sound Test: %d sounds, %d loops" % [_streams.size(), _streams.keys().filter(_is_loop).size()])
+	if DirAccess.dir_exists_absolute(preview_dir):
+		for file: String in DirAccess.get_files_at(preview_dir):
+			if file.get_extension() != "wav":
+				continue
+			var preview := load(preview_dir.path_join(file)) as AudioStream
+			if preview:
+				_streams[PREVIEW_PREFIX + file.get_basename()] = preview
+	print("Sound Test: %d sounds, %d loops, %d preview" % [_streams.size(), _streams.keys().filter(_is_loop).size(), _preview_names().size()])
+
+
+func _preview_names() -> Array:
+	var names: Array = _streams.keys().filter(func(n: String) -> bool: return n.begins_with(PREVIEW_PREFIX))
+	names.sort()
+	return names
 
 
 func _is_loop(sound_name: String) -> bool:
@@ -135,6 +154,21 @@ func _build_ui() -> void:
 	_vary.button_pressed = true
 	top.add_child(_vary)
 	_add_button(top, "Stop everything", _stop_all)
+
+	# New sounds first: each one next to the version the game uses now.
+	var previews: Array = _preview_names()
+	if not previews.is_empty():
+		_add_title(column, "Preview: new sounds, not in the game yet (NEW / current)")
+		var preview_flow := HFlowContainer.new()
+		column.add_child(preview_flow)
+		for preview_name: String in previews:
+			var current: String = preview_name.trim_prefix(PREVIEW_PREFIX)
+			if _is_loop(preview_name):
+				_add_button(preview_flow, "NEW ⟳ " + current, _toggle_loop.bind(preview_name))
+			else:
+				_add_button(preview_flow, "NEW " + current, play.bind(preview_name))
+			if _streams.has(current):
+				_add_button(preview_flow, "current", play.bind(current) if not _is_loop(current) else _toggle_loop.bind(current))
 
 	_add_title(column, "Adaptive music (all layers in sync, %.1f s crossfades)" % fade_time)
 	var music := HFlowContainer.new()

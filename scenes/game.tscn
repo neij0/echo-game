@@ -23,6 +23,7 @@
 [ext_resource type="Script" uid="uid://c8bgspb7fd55o" path="res://scripts/escape_event.gd" id="22_escape"]
 [ext_resource type="AudioStream" uid="uid://bmb5v14y77ycq" path="res://assets/audio/sfx/world_collapse_rumble.wav" id="23_rumble"]
 [ext_resource type="Script" uid="uid://cjnf85nw1xvx" path="res://scripts/nav_debug_draw.gd" id="24_navdebug"]
+[ext_resource type="Script" path="res://scripts/hitbox_debug_draw.gd" id="24_hitboxdebug"]
 [ext_resource type="Script" uid="uid://chq4ph6hxqiel" path="res://scripts/audio_director.gd" id="25_audio"]
 [ext_resource type="Script" uid="uid://nuqg4pe4wf6k" path="res://scripts/ambience_player.gd" id="26_ambience"]
 [ext_resource type="Script" uid="uid://drd3ulb5uei57" path="res://scripts/music_director.gd" id="27_music"]
@@ -80,6 +81,9 @@ follow_viewport_enabled = true
 
 [node name="NavDebugDraw" type="Node2D" parent="DebugLayer" unique_id=871310969]
 script = ExtResource("24_navdebug")
+
+[node name="HitboxDebugDraw" type="Node2D" parent="DebugLayer"]
+script = ExtResource("24_hitboxdebug")
 
 [node name="SharedCamera" type="Camera2D" parent="." unique_id=1332892929 node_paths=PackedStringArray("stage_manager")]
 position = Vector2(1250, 200)

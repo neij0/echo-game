@@ -134,6 +134,10 @@ signal exposed_kill(creature_position: Vector2)
 ## The finisher pulls the body back this far during its wind-up.
 @export var windup_pull: float = 6.0
 
+@export_group("Debug")
+## F2 view (HitboxDebugDraw): how long a swing's reach stays drawn.
+@export var debug_swing_time: float = 0.25
+
 ## -1 = not attacking, otherwise 0, 1 or 2.
 var hit_index: int = -1
 var _next_index: int = 0
@@ -157,9 +161,13 @@ var _drawn_angle: float = 0.0
 # Gold bursts of Exposed kills: world position and age in seconds.
 var _burst_positions: PackedVector2Array = PackedVector2Array()
 var _burst_ages: PackedFloat32Array = PackedFloat32Array()
+## The last swing's reach (F2 debug view) and how long it stays drawn.
+var _debug_swing: PackedVector2Array = PackedVector2Array()
+var _debug_swing_left: float = 0.0
 
 
 func _ready() -> void:
+	add_to_group(HitShapes.DEBUG_GROUP)
 	_pose_angle = _rest_angle(facing_sign)
 	_pose_to = _pose_angle
 	_drawn_angle = _pose_angle
@@ -169,6 +177,7 @@ func _process(delta: float) -> void:
 	if player == null:
 		return
 	global_position = player.global_position + get_lunge_offset()
+	_debug_swing_left = maxf(_debug_swing_left - delta, 0.0)
 	_recovery_left = maxf(_recovery_left - delta, 0.0)
 	_window_left = maxf(_window_left - delta, 0.0)
 	if _window_left <= 0.0 and hit_index < 0:
@@ -294,14 +303,14 @@ func _apply_damage() -> void:
 	var is_finisher: bool = hit_index == 2
 	var reach: float = finisher_range if is_finisher else quick_range
 	var half_arc: float = get_arc_radians(is_finisher) * 0.5
+	_debug_swing = HitShapes.sector(player.global_position, _swing_dir, reach, half_arc)
+	_debug_swing_left = debug_swing_time
 	for node: Node in get_tree().get_nodes_in_group("creatures"):
 		var creature := node as Creature
 		if creature == null or creature.is_dying():
 			continue
-		var offset: Vector2 = creature.global_position - player.global_position
-		if offset.length() > reach + creature.body_radius:
-			continue
-		if absf(_swing_dir.angle_to(offset)) > half_arc:
+		# The creature's hurtbox (a circle, or a boss's drawn shape) in the swing.
+		if not creature.is_in_swing(player.global_position, _swing_dir, reach, half_arc):
 			continue
 		# Unrevealed creatures cannot be hurt: the Guardian only fights what the Echo
 		# shows, or what is right next to him (his close sense).
@@ -326,6 +335,13 @@ func _apply_damage() -> void:
 		if offset.length() <= reach + deflect_margin and absf(_swing_dir.angle_to(offset)) <= half_arc:
 			if target.call("deflect", player):
 				_play(impact_sound, target.global_position)
+
+
+## F2 debug view: the last swing's reach, shortly after it landed.
+func get_debug_shapes() -> Array[Dictionary]:
+	if _debug_swing_left <= 0.0:
+		return []
+	return [HitShapes.debug_shape(_debug_swing, HitShapes.Kind.HIT, true, "sword")]
 
 
 func _on_exposed_kill(creature_position: Vector2) -> void:

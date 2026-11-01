@@ -315,6 +315,28 @@ func get_silhouette() -> PackedVector2Array:
 	return _union(_outline, _jaw_polygon(0.0))
 
 
+## The hurtbox (world): the silhouette (back + lower jaw) and its 3/4 flank
+## below it, as drawn this frame (tilt, flip, undulation, open jaw).
+func get_hurt_polygon() -> PackedVector2Array:
+	var silhouette: PackedVector2Array = get_silhouette()
+	if silhouette.size() < 3:
+		return silhouette
+	var flank := PackedVector2Array()
+	for point: Vector2 in silhouette:
+		flank.append(point + Vector2(0.0, flank_depth))
+	return _union(silhouette, flank)
+
+
+## The mouth with the jaw open by open_share (world), at the current lunge:
+## the bite's reach.
+func get_mouth_polygon(open_share: float) -> PackedVector2Array:
+	var saved: float = jaw_open
+	jaw_open = open_share
+	var polygon: PackedVector2Array = _jaw_polygon(0.0)
+	jaw_open = saved
+	return polygon
+
+
 ## The armour plates (world polygons), for the Exposed outline.
 func get_plates() -> Array[PackedVector2Array]:
 	var result: Array[PackedVector2Array] = []
