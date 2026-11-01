@@ -20,7 +20,7 @@ extends Creature
 ## - Calm vs Challenge: per-attack timing / damage, challenge_health_scale,
 ##   challenge_speed_scale.
 ## A pulse makes it Exposed (with the Echo's "exposed_time_add" bonus), but a
-## finisher on an Exposed boss never kills it outright: _scale_damage decides.
+## finisher on an Exposed boss never kills it outright: _damage_multipliers decides.
 ## The boss stays in the "creatures" group (the sword, the sonar, the music:
 ## Creature.state is CHASE while it fights) but ignores pulses, noise, alerts
 ## and frenzy. Downed players are never targeted.
@@ -31,6 +31,13 @@ signal attack_started(attack: BossAttack)
 signal stunned
 ## Emitted on every change of its health (the health bar).
 signal health_changed(ratio: float)
+## Emitted on every sword hit, also ignored ones (the damage log, the fight
+## simulation): source, base, multipliers, dealt, hp_before / hp_after, phase,
+## mode, distance, contact (gap to its body), result.
+signal damage_taken(info: Dictionary)
+
+## Prints every damage event (also set per boss: log_damage).
+static var damage_log_enabled: bool = false
 
 enum Mode { DORMANT, INTRO, IDLE, TELEGRAPH, ACTIVE, RECOVERY, TRANSITION, STUNNED, DEAD }
 
@@ -42,7 +49,7 @@ enum Mode { DORMANT, INTRO, IDLE, TELEGRAPH, ACTIVE, RECOVERY, TRANSITION, STUNN
 ## Health shares where a new phase starts (phase 2 at the first, 3 at the next).
 @export var phase_thresholds: PackedFloat32Array = PackedFloat32Array([0.66, 0.33])
 ## Seconds of a phase change (it roars; cannot be hurt).
-@export var transition_time: float = 1.6
+@export var transition_time: float = 2.4
 ## Challenge: more health and a little faster.
 @export var challenge_health_scale: float = 1.25
 @export var challenge_speed_scale: float = 1.1
@@ -53,6 +60,8 @@ enum Mode { DORMANT, INTRO, IDLE, TELEGRAPH, ACTIVE, RECOVERY, TRANSITION, STUNN
 ## Draws the plain creature body (Creature.draw_shape) for a boss without
 ## a visual of its own (the placeholder bosses).
 @export var draws_creature_body: bool = false
+## Prints every damage event with its multipliers (debugging the balance).
+@export var log_damage: bool = false
 
 @export_group("Waking")
 ## Wakes when a standing player is this close and in line of sight.
@@ -98,6 +107,8 @@ var target_player: Player
 ## Debug / tests: hits it landed, soft pushes.
 var strikes_landed: int = 0
 var _cooldowns: Dictionary = {}
+## Physics frame of each attacker's last hit (one damage per swing).
+var _hit_frames: Dictionary = {}
 var _struck: Array[Player] = []
 var _gap_left: float = 0.0
 var _circle_side: float = 1.0
@@ -178,17 +189,57 @@ func repel(direction: Vector2, _speed: float, _stagger_time: float) -> void:
 ## A sword hit. Returns true for a big hit (a finisher while Exposed: the
 ## sword plays its heavy effect), never an instant kill.
 func take_damage(amount: int, attacker: Player, _stagger_time: float, _knockback: float, is_finisher: bool = false) -> bool:
+	var info: Dictionary = {
+		"time": Time.get_ticks_msec() / 1000.0, "source": attacker.display_name if attacker else "?",
+		"base": amount, "finisher": is_finisher, "phase": phase, "mode": get_mode_name(),
+		"hp_before": boss_health, "hp_after": boss_health, "dealt": 0.0, "multipliers": {},
+		"distance": attacker.global_position.distance_to(global_position) if attacker else 0.0,
+		"contact": _contact_distance(attacker.global_position) if attacker else 0.0, "result": "",
+	}
 	if not can_be_hurt():
+		info["result"] = "ignored (%s)" % get_mode_name()
+		_log_damage(info)
 		return false
+	# One damage instance per swing and target: a second call from the same
+	# attacker in the same physics frame is the same swing.
+	var frame: int = Engine.get_physics_frames()
+	if attacker and int(_hit_frames.get(attacker, -1)) == frame:
+		info["result"] = "duplicate (same swing)"
+		_log_damage(info)
+		return false
+	if attacker:
+		_hit_frames[attacker] = frame
 	var was_exposed: bool = is_exposed()
-	var dealt: float = _scale_damage(float(amount), is_finisher)
-	if mode == Mode.RECOVERY:
-		dealt *= recovery_damage_scale
+	var multipliers: Dictionary = _damage_multipliers(is_finisher)
+	if mode == Mode.RECOVERY and recovery_damage_scale != 1.0:
+		multipliers["recovery"] = recovery_damage_scale
+	var dealt: float = float(amount)
+	for key: String in multipliers:
+		dealt *= float(multipliers[key])
 	_flash_left = hit_flash_time
 	_echo.flash(self, body_radius)
 	_apply_damage(dealt)
+	info["multipliers"] = multipliers
+	info["dealt"] = dealt
+	info["hp_after"] = boss_health
+	info["result"] = "phase %d -> %d" % [int(info["phase"]), phase] if phase != int(info["phase"]) else ("dead" if _dying else "hit")
+	_log_damage(info)
 	_on_hit(attacker, dealt, is_finisher)
 	return is_finisher and was_exposed
+
+
+func _log_damage(info: Dictionary) -> void:
+	damage_taken.emit(info)
+	if not (log_damage or damage_log_enabled):
+		return
+	var parts: PackedStringArray = PackedStringArray()
+	for key: String in info["multipliers"]:
+		parts.append("%s x%.2f" % [key, float(info["multipliers"][key])])
+	print("[boss dmg] %s %s base %d%s | %s | %.2f dealt | HP %.2f -> %.2f / %.0f | phase %d %s | %.0f px (body gap %.0f) | %s" % [
+		name, info["source"], int(info["base"]), " finisher" if info["finisher"] else "",
+		", ".join(parts) if not parts.is_empty() else "no multipliers", float(info["dealt"]),
+		float(info["hp_before"]), float(info["hp_after"]), boss_max_health, int(info["phase"]), info["mode"],
+		float(info["distance"]), float(info["contact"]), info["result"]])
 
 
 ## Not while asleep, showing itself, changing phase or dying.
@@ -509,6 +560,9 @@ func _start_transition() -> void:
 	phase += 1
 	mode = Mode.TRANSITION
 	mode_left = transition_time
+	# A new phase starts closed: the next opening has to be earned again.
+	_exposed_left = 0.0
+	_revealed_left = 0.0
 	_on_phase_start(phase)
 	phase_changed.emit(phase)
 
@@ -566,9 +620,10 @@ func _sees_a_player() -> bool:
 
 # --- Hooks for the boss script ------------------------------------------------
 
-## Damage after armour / Exposed (amount = the sword's damage).
-func _scale_damage(amount: float, _is_finisher: bool) -> float:
-	return amount
+## Named factors on a sword hit's damage (armour, Exposed, finisher...): their
+## product is applied; the damage log prints each one.
+func _damage_multipliers(_is_finisher: bool) -> Dictionary:
+	return {}
 
 
 ## How far a player is from the body's edge (negative = inside it).

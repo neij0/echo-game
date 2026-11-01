@@ -88,4 +88,4 @@ shard_count = 2
 creatures = Array[ExtResource("2_spawn")]([SubResource("Spawn_0"), SubResource("Spawn_1")])
 corals = 5
 boss = ExtResource("boss")
-boss_max_health = 40
+boss_max_health = 360

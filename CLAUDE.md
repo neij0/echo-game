@@ -59,11 +59,16 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   phase). `stun(s)` counts as Exposed. A pulse makes it Exposed (+ `exposed_time_add`); a
   finisher never kills it outright. Calm / Challenge: `challenge_health_scale`,
   `challenge_speed_scale`, per-attack values. Ignores pulses, noise, alerts, frenzy;
-  `Creature.state` is CHASE while it fights (boss music). Hooks: `_scale_damage`,
+  `Creature.state` is CHASE while it fights (boss music). Hooks: `_damage_multipliers`,
   `_contact_distance`, `_attack_distance`, `_pick_attack`, `_on_telegraph*`, `_on_attack_*`,
   `_on_recovery*`, `_on_blocked` (Shield), `_on_stunned`, `_on_phase_start`, `_on_death`...
 - **The Angler** (`AnglerBoss`, look = `AnglerVisual` + `AnglerVoice`): armoured
-  (`armored_damage_scale` 0.25; Exposed 2x, Exposed finisher 5x). **Charge** (telegraph: lure
+  (`armored_damage_scale` 0.1; Exposed by a pulse: quick hits x1, finisher x1.5; stunned
+  against a pillar: x1.5 on top). HP 360 (Calm), x1.45 in Challenge. A new phase clears
+  Exposed; transitions last 2.4 s. Damage log: `Boss.damage_log_enabled` / `log_damage`
+  prints every hit (source, base, multipliers, HP before / after, phase, mode, distance) and
+  `damage_taken` carries it; one damage per swing and target (same attacker + same physics
+  frame = ignored). **Charge** (telegraph: lure
   flares, body coils; the aim locks `charge_aim_lock` before the dash): an `ArenaPillar` in the
   way stuns it `pillar_stun_time` (3 s, Exposed) and takes a blow (cracks after 2, breaks after
   3: rubble, dust, no collision, navigation rebaked); a wall ends the dash; the raised Shield
@@ -149,6 +154,10 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   stage (`game.tscn`) → stage summary → next stage, or story screen → World Map.
 - **Skills** (see "Skills" below): after every completed level both players pick at the same
   time (`SkillChoiceScreen`), then the next level starts.
+- **Stage summary counts** (`StageManager`: pulses, hits taken, kills): hits taken = real
+  damage only (`PlayerHealth.hit_taken`: not blocked, not invulnerable, never a push); a retry
+  rolls the counts back to the level start (Calm) / zero (Challenge), so failed attempts are
+  not added up.
 - **Debug HUD lines** (`Hud`, F1 = `debug_toggle_key`): stage / seed / creature states;
   hidden in normal play, shown when running from the editor (`OS.has_feature("editor")`).
 - **Pause menu** (`PauseMenu`, `pause` action: Esc / Start on any gamepad, only while a level is
@@ -511,6 +520,11 @@ The world is tilted to match the characters, still 2D:
     break (navigation), Shield block, Lure baiting, no chained hits (bite), phases per mode
     (transition, fake lure, summons, darkness, death):
     `godot --headless --path . --fixed-fps 60 res://tools/test_boss.tscn`
+  - `sim_boss_fight.tscn`: the Angler fight in the real game played by two bots (pulse on
+    cooldown, Lure baits into pillars, sword in every opening, dodging every telegraph);
+    reports the fight time, time + damage per phase, damage by kind, pillar stuns and the
+    players' hits taken; fails under 90 s (target: Calm 2-4 min, Challenge 3-5):
+    `godot --headless --path . --fixed-fps 60 res://tools/sim_boss_fight.tscn -- both [log]`
   - `angler_preview.tscn`: look preview of the Angler's states (F6; `-- capture <folder>`
     saves screenshots, needs a window)
   - `sound_test.tscn`: listen to every sound and the music crossfades (run it with F6)

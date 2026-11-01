@@ -82,9 +82,15 @@ var stage_index: int = 0
 var level_index: int = 0
 var mode: SaveData.Mode = SaveData.Mode.CALM
 var stage_time: float = 0.0
+## Stage summary counts. Only what counts for the result: a retry rolls them
+## back to the start of the level (Calm) / the stage (Challenge), so failed
+## attempts are not added up. hits_taken = real damage events only
+## (PlayerHealth.hit_taken: not blocked, not invulnerable, never a push).
 var pulses_used: int = 0
 var hits_taken: int = 0
 var creatures_killed: int = 0
+## [pulses_used, hits_taken, creatures_killed] when the current level started.
+var _level_start_counts: Array[int] = [0, 0, 0]
 var shards_collected: int = 0
 var shards_total: int = 0
 ## Paused on a defeat / stage summary screen.
@@ -178,6 +184,7 @@ func _start_level(index: int) -> void:
 		_level_start_pressure[player] = player.pressure.get_ratio()
 		_level_start_health[player] = player.health.value
 	_level_start_loadout = loadout.copy()
+	_level_start_counts = [pulses_used, hits_taken, creatures_killed]
 	if awareness:
 		awareness.reset()
 	if escape_event:
@@ -285,6 +292,7 @@ func _retry() -> void:
 			player.health.set_segments(maxf(start_health, retry_min_health_segments))
 		loadout = _level_start_loadout.copy()
 		_apply_loadout()
+		_restore_counts(_level_start_counts)
 		_start_level(level_index)
 	else:
 		for player: Player in players:
@@ -292,8 +300,16 @@ func _retry() -> void:
 			player.health.refill()
 		loadout = _stage_start_loadout.copy()
 		_apply_loadout()
+		_restore_counts([0, 0, 0])
 		_start_level(0)
 	get_tree().paused = false
+
+
+## Rolls the summary counts back (retries: failed attempts do not count).
+func _restore_counts(counts: Array[int]) -> void:
+	pulses_used = counts[0]
+	hits_taken = counts[1]
+	creatures_killed = counts[2]
 
 
 ## The pause menu's "Restart level". Calm: the current level again, with the
@@ -313,6 +329,7 @@ func restart_level() -> void:
 		player.health.set_segments(float(_level_start_health.get(player, player.health.get_max_value())))
 	loadout = _level_start_loadout.copy()
 	_apply_loadout()
+	_restore_counts(_level_start_counts)
 	_start_level(level_index)
 	get_tree().paused = false
 

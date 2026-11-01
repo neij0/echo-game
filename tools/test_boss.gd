@@ -62,6 +62,7 @@ func _run() -> void:
 	await _test_mending()
 	await _test_hud()
 	await _test_placeholder()
+	await _test_hit_count()
 
 	print("RESULT: %s" % ("ALL BOSS CHECKS PASSED" if _failures == 0 else "%d CHECK(S) FAILED" % _failures))
 	_game.queue_free()
@@ -120,14 +121,25 @@ func _test_armor() -> void:
 	var start: float = _boss.boss_health
 	_boss.take_damage(1, _guardian, 0.0, 0.0, false)
 	var armored: float = start - _boss.boss_health
+	await _frames(1)
 	_check(is_equal_approx(armored, _boss.armored_damage_scale), "unexposed: a sword hit deals only %.2f" % armored)
 	_boss.on_sonar_hit(_echo.global_position)
 	_check(_boss.is_exposed() and is_equal_approx(_boss._exposed_total, _boss.exposed_time), "a pulse makes it Exposed (%.1f s)" % _boss._exposed_total)
+	await _frames(1)
 	var before: float = _boss.boss_health
 	var big: bool = _boss.take_damage(2, _guardian, 0.0, 0.0, true)
 	var dealt: float = before - _boss.boss_health
 	_check(is_equal_approx(dealt, 2.0 * _boss.exposed_finisher_scale) and big, "the Exposed finisher deals %.0f (big hit)" % dealt)
 	_check(not _boss.is_dying(), "and does not kill it outright")
+	await _frames(1)
+	_boss.stun(2.0)
+	before = _boss.boss_health
+	_boss.take_damage(2, _guardian, 0.0, 0.0, true)
+	var stunned_hit: float = before - _boss.boss_health
+	_check(is_equal_approx(stunned_hit, 2.0 * _boss.exposed_finisher_scale * _boss.stunned_damage_scale), "stunned: the finisher deals %.1f (the big opening)" % stunned_hit)
+	_boss.take_damage(2, _guardian, 0.0, 0.0, true)
+	_check(_boss.boss_health == before - stunned_hit, "a second hit from the same swing (same frame) is ignored")
+	await _frames(int(2.2 * PHYSICS_FPS))
 	_boss._exposed_left = 0.0
 	_give(_echo, "longer_exposure", 1)
 	_boss.on_sonar_hit(_echo.global_position)
@@ -263,10 +275,11 @@ func _test_phases(mode: SaveData.Mode) -> void:
 	_check(is_equal_approx(_boss.boss_max_health, expected_health), "health %.0f" % _boss.boss_max_health)
 	var calm_speed: float = _boss.get_charge_speed()
 	_boss.expose(5.0)
-	_boss.take_damage(100, _guardian, 0.0, 0.0, true)
+	_boss.take_damage(1000, _guardian, 0.0, 0.0, true)
 	_check(_boss.phase == 2 and _boss.mode == Boss.Mode.TRANSITION, "66 %: phase 2 starts with a transition")
 	_check(is_equal_approx(_boss.get_health_ratio(), _boss.phase_thresholds[0]), "one hit never skips past the threshold")
 	var during: float = _boss.boss_health
+	await _frames(1)
 	_boss.take_damage(2, _guardian, 0.0, 0.0, true)
 	_check(_boss.boss_health == during, "it cannot be hurt during the transition")
 	await _frames(int((_boss.transition_time + 0.2) * PHYSICS_FPS))
@@ -280,7 +293,7 @@ func _test_phases(mode: SaveData.Mode) -> void:
 			break
 	_check(faked, "phase 2: the lure fakes its position (its light moves)")
 	_boss.expose(5.0)
-	_boss.take_damage(100, _guardian, 0.0, 0.0, true)
+	_boss.take_damage(1000, _guardian, 0.0, 0.0, true)
 	_check(_boss.phase == 3, "33 %: phase 3")
 	var wanted: int = _boss.challenge_summon_count if challenge else _boss.calm_summon_count
 	_check(_boss.summoned.size() == wanted, "it calls %d small creature(s)" % _boss.summoned.size())
@@ -293,7 +306,8 @@ func _test_phases(mode: SaveData.Mode) -> void:
 	for i: int in 10:
 		if _boss.is_dying():
 			break
-		_boss.take_damage(100, _guardian, 0.0, 0.0, true)
+		await _frames(1)
+		_boss.take_damage(1000, _guardian, 0.0, 0.0, true)
 	_check(killed[0] and _boss.mode == Boss.Mode.DEAD, "it dies at 0 health")
 	_check(darkness.extra_darkness == 0.0, "the darkness lifts when it dies")
 	for creature: Creature in _boss.summoned:
@@ -450,8 +464,53 @@ func _test_placeholder() -> void:
 	_check(boss.charges_blocked == 1 and _guardian.health.value == guardian_full, "the Shield blocks the lunge")
 	_give(_guardian, "", 0)
 	boss.expose(5.0)
-	boss.take_damage(100, _guardian, 0.0, 0.0, true)
+	boss.take_damage(1000, _guardian, 0.0, 0.0, true)
 	_check(boss.phase == 2 and boss.mode == Boss.Mode.TRANSITION, "66 %: phase 2 with a transition")
+	_protect_players()
+
+
+func _test_hit_count() -> void:
+	print("== Hits taken: real damage only, retries roll back ==")
+	_stage.mode = SaveData.Mode.CALM
+	await _build_fighting()
+	_freeze(_boss)
+	_boss.move_speed = 0.0
+	var start: int = _stage.hits_taken
+	# Soft pushes are no hits.
+	_teleport(_guardian, _entrance())
+	_teleport(_echo, _boss.global_position)
+	_echo.health._invulnerable_left = 0.0
+	await _frames(60)
+	_check(_stage.hits_taken == start, "a soft push is not counted")
+	# A hit while invulnerable is not counted, a real one is (once).
+	_echo.health._invulnerable_left = 5.0
+	_echo.health.take_hit(_boss.global_position, _boss)
+	_check(_stage.hits_taken == start, "a hit during invulnerability is not counted")
+	_echo.health._invulnerable_left = 0.0
+	_echo.health.take_hit(_boss.global_position, _boss)
+	_echo.health.take_hit(_boss.global_position, _boss)
+	_check(_stage.hits_taken == start + 1, "a real hit counts once (the next is inside its invulnerability)")
+	# A blocked hit is not counted.
+	_give(_guardian, "shield", 1)
+	var shield := _guardian.skills.active as ShieldSkill
+	_teleport(_guardian, _boss.global_position + Vector2(0.0, -200.0))
+	Input.action_press("p2_skill")
+	await _frames(3)
+	shield.shield_direction = _guardian.global_position.direction_to(_boss.global_position)
+	_guardian.health._invulnerable_left = 0.0
+	_guardian.health.take_hit(_boss.global_position, _boss)
+	Input.action_release("p2_skill")
+	_check(_stage.hits_taken == start + 1 and shield.blocks >= 1, "a blocked hit is not counted")
+	_give(_guardian, "", 0)
+	# A Calm retry rolls the count back to the level start.
+	_stage._retry()
+	await _frames(5)
+	_check(_stage.hits_taken == _stage._level_start_counts[1] and _stage.hits_taken <= start, "a Calm retry does not add up the failed attempt (%d)" % _stage.hits_taken)
+	_stage.mode = SaveData.Mode.CHALLENGE
+	_stage.hits_taken = 9
+	_stage._retry()
+	await _frames(5)
+	_check(_stage.hits_taken == 0, "a Challenge retry (stage from level 1) starts the count again")
 	_protect_players()
 
 

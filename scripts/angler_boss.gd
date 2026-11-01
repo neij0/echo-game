@@ -4,8 +4,9 @@ extends Boss
 ## AnglerVisual (+ AnglerVoice) made here; the fight:
 ## - Armoured: the sword barely hurts it (armored_damage_scale) unless it is
 ##   Exposed (an Echo pulse, Longer Exposure applies; a stun). Exposed hits
-##   deal exposed_damage_scale, the finisher exposed_finisher_scale: big, but
-##   never an instant kill.
+##   deal exposed_damage_scale, the finisher exposed_finisher_scale, and a
+##   stun against a pillar adds stunned_damage_scale (the big opening); never
+##   an instant kill. A new phase clears Exposed (Boss).
 ## - Charge ("charge" attack): it lines up on its target (the lure flares, the
 ##   body coils), the aim locks charge_aim_lock seconds before the end of the
 ##   telegraph, then a straight dash. Running into an ArenaPillar stuns it
@@ -22,9 +23,13 @@ extends Boss
 ## Touching it never hurts (Boss: soft push only).
 
 @export_group("Armor")
-@export var armored_damage_scale: float = 0.25
-@export var exposed_damage_scale: float = 2.0
-@export var exposed_finisher_scale: float = 5.0
+## Sword damage while armoured (not Exposed).
+@export var armored_damage_scale: float = 0.1
+## Exposed by a pulse: quick hits at their normal damage, the finisher x1.5.
+@export var exposed_damage_scale: float = 1.0
+@export var exposed_finisher_scale: float = 1.5
+## Stunned against a pillar (the real opening): on top of Exposed.
+@export var stunned_damage_scale: float = 1.5
 
 @export_group("Charge")
 @export var calm_charge_speed: float = 520.0
@@ -155,10 +160,13 @@ func get_bite_point() -> Vector2:
 
 # --- Boss hooks ------------------------------------------------------------------
 
-func _scale_damage(amount: float, is_finisher: bool) -> float:
-	if is_exposed():
-		return amount * (exposed_finisher_scale if is_finisher else exposed_damage_scale)
-	return amount * armored_damage_scale
+func _damage_multipliers(is_finisher: bool) -> Dictionary:
+	if not is_exposed():
+		return {"armor": armored_damage_scale}
+	var multipliers: Dictionary = {"exposed": exposed_finisher_scale if is_finisher else exposed_damage_scale}
+	if mode == Mode.STUNNED:
+		multipliers["stunned"] = stunned_damage_scale
+	return multipliers
 
 
 func _contact_distance(point: Vector2) -> float:
