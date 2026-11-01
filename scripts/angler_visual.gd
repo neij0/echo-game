@@ -156,6 +156,8 @@ var _face: Vector2 = Vector2.ZERO
 ## heading with the stunned nose dip (what the body and the lure use).
 var _shown: Vector2 = Vector2.RIGHT
 var _flip_left: float = 0.0
+var _fake: float = 0.0
+var _fake_offset: Vector2 = Vector2.ZERO
 var _telegraph: float = 0.0
 var _charge: float = 0.0
 var _stun: float = 0.0
@@ -273,6 +275,13 @@ func reveal() -> void:
 	_flash = 1.0
 	glow.add_ring(lure.get_orb_position())
 	revealed.emit()
+
+
+## Phase 2 trick: the orb goes dark and a lure glows at orb + offset instead
+## (its light moves there too). strength 0 = off, 1 = fully faked.
+func set_fake_lure(offset: Vector2, strength: float) -> void:
+	_fake_offset = offset
+	_fake = clampf(strength, 0.0, 1.0)
 
 
 func is_death_done() -> bool:
@@ -489,9 +498,12 @@ func _update_lure_glow(_delta: float) -> void:
 		var dying_flicker: float = 1.0 if _death_age < lure_hold_until else (0.5 + 0.5 * sin(_death_age * 23.0)) * 0.6 + 0.4
 		energy *= fade * dying_flicker
 		light *= fade * dying_flicker
+	lure.light_offset = _fake_offset * _fake
 	lure.set_glow(color, light)
 	glow.orb_color = color
 	glow.orb_energy = energy
+	glow.fake_offset = _fake_offset
+	glow.fake = _fake
 
 
 func _update_glow(delta: float) -> void:

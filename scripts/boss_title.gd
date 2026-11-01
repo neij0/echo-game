@@ -37,9 +37,13 @@ func _ready() -> void:
 
 ## name_key / subtitle_key: UiText keys.
 func show_title(name_key: String, subtitle_key: String) -> void:
-	Game.apply_direction(_box)
-	_name.text = Game.text(name_key)
-	_subtitle.text = Game.text(subtitle_key)
+	# Through the node, not the autoload name: the boss scene is also loaded by
+	# the -s tools (check_levels), which run without autoloads.
+	var game: Node = get_node_or_null("/root/Game")
+	if game:
+		game.call("apply_direction", _box)
+	_name.text = String(game.call("text", name_key)) if game else name_key
+	_subtitle.text = String(game.call("text", subtitle_key)) if game else subtitle_key
 	_age = 0.0
 
 

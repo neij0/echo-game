@@ -14,7 +14,8 @@ extends Node2D
 ## navigation), harmless life on open floor (WorldConfig.ambient_life, with
 ## the seed), a muted colour accent per room (AreaAccent), the Echo Shards on
 ## the planned spots, Sentinels next to some of them, the LockdownRoom in the lockdown cell, a ShardDoor on the boss
-## arena's doorway (boss levels), and a navigation mesh baked from every rock,
+## arena's doorway (boss levels; its ArenaPillars rebake the mesh when they
+## break), and a navigation mesh baked from every rock,
 ## so creatures can path through doorways and around corners. When a door or a
 ## lockdown barrier changes, the mesh is rebaked one frame later, while the
 ## camera shake started by that event hides the short hitch. Large creatures
@@ -779,6 +780,18 @@ func _add_navigation(layout: Layout) -> void:
 	# Before it enters the tree, so it never sits on the default map.
 	_navigation_large.set_navigation_map(_large_map)
 	_level.add_child(_navigation_large)
+	# A boss arena's pillar that breaks is no obstacle any more.
+	for node: Node in get_tree().get_nodes_in_group("arena_pillars"):
+		var pillar := node as ArenaPillar
+		if pillar and _level.is_ancestor_of(pillar):
+			pillar.broken.connect(_on_pillar_broken.bind(pillar.get_polygon_in(self)))
+
+
+func _on_pillar_broken(polygon: PackedVector2Array) -> void:
+	for i: int in range(_nav_obstacles.size() - 1, -1, -1):
+		if _nav_obstacles[i].size() == polygon.size() and _nav_obstacles[i][0].distance_to(polygon[0]) < 1.0:
+			_nav_obstacles.remove_at(i)
+	_rebake_navigation_soon()
 
 
 ## Rock that can open or close: the closed arena door, closed lockdown barriers.

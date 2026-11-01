@@ -1,0 +1,74 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/angler_boss.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/creature_echo.gd" id="2_echo"]
+[ext_resource type="Script" path="res://scripts/boss_attack.gd" id="3_attack"]
+[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="4_summon"]
+
+[sub_resource type="Resource" id="Attack_charge"]
+script = ExtResource("3_attack")
+id = &"charge"
+weight = 2.0
+min_range = 160.0
+max_range = 1400.0
+calm_telegraph = 1.1
+challenge_telegraph = 0.9
+active_time = 1.6
+calm_recovery = 1.6
+challenge_recovery = 1.2
+cooldown = 2.5
+calm_damage = 1.0
+challenge_damage = 1.5
+knockback_speed = 380.0
+
+[sub_resource type="Resource" id="Attack_bite"]
+script = ExtResource("3_attack")
+id = &"bite"
+weight = 3.0
+max_range = 190.0
+calm_telegraph = 1.0
+challenge_telegraph = 0.8
+active_time = 1.2
+calm_recovery = 1.4
+challenge_recovery = 1.0
+cooldown = 3.5
+calm_damage = 1.0
+challenge_damage = 1.5
+knockback_speed = 340.0
+
+[sub_resource type="CircleShape2D" id="Shape_body"]
+radius = 50.0
+
+[sub_resource type="CircleShape2D" id="Shape_hitbox"]
+radius = 60.0
+
+[node name="Angler" type="CharacterBody2D"]
+collision_layer = 4
+collision_mask = 1
+motion_mode = 1
+script = ExtResource("1_script")
+summon_scene = ExtResource("4_summon")
+name_key = "boss_angler_name"
+subtitle_key = "boss_angler_subtitle"
+attacks = Array[ExtResource("3_attack")]([SubResource("Attack_charge"), SubResource("Attack_bite")])
+max_health = 40
+body_radius = 80.0
+body_color = Color(0.25, 1, 0.85, 1)
+eye_color = Color(0.75, 0.9, 1, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("Shape_body")
+
+[node name="Hitbox" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 2
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox"]
+shape = SubResource("Shape_hitbox")
+
+[node name="EchoLayer" type="CanvasLayer" parent="."]
+follow_viewport_enabled = true
+
+[node name="Echo" type="Node2D" parent="EchoLayer"]
+script = ExtResource("2_echo")
+color = Color(0.25, 1, 0.85, 1)

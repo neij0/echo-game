@@ -43,6 +43,8 @@ var _light: PointLight2D
 var _batch := ShapeBatch.new()
 ## Set by AnglerVisual.
 var stalk_visible: bool = true
+## The light sits this far from the orb (the fake lure of phase 2 moves it).
+var light_offset: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -90,7 +92,7 @@ func update_pose(base: Vector2, forward: Vector2, droop: float, delta: float) ->
 		var offset: Vector2 = points[i] - points[i - 1]
 		if offset.length() > rest:
 			points[i] = points[i - 1] + offset.normalized() * rest
-	_light.position = to_local(get_orb_position())
+	_light.position = to_local(get_orb_position() + light_offset)
 	queue_redraw()
 
 

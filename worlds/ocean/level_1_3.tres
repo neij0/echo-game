@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://cm73u60v08s6t" path="res://scripts/level_definition.gd" id="1_level"]
 [ext_resource type="Script" uid="uid://bicpm113ja1v1" path="res://scripts/creature_spawn.gd" id="2_spawn"]
 [ext_resource type="Script" uid="uid://dw55y71dqgmgj" path="res://scripts/room_placement.gd" id="3_room"]
-[ext_resource type="PackedScene" path="res://scenes/boss_placeholder.tscn" id="boss"]
+[ext_resource type="PackedScene" path="res://scenes/bosses/angler.tscn" id="boss"]
 [ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_0"]
 [ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_1"]
 [ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_clam.tscn" id="lm_clam"]

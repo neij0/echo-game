@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/level_chunk.gd" id="1_chunk"]
 [ext_resource type="Script" path="res://scripts/rock_wall.gd" id="2_wall"]
+[ext_resource type="Script" path="res://scripts/arena_pillar.gd" id="3_pillar"]
 
 [node name="RoomBossArena" type="Node2D"]
 script = ExtResource("1_chunk")
@@ -18,12 +19,20 @@ script = ExtResource("2_wall")
 polygon = PackedVector2Array(620, 0, 612, 90, 618, 244, 615, 265, 609, 280, 595, 291, 515, 326, 478, 351, 439, 372, 353, 442, 286, 530, 238, 605, 228, 625, 202, 709, 178, 817, 175, 861, 179, 928, 196, 1037, 224, 1121, 289, 1237, 343, 1308, 359, 1323, 428, 1378, 520, 1440, 603, 1471, 733, 1502, 821, 1504, 931, 1489, 1017, 1467, 1134, 1404, 1190, 1368, 1224, 1340, 1281, 1273, 1347, 1184, 1382, 1102, 1418, 974, 1424, 908, 1425, 886, 1414, 776, 1397, 688, 1389, 667, 1349, 589, 1292, 493, 1230, 430, 1126, 347, 1067, 317, 1005, 295, 988, 285, 983, 268, 987, 136, 980, 0, 1600, 0, 1600, 1600, 0, 1600, 0, 0)
 
 [node name="Rock2" type="StaticBody2D" parent="."]
-script = ExtResource("2_wall")
+script = ExtResource("3_pillar")
 polygon = PackedVector2Array(507, 947, 490, 947, 472, 955, 456, 967, 446, 982, 449, 1017, 455, 1032, 467, 1043, 483, 1047, 518, 1045, 534, 1040, 547, 1027, 554, 1013, 553, 997, 546, 980, 534, 967)
 
 [node name="Rock3" type="StaticBody2D" parent="."]
-script = ExtResource("2_wall")
+script = ExtResource("3_pillar")
 polygon = PackedVector2Array(1097, 951, 1078, 952, 1061, 959, 1051, 974, 1048, 994, 1052, 1013, 1061, 1030, 1074, 1042, 1088, 1047, 1123, 1044, 1139, 1038, 1151, 1024, 1158, 1007, 1154, 987, 1144, 971, 1131, 960)
+
+[node name="Rock4" type="StaticBody2D" parent="."]
+script = ExtResource("3_pillar")
+polygon = PackedVector2Array(807, 590, 790, 590, 772, 598, 756, 610, 746, 625, 749, 660, 755, 675, 767, 686, 783, 690, 818, 688, 834, 683, 847, 670, 854, 656, 853, 640, 846, 623, 834, 610)
+
+[node name="Rock5" type="StaticBody2D" parent="."]
+script = ExtResource("3_pillar")
+polygon = PackedVector2Array(807, 1240, 790, 1240, 772, 1248, 756, 1260, 746, 1275, 749, 1310, 755, 1325, 767, 1336, 783, 1340, 818, 1338, 834, 1333, 847, 1320, 854, 1306, 853, 1290, 846, 1273, 834, 1260)
 
 [node name="Spawns" type="Node2D" parent="."]
 

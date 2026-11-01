@@ -118,7 +118,9 @@ func make_invulnerable(seconds: float) -> void:
 
 ## A creature touch. Nodes in the "hit_blockers" group (the Shield) can stop it:
 ## blocks_hit(target: Player, from_position: Vector2, source: Node2D) -> bool.
-func take_hit(from_position: Vector2, source: Node2D = null) -> void:
+## damage / knockback < 0 = this mode's hit damage / knockback_speed (a boss
+## attack passes its own).
+func take_hit(from_position: Vector2, source: Node2D = null, damage: float = -1.0, knockback: float = -1.0) -> void:
 	if is_downed or is_invulnerable():
 		return
 	if player and _is_blocked(from_position, source):
@@ -126,14 +128,14 @@ func take_hit(from_position: Vector2, source: Node2D = null) -> void:
 		return
 	hit_taken.emit()
 	_since_damage = 0.0
-	_set_value(value - get_hit_damage())
+	_set_value(value - (damage if damage >= 0.0 else get_hit_damage()))
 	if value <= EPSILON:
 		_set_value(0.0)
 		down(Cause.CREATURE)
 		return
 	_invulnerable_left = invulnerable_time
 	if player:
-		player.knock_back(from_position.direction_to(player.global_position) * knockback_speed)
+		player.knock_back(from_position.direction_to(player.global_position) * (knockback if knockback >= 0.0 else knockback_speed))
 	hurt.emit()
 
 

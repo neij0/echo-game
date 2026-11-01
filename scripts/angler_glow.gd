@@ -86,6 +86,9 @@ var teeth_flash: float = 0.0
 var stun: float = 0.0
 ## Share of the whole glow kept (death, intro).
 var body_glow: float = 1.0
+## Phase 2 fake lure: the real orb dims and one glows at orb + fake_offset.
+var fake: float = 0.0
+var fake_offset: Vector2 = Vector2.ZERO
 var _time: float = 0.0
 var _trail: Array[PackedVector2Array] = []
 var _trail_ages: PackedFloat32Array = PackedFloat32Array()
@@ -161,10 +164,17 @@ func _draw_orb() -> void:
 		return
 	var center: Vector2 = lure.get_orb_position()
 	var strength: float = clampf(orb_energy, 0.0, 6.0)
+	# A faked lure: the real orb is only a faint ember, the fake one glows.
+	_draw_orb_at(center, strength * (1.0 - 0.92 * fake), 1.0 - 0.8 * fake)
+	if fake > 0.01:
+		_draw_orb_at(center + fake_offset, strength * fake, fake)
+
+
+func _draw_orb_at(center: Vector2, strength: float, alpha: float) -> void:
 	_soft_disc(center, outer_halo_radius, _hdr(orb_color, 1.0, 1.0), outer_halo_alpha * minf(strength, 1.5))
 	_soft_disc(center, halo_radius, _hdr(orb_color, 1.2, 1.0), halo_alpha * minf(strength, 1.5))
-	draw_circle(center, orb_radius, _hdr(orb_color, 1.5 + strength * 1.2, 1.0))
-	draw_circle(center, orb_radius * 0.45, _hdr(Color.WHITE, 1.0 + strength, 1.0))
+	draw_circle(center, orb_radius, _hdr(orb_color, 1.5 + strength * 1.2, alpha))
+	draw_circle(center, orb_radius * 0.45, _hdr(Color.WHITE, 1.0 + strength, alpha))
 
 
 ## A soft round glow: stacked discs, so the alpha falls off towards the edge.

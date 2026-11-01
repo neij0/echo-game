@@ -36,8 +36,37 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   The pressure meter carries over between the levels of a stage with a partial refill.
 - **Boss level** (last level of a stage): its exit room is a boss arena, sealed by a
   `ShardDoor` (rock with one socket per shard) until every shard is collected; beating the
-  boss completes the stage. The boss is a placeholder for now (`scenes/boss_placeholder.tscn`: a
-  bigger creature with much more health; real bosses come later).
+  boss completes the stage. Stage 1: **The Angler** (`scenes/bosses/angler.tscn`, see
+  "Bosses"); stages 2-3 still use the placeholder (`scenes/boss_placeholder.tscn`: a bigger
+  creature with much more health, also used by `test_stuck`).
+- **Bosses** (`Boss` extends `Creature`, reusable): DORMANT until a standing player is within
+  `wake_radius` in sight (the arena's pillars do not hide, the closed door does) -> INTRO
+  (cannot be hurt) -> the fight: name card (`BossTitle`) + health bar at the top
+  (`BossHealthBar`, AR/EN, a tick per phase). Attacks are `BossAttack` resources (id, phase,
+  weight, range, telegraph / recovery / damage per mode, active time, cooldown, knockback):
+  TELEGRAPH -> ACTIVE -> RECOVERY (`recovery_damage_scale`, the opening). **No contact
+  damage**: touching it only pushes the player aside (`soft_push_*`); `strike(player)` hits
+  once per attack and player with a short knockback (`PlayerHealth.take_hit(from, source,
+  damage, knockback)`) + the normal invulnerability, so hits never chain. Phases at
+  `phase_thresholds` (66 % / 33 %) with a TRANSITION (cannot be hurt; one hit never skips a
+  phase). `stun(s)` counts as Exposed. A pulse makes it Exposed (+ `exposed_time_add`); a
+  finisher never kills it outright. Calm / Challenge: `challenge_health_scale`,
+  `challenge_speed_scale`, per-attack values. Ignores pulses, noise, alerts, frenzy;
+  `Creature.state` is CHASE while it fights (boss music). Hooks: `_scale_damage`,
+  `_contact_distance`, `_attack_distance`, `_pick_attack`, `_on_telegraph*`, `_on_attack_*`,
+  `_on_recovery*`, `_on_blocked` (Shield), `_on_stunned`, `_on_phase_start`, `_on_death`...
+- **The Angler** (`AnglerBoss`, look = `AnglerVisual` + `AnglerVoice`): armoured
+  (`armored_damage_scale` 0.25; Exposed 2x, Exposed finisher 5x). **Charge** (telegraph: lure
+  flares, body coils; the aim locks `charge_aim_lock` before the dash): an `ArenaPillar` in the
+  way stuns it `pillar_stun_time` (3 s, Exposed) and takes a blow (cracks after 2, breaks after
+  3: rubble, dust, no collision, navigation rebaked); a wall ends the dash; the raised Shield
+  blocks it (recoil + longer recovery); a Lure Pulse decoy within its hearing
+  (`decoy_listeners` group, `hear_decoy`) baits the next charge at the decoy. **Bite** (player
+  near the head): jaw opens, 2 snaps. Phase 2: charges x1.3, the lure now and then goes dark
+  and glows at a fake spot (its light moves). Phase 3: summons (`calm_summon_count` 1,
+  `challenge_summon_count` 2) and a darker arena (`Darkness.set_extra_darkness`, lifted when
+  it dies). The visual is always a side profile (flips left/right, tilts at most 30°).
+  The boss arena room has 4 pillars (diamond round the Boss marker).
 - **Every attempt** (retries included) reshuffles creature, coral, station and shard spawn
   points with a new seed, so a retry never plays exactly the same.
 - **Room grid rules** (`LevelBuilder`, `RoomGrid`): every room is a square of
@@ -468,6 +497,13 @@ The world is tilted to match the characters, still 2D:
   - `test_audio.tscn`: buses, volume settings, underwater filter, the sound catalog, hit-stop
     + ducking, music states and stingers, every creature type's voice, player / world /
     ambience sounds: `godot --headless --path . --fixed-fps 60 res://tools/test_audio.tscn`
+  - `test_boss.tscn`: the boss framework and the Angler, run as a scene: waking + intro +
+    health bar, no contact damage, armour / Exposed / Longer Exposure, pillar stun + cracks +
+    break (navigation), Shield block, Lure baiting, no chained hits (bite), phases per mode
+    (transition, fake lure, summons, darkness, death):
+    `godot --headless --path . --fixed-fps 60 res://tools/test_boss.tscn`
+  - `angler_preview.tscn`: look preview of the Angler's states (F6; `-- capture <folder>`
+    saves screenshots, needs a window)
   - `sound_test.tscn`: listen to every sound and the music crossfades (run it with F6)
   - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it

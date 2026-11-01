@@ -4,7 +4,8 @@ extends ActiveSkill
 ## by rock). Where it lands it pings "pings" times, "ping_interval" s apart:
 ## every creature within "noise_radius" that is not chasing comes to
 ## INVESTIGATE it. Costs "cost" of a full pressure meter; "cooldown" seconds.
-## It reveals nothing (no sonar, no Exposed).
+## It reveals nothing (no sonar, no Exposed). Bosses in the "decoy_listeners"
+## group hear each ping too (hear_decoy: the Angler charges at it).
 ## Aiming:
 ## - gamepad: the skill button throws towards the right stick (independent of
 ##   moving); stick neutral = the move direction, else the facing;
@@ -148,6 +149,8 @@ func _ping() -> void:
 	_ring_ages.append(0.0)
 	_play(ping_sound, decoy_position)
 	get_tree().call_group("creatures", "hear_noise", decoy_position, value("noise_radius", 500.0))
+	# Bosses that can be baited (the Angler charges at the decoy).
+	get_tree().call_group("decoy_listeners", "hear_decoy", decoy_position, value("noise_radius", 500.0))
 
 
 func _draw() -> void:

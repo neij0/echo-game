@@ -18,10 +18,19 @@ extends CanvasModulate
 
 var ambient_color: Color = Color(0.18, 0.26, 0.31)
 var deep_ambient_color: Color = Color(0.16, 0.23, 0.28)
+## 0-1: share taken off the ambient on top of everything (a boss phase
+## darkens its arena; set_extra_darkness, "darkness" group).
+var extra_darkness: float = 0.0
 
 
 func _ready() -> void:
 	add_to_group("stage_listeners")
+	add_to_group("darkness")
+
+
+## Called (via the "darkness" group), e.g. by the Angler's last phase; 0 = off.
+func set_extra_darkness(amount: float) -> void:
+	extra_darkness = clampf(amount, 0.0, 1.0)
 
 
 ## Called (via the "stage_listeners" group) by StageManager.
@@ -46,4 +55,5 @@ func _process(_delta: float) -> void:
 
 
 func _with_brightness(base: Color) -> Color:
-	return Color(base.r * Game.brightness, base.g * Game.brightness, base.b * Game.brightness, base.a)
+	var factor: float = Game.brightness * (1.0 - extra_darkness)
+	return Color(base.r * factor, base.g * factor, base.b * factor, base.a)
