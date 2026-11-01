@@ -221,7 +221,11 @@ func _test_creature_voices() -> void:
 		await _frames(2)
 		var screech_ok: bool = _heard.any(func(n: String) -> bool: return n.ends_with("_screech"))
 		_heard.clear()
-		creature.take_damage(9999, _guardian, 0.0, 0.0)
+		# A boss never dies from one hit (its phases): end it directly.
+		if creature is Boss:
+			(creature as Boss)._die()
+		else:
+			creature.take_damage(9999, _guardian, 0.0, 0.0)
 		await _frames(1)
 		print("  %-22s investigate: %s | screech: %s | death: %s" % [path.get_file(), investigate_ok, screech_ok, types[path][1] in _heard])
 		_check(investigate_ok, "%s investigates with %s" % [path.get_file().get_basename(), expected])

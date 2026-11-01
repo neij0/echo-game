@@ -15,7 +15,13 @@ extends Node
 ## - no chained hits: the 2-snap bite hits a player once;
 ## - phases at 66 % / 33 % (transition, no skipping), faster charges and the
 ##   fake lure in phase 2, summons per mode and a darker arena in phase 3,
-##   death; Challenge has more health than Calm.
+##   death; Challenge has more health than Calm;
+## - the placeholder bosses (stages 2-3) on the framework: no contact damage,
+##   telegraphed lunge and slam, one hit each, Shield block, a phase change;
+## - partner mending in a boss fight: open while it is stunned / recovering /
+##   far, closed during a telegraph or an attack and while it is close;
+## - the HUD: F1 shows / hides the debug lines, the boss bar never overlaps
+##   a HUD part (debug lines shown or hidden).
 
 const GAME_SCENE: String = "res://scenes/game.tscn"
 const PHYSICS_FPS: float = 60.0
@@ -53,6 +59,9 @@ func _run() -> void:
 	await _test_no_chained_hits()
 	await _test_phases(SaveData.Mode.CHALLENGE)
 	await _test_phases(SaveData.Mode.CALM)
+	await _test_mending()
+	await _test_hud()
+	await _test_placeholder()
 
 	print("RESULT: %s" % ("ALL BOSS CHECKS PASSED" if _failures == 0 else "%d CHECK(S) FAILED" % _failures))
 	_game.queue_free()
@@ -293,11 +302,165 @@ func _test_phases(mode: SaveData.Mode) -> void:
 	_stage.mode = SaveData.Mode.CHALLENGE
 
 
+func _test_mending() -> void:
+	print("== Partner mending in a boss fight ==")
+	await _build_fighting()
+	_freeze(_boss)
+	_boss.move_speed = 0.0
+	var mending: PartnerMending = _game.get_node("MendLayer/PartnerMending") as PartnerMending
+	var near: Vector2 = _boss.global_position + Vector2(0.0, -220.0)
+	_teleport(_echo, near)
+	_teleport(_guardian, near + Vector2(40.0, 0.0))
+	_echo.health.set_segments(2.0)
+	await _frames(2)
+	_check(not mending._can_mend(), "idle and close (%.0f px): no mending" % near.distance_to(_boss.global_position))
+	_boss.target_player = _echo
+	_boss.start_attack(_boss.get_attack(&"bite"))
+	await _frames(2)
+	_check(_boss.mode == Boss.Mode.TELEGRAPH and not mending._can_mend(), "during a telegraph: no mending")
+	_boss.stun(2.0)
+	await _frames(2)
+	_check(_boss.mode == Boss.Mode.STUNNED and mending._can_mend(), "while it is stunned: mending")
+	await _frames(int(2.2 * PHYSICS_FPS))
+	_freeze(_boss)
+	_boss.target_player = _echo
+	_boss.start_attack(_boss.get_attack(&"bite"))
+	_boss.end_active()
+	await _frames(2)
+	_check(_boss.mode == Boss.Mode.RECOVERY and mending._can_mend(), "during its recovery: mending")
+	await _frames(int(2.0 * PHYSICS_FPS))
+	_check(_boss.mode == Boss.Mode.IDLE, "(back to idle)")
+	var far: Vector2 = _boss.global_position + Vector2(0.0, -(_boss.mend_safe_distance + 120.0))
+	_teleport(_echo, far)
+	_teleport(_guardian, far + Vector2(40.0, 0.0))
+	await _frames(2)
+	_echo.health.set_segments(2.0)
+	_check(mending._can_mend(), "idle and farther than %.0f px from both: mending" % _boss.mend_safe_distance)
+	_boss.start_attack(_boss.get_attack(&"charge"))
+	await _frames(2)
+	_check(not mending._can_mend(), "a telegraph blocks it even from far away")
+	_protect_players()
+
+
+func _test_hud() -> void:
+	print("== HUD: F1 debug lines, the boss bar stays clear ==")
+	await _build_fighting()
+	_freeze(_boss)
+	var hud: Hud = _game.get_node("Hud") as Hud
+	var bar: BossHealthBar = _boss._health_bar
+	# Headless windows are tiny: lay it out for the game's 1280 x 720.
+	bar.screen_size_override = Vector2(1280.0, 720.0)
+	for shown: bool in [true, false]:
+		hud.set_debug_visible(shown)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var overlap: bool = false
+		for rect: Rect2 in hud.get_occupied_rects():
+			if rect.intersects(bar.get_screen_rect()):
+				overlap = true
+		_check(not overlap, "debug lines %s: the bar %s overlaps no HUD part" % ["shown" if shown else "hidden", bar.get_screen_rect()])
+	var before: bool = hud.is_debug_visible()
+	var key := InputEventKey.new()
+	key.keycode = hud.debug_toggle_key
+	key.pressed = true
+	Input.parse_input_event(key)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(hud.is_debug_visible() != before, "F1 toggles the debug lines")
+	var release := InputEventKey.new()
+	release.keycode = hud.debug_toggle_key
+	release.pressed = false
+	Input.parse_input_event(release)
+	hud.set_debug_visible(OS.has_feature("editor"))
+
+
+func _test_placeholder() -> void:
+	print("== Placeholder boss (stage 2) on the framework ==")
+	await _build(1)
+	var boss := _builder.get_boss() as PlaceholderBoss
+	_check(boss != null, "the stage 2 boss is a PlaceholderBoss")
+	if boss == null:
+		return
+	_builder.open_exit()
+	boss.start_fight()
+	await _frames(10)
+	_protect_players()
+	_freeze(boss)
+	boss.move_speed = 0.0
+	_check(boss._health_bar.is_shown() and boss.name_key != "", "name + health bar")
+	_teleport(_guardian, _entrance())
+	var full: float = _echo.health.value
+	_teleport(_echo, boss.global_position)
+	_echo.health._invulnerable_left = 0.0
+	await _frames(int(1.5 * PHYSICS_FPS))
+	_check(_echo.health.value == full, "no contact damage")
+	# Lunge: telegraphed, one hit.
+	var lunge: BossAttack = boss.get_attack(&"lunge")
+	_protect_players()
+	_teleport(_echo, boss.global_position + Vector2(-260.0, 0.0))
+	_echo.health._invulnerable_left = 0.0
+	full = _echo.health.value
+	boss.target_player = _echo
+	boss.start_attack(lunge)
+	var telegraph_frames: int = 0
+	for i: int in int(3.0 * PHYSICS_FPS):
+		await _frames(1)
+		if boss.mode == Boss.Mode.TELEGRAPH:
+			telegraph_frames += 1
+		if boss.mode == Boss.Mode.RECOVERY or boss.mode == Boss.Mode.IDLE:
+			break
+	_check(telegraph_frames >= int(0.75 * PHYSICS_FPS), "the lunge is telegraphed (%.2f s)" % (telegraph_frames / PHYSICS_FPS))
+	_check(is_equal_approx(full - _echo.health.value, lunge.get_damage(true)) and boss.strikes_landed == 1, "the lunge hits once")
+	_check(boss.mode == Boss.Mode.RECOVERY, "then it recovers (an opening)")
+	await _frames(int(2.0 * PHYSICS_FPS))
+	_freeze(boss)
+	# Slam: both players inside the ring, each hit once.
+	_protect_players()
+	for player: Player in [_echo, _guardian]:
+		player.health._invulnerable_left = 0.0
+	_teleport(_echo, boss.global_position + Vector2(-90.0, 0.0))
+	_teleport(_guardian, boss.global_position + Vector2(90.0, 0.0))
+	var strikes: int = boss.strikes_landed
+	boss.start_attack(boss.get_attack(&"slam"))
+	for i: int in int(3.0 * PHYSICS_FPS):
+		await _frames(1)
+		if boss.mode == Boss.Mode.RECOVERY:
+			break
+	_check(boss.strikes_landed - strikes == 2, "the slam hits each player inside once")
+	await _frames(int(2.0 * PHYSICS_FPS))
+	_freeze(boss)
+	# Shield block.
+	_protect_players()
+	_give(_guardian, "shield", 1)
+	var shield := _guardian.skills.active as ShieldSkill
+	_teleport(_echo, _entrance())
+	_teleport(_guardian, boss.global_position + Vector2(0.0, -260.0))
+	Input.action_press("p2_skill")
+	await _frames(3)
+	_guardian.health._invulnerable_left = 0.0
+	var guardian_full: float = _guardian.health.value
+	boss.target_player = _guardian
+	boss.start_attack(lunge)
+	for i: int in int(3.0 * PHYSICS_FPS):
+		await _frames(1)
+		shield.shield_direction = _guardian.global_position.direction_to(boss.global_position)
+		if boss.mode == Boss.Mode.RECOVERY or boss.mode == Boss.Mode.IDLE:
+			break
+	Input.action_release("p2_skill")
+	_check(boss.charges_blocked == 1 and _guardian.health.value == guardian_full, "the Shield blocks the lunge")
+	_give(_guardian, "", 0)
+	boss.expose(5.0)
+	boss.take_damage(100, _guardian, 0.0, 0.0, true)
+	_check(boss.phase == 2 and boss.mode == Boss.Mode.TRANSITION, "66 %: phase 2 with a transition")
+	_protect_players()
+
+
 # --- Helpers -----------------------------------------------------------------------
 
-## Builds stage 1 level 3 (the Angler) with the players at the start.
-func _build() -> void:
-	_stage.stage_index = 0
+## Builds stage 1 level 3 (the Angler; stage_index 1 / 2 = a placeholder
+## boss) with the players at the start.
+func _build(stage_index: int = 0) -> void:
+	_stage.stage_index = stage_index
 	_stage._start_level(2)
 	for node: Node in get_tree().get_nodes_in_group("creatures"):
 		var creature := node as Creature
@@ -305,9 +468,10 @@ func _build() -> void:
 			creature.remove_from_group("creatures")
 			creature.queue_free()
 	_boss = _builder.get_boss() as AnglerBoss
+	var boss: Boss = _builder.get_boss() as Boss
 	# The tests check the boss alone (no stage summary when it dies).
-	if _boss.killed.is_connected(_stage._on_boss_killed):
-		_boss.killed.disconnect(_stage._on_boss_killed)
+	if boss and boss.killed.is_connected(_stage._on_boss_killed):
+		boss.killed.disconnect(_stage._on_boss_killed)
 	if _builder.get_lockdown():
 		_builder.get_lockdown().enabled = false
 	await _frames(15)
@@ -354,7 +518,7 @@ func _teleport(player: Player, at: Vector2) -> void:
 func _entrance() -> Vector2:
 	var door: ShardDoor = _builder.get_exit_door()
 	var door_center: Vector2 = door.to_global(door._center)
-	return door_center + door_center.direction_to(_boss.global_position) * 160.0
+	return door_center + door_center.direction_to(_builder.get_boss().global_position) * 160.0
 
 
 func _nearest_pillar(from: Vector2) -> ArenaPillar:

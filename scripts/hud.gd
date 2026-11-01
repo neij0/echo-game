@@ -3,12 +3,17 @@ extends CanvasLayer
 ## Awareness bar, the Echo Shard counter, the collapse escape timer, a debug
 ## label (stage, level, mode, seed, abilities, creatures, chase speeds), and
 ## one PlayerStatus (depth + pressure meter) per registered player. Never holds
-## a single fixed player.
+## a single fixed player. The debug label is toggled with debug_toggle_key (F1):
+## hidden in normal play, shown when running from the editor. Other screen
+## parts (the boss health bar) ask get_occupied_rects() to stay clear of it.
 
 @export var stage_manager: StageManager
 @export var awareness: DepthAwareness
 @export var level_builder: LevelBuilder
 @export var escape_event: EscapeEvent
+
+@export_group("Debug")
+@export var debug_toggle_key: Key = KEY_F1
 
 @export_group("Awareness Bar")
 @export var calm_color: Color = Color(0.2, 0.55, 1.0)
@@ -42,6 +47,8 @@ var _time: float = 0.0
 
 
 func _ready() -> void:
+	add_to_group("hud")
+	_debug_label.visible = OS.has_feature("editor")
 	_bar.max_value = awareness.max_value
 
 	_fill_style = StyleBoxFlat.new()
@@ -69,6 +76,37 @@ func _ready() -> void:
 	if stage_manager:
 		stage_manager.player_registered.connect(_on_player_registered)
 		stage_manager.shards_changed.connect(_on_shards_changed)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key and key.pressed and not key.echo and key.keycode == debug_toggle_key:
+		set_debug_visible(not _debug_label.visible)
+		get_viewport().set_input_as_handled()
+
+
+func set_debug_visible(shown: bool) -> void:
+	_debug_label.visible = shown
+
+
+func is_debug_visible() -> bool:
+	return _debug_label.visible
+
+
+## Screen rects of the HUD parts showing right now (labels by their text).
+func get_occupied_rects() -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	for control: Control in [_bar, _shard_label, _debug_label, _escape_label, _statuses]:
+		if control == null or not control.is_visible_in_tree():
+			continue
+		var label := control as Label
+		if label:
+			if label.text.is_empty():
+				continue
+			rects.append(Rect2(label.global_position, label.get_minimum_size()))
+		else:
+			rects.append(control.get_global_rect())
+	return rects
 
 
 func _on_shards_changed(collected: int, total: int) -> void:

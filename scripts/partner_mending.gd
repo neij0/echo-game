@@ -1,7 +1,8 @@
 class_name PartnerMending
 extends Node2D
 ## Partner mending: while the two players stay close together, neither is
-## downed and no creature is chasing either of them, both slowly get lost
+## downed and no creature is chasing either of them (a boss decides itself:
+## Boss.allows_mending), both slowly get lost
 ## health back (one segment per seconds_per_segment, per mode). A soft glowing
 ## link is drawn between them while it mends. Must live on a CanvasLayer with
 ## follow_viewport_enabled at the origin, so it draws in world coordinates and
@@ -134,6 +135,12 @@ func _can_mend() -> bool:
 	for node: Node in get_tree().get_nodes_in_group("creatures"):
 		var creature := node as Creature
 		if creature == null:
+			continue
+		# A boss decides itself (open moments and distance, Boss.allows_mending).
+		var boss := creature as Boss
+		if boss:
+			if not boss.allows_mending(_a, _b):
+				return false
 			continue
 		var chased: Player = creature.get_chased_player()
 		if chased == _a or chased == _b:

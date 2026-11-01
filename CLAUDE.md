@@ -37,12 +37,19 @@ After the 3rd stage of a world: a story text screen, then the World Map.
 - **Boss level** (last level of a stage): its exit room is a boss arena, sealed by a
   `ShardDoor` (rock with one socket per shard) until every shard is collected; beating the
   boss completes the stage. Stage 1: **The Angler** (`scenes/bosses/angler.tscn`, see
-  "Bosses"); stages 2-3 still use the placeholder (`scenes/boss_placeholder.tscn`: a bigger
-  creature with much more health, also used by `test_stuck`).
+  "Bosses"); stages 2-3 use "The Hollow Brute" (`PlaceholderBoss`,
+  `scenes/boss_placeholder.tscn`: the plain round creature on the boss framework, with a
+  telegraphed lunge (a dashed line shows the path) and a slam (a ring shows its reach); faster
+  each phase) until they get their own bosses. `test_stuck` uses `tools/large_creature.tscn`
+  (a plain creature of boss size) instead.
+  **Mending in a boss fight** (`Boss.allows_mending`): allowed while the boss is stunned or
+  recovering, or farther than `mend_safe_distance` (400 px) from both players; never during a
+  telegraph or an attack.
 - **Bosses** (`Boss` extends `Creature`, reusable): DORMANT until a standing player is within
   `wake_radius` in sight (the arena's pillars do not hide, the closed door does) -> INTRO
   (cannot be hurt) -> the fight: name card (`BossTitle`) + health bar at the top
-  (`BossHealthBar`, AR/EN, a tick per phase). Attacks are `BossAttack` resources (id, phase,
+  (`BossHealthBar`, AR/EN, a tick per phase; never over the HUD: `Hud.get_occupied_rects`,
+  centred at the top, else just below, else beside the HUD parts). Attacks are `BossAttack` resources (id, phase,
   weight, range, telegraph / recovery / damage per mode, active time, cooldown, knockback):
   TELEGRAPH -> ACTIVE -> RECOVERY (`recovery_damage_scale`, the opening). **No contact
   damage**: touching it only pushes the player aside (`soft_push_*`); `strike(player)` hits
@@ -142,6 +149,8 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   stage (`game.tscn`) → stage summary → next stage, or story screen → World Map.
 - **Skills** (see "Skills" below): after every completed level both players pick at the same
   time (`SkillChoiceScreen`), then the next level starts.
+- **Debug HUD lines** (`Hud`, F1 = `debug_toggle_key`): stage / seed / creature states;
+  hidden in normal play, shown when running from the editor (`OS.has_feature("editor")`).
 - **Pause menu** (`PauseMenu`, `pause` action: Esc / Start on any gamepad, only while a level is
   played: `StageManager.can_pause`): pauses the whole tree (players, creatures, oxygen, the
   escape timer, stage time). Resume, Options (`OptionsPanel`, shared with the main menu),
@@ -490,7 +499,7 @@ The world is tilted to match the characters, still 2D:
     level (with and without navigation), shards, locked exit and arena door, landmarks
     (solid base, navigation around it) and harmless life (ignored, calm music, reactions):
     `godot --headless --path . --fixed-fps 60 res://tools/test_creatures.tscn`
-  - `test_stuck.tscn`: creatures (normal + boss size) chase hopping players through every
+  - `test_stuck.tscn`: creatures (normal + boss size: `tools/large_creature.tscn`) chase hopping players through every
     level, plus a normal-AI pass with pulses and lit corals; fails on any stuck >= 1.5 s
     (`-- log` prints every stuck window, `-- norecover` turns the safety net off):
     `godot --headless --path . --fixed-fps 60 res://tools/test_stuck.tscn`

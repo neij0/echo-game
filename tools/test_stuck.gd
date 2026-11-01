@@ -12,7 +12,7 @@ extends Node
 ##           -- norecover  (safety net off: shows the real causes)
 
 const GAME_SCENE: String = "res://scenes/game.tscn"
-const CREATURE_SCENES: Array[String] = ["res://scenes/creature.tscn", "res://scenes/boss_placeholder.tscn"]
+const CREATURE_SCENES: Array[String] = ["res://scenes/creature.tscn", "res://tools/large_creature.tscn"]
 const PHYSICS_FPS: float = 60.0
 const RUNS_PER_LEVEL: int = 4
 ## Seconds the players stay on one spot, and spots per run.

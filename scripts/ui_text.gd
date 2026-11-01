@@ -77,6 +77,8 @@ const STRINGS: Dictionary = {
 	# Bosses (BossTitle)
 	"boss_angler_name": {"en": "THE ANGLER", "ar": "أبو صنارة العملاق"},
 	"boss_angler_subtitle": {"en": "It hunts with light", "ar": "يصطاد بالضوء"},
+	"boss_brute_name": {"en": "THE HOLLOW BRUTE", "ar": "الوحش الأجوف"},
+	"boss_brute_subtitle": {"en": "It guards the dark", "ar": "يحرس الظلام"},
 
 	# Characters
 	"char_echo": {"en": "Echo", "ar": "إيكو"},

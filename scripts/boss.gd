@@ -50,6 +50,9 @@ enum Mode { DORMANT, INTRO, IDLE, TELEGRAPH, ACTIVE, RECOVERY, TRANSITION, STUNN
 @export var recovery_damage_scale: float = 1.0
 ## A stun counts as Exposed (finisher damage, the Exposed look).
 @export var stun_exposed: bool = true
+## Draws the plain creature body (Creature.draw_shape) for a boss without
+## a visual of its own (the placeholder bosses).
+@export var draws_creature_body: bool = false
 
 @export_group("Waking")
 ## Wakes when a standing player is this close and in line of sight.
@@ -75,6 +78,11 @@ enum Mode { DORMANT, INTRO, IDLE, TELEGRAPH, ACTIVE, RECOVERY, TRANSITION, STUNN
 @export var soft_push_margin: float = 14.0
 @export var soft_push_speed: float = 180.0
 
+@export_group("Partner Mending")
+## Mending is allowed while it is stunned or recovering, or while it is this
+## far from both players; never during a telegraph or an attack.
+@export var mend_safe_distance: float = 400.0
+
 @export_group("Death")
 ## Seconds after death before it is removed (its death animation).
 @export var remove_delay: float = 5.0
@@ -99,6 +107,10 @@ var _title: BossTitle
 
 func _ready() -> void:
 	super()
+	# Bosses run their own movement (no stuck safety net nudging them mid-attack).
+	for child: Node in get_children():
+		if child is CreatureStuckWatch:
+			child.queue_free()
 	_reset_health()
 	_health_bar = BossHealthBar.new()
 	add_child(_health_bar)
@@ -206,8 +218,11 @@ func _die() -> void:
 		queue_free()
 
 
+## A boss with no look of its own (draws_creature_body) uses the creature's
+## round body; others draw nothing here.
 func _draw() -> void:
-	pass
+	if draws_creature_body:
+		super()
 
 
 # --- Public API (boss scripts, tests) ---------------------------------------------
@@ -303,6 +318,19 @@ func strike(player: Player) -> bool:
 		strikes_landed += 1
 		return true
 	return false
+
+
+## Can these two players mend each other right now (PartnerMending)?
+func allows_mending(a: Player, b: Player) -> bool:
+	match mode:
+		Mode.TELEGRAPH, Mode.ACTIVE:
+			return false
+		Mode.STUNNED, Mode.RECOVERY, Mode.DORMANT, Mode.DEAD:
+			return true
+	for player: Player in [a, b]:
+		if player and global_position.distance_to(player.global_position) <= mend_safe_distance:
+			return false
+	return true
 
 
 func get_attack(id: StringName) -> BossAttack:

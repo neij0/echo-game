@@ -1,6 +1,39 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="1_base"]
+[ext_resource type="Script" path="res://scripts/placeholder_boss.gd" id="2_script"]
+[ext_resource type="Script" path="res://scripts/boss_attack.gd" id="3_attack"]
+
+[sub_resource type="Resource" id="Attack_lunge"]
+script = ExtResource("3_attack")
+id = &"lunge"
+weight = 2.0
+min_range = 110.0
+max_range = 480.0
+calm_telegraph = 1.0
+challenge_telegraph = 0.8
+active_time = 0.4
+calm_recovery = 1.4
+challenge_recovery = 1.0
+cooldown = 2.2
+calm_damage = 1.0
+challenge_damage = 1.5
+knockback_speed = 360.0
+
+[sub_resource type="Resource" id="Attack_slam"]
+script = ExtResource("3_attack")
+id = &"slam"
+weight = 3.0
+max_range = 150.0
+calm_telegraph = 1.1
+challenge_telegraph = 0.9
+active_time = 0.2
+calm_recovery = 1.5
+challenge_recovery = 1.1
+cooldown = 3.5
+calm_damage = 1.0
+challenge_damage = 1.5
+knockback_speed = 340.0
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_boss_body"]
 radius = 46.0
@@ -9,9 +42,14 @@ radius = 46.0
 radius = 50.0
 
 [node name="BossPlaceholder" instance=ExtResource("1_base")]
+script = ExtResource("2_script")
+name_key = "boss_brute_name"
+subtitle_key = "boss_brute_subtitle"
+attacks = Array[ExtResource("3_attack")]([SubResource("Attack_lunge"), SubResource("Attack_slam")])
+draws_creature_body = true
+keep_distance = 200.0
 max_health = 40
 exposed_finisher_kills = false
-stagger_scale = 0.4
 body_radius = 46.0
 body_color = Color(0.95, 0.35, 0.2, 1)
 eye_color = Color(1, 0.95, 0.4, 1)
