@@ -1018,6 +1018,118 @@ def make_skill_ready(rng):
     return _norm(_trim_tail(_reverb(out, 1.0, 0.3, rng)), PEAK_SOFT * 0.8)
 
 
+# --- The Angler (boss): deep and wet, built from tones only -------------------
+# Sources are sine stacks shaped by moving formants, sub sweeps and short
+# "bubble" blips (sines that rise in pitch): no noise source, so nothing buzzes.
+
+def _formants(x, centers, widths, gains):
+    """Vocal-tract colour: a sum of band-passed copies (one per formant)."""
+    out = np.zeros_like(x)
+    for center, width, gain in zip(centers, widths, gains):
+        out += _filter(x, "bandpass", [max(center - width, 20.0), center + width]) * gain
+    return out
+
+
+def _bubble(rng, low: float, high: float, seconds: float = 0.05):
+    t = _t(seconds)
+    f0 = rng.uniform(low, high)
+    return np.sin(2 * np.pi * np.cumsum(f0 * (1.0 + 1.8 * t / seconds)) / SAMPLE_RATE) * _env(t, 0.002, seconds * 0.35)
+
+
+def _bubbles(rng, out, count: int, start: float, end: float, low: float, high: float, gain: float):
+    for i in range(count):
+        _place(out, _bubble(rng, low, high, rng.uniform(0.03, 0.08)), rng.uniform(start, end), rng.uniform(0.3, 1.0) * gain)
+    return out
+
+
+def _throat(f, t, harmonics: int = 14):
+    """A rich tone (falling harmonics) with a slow, uneven vibrato."""
+    vibrato = 1.0 + 0.012 * np.sin(2 * np.pi * 4.3 * t) + 0.006 * np.sin(2 * np.pi * 7.1 * t + 1.0)
+    return _osc(f * vibrato, partials=tuple((k, 1.0 / k ** 0.9) for k in range(1, harmonics + 1)))
+
+
+def make_angler_roar(rng):
+    seconds = 2.8
+    t = _t(seconds)
+    k = np.clip(t / seconds, 0, 1)
+    # A wail that rises, holds and sinks (around 110 Hz, low enough to be huge,
+    # high enough to read as a voice, not a buzz).
+    f = 96.0 + 44.0 * np.sin(np.pi * np.clip(t / 1.6, 0, 1)) - 26.0 * np.clip((t - 1.6) / 1.2, 0, 1)
+    voice = _throat(f, t)
+    # The mouth opens ("ooh" -> "aah") and closes again: formants move up then down.
+    opening = np.sin(np.pi * k) ** 0.7
+    voiced = np.zeros_like(voice)
+    steps = 14
+    for i in range(steps):
+        a, b = int(i * len(t) / steps), int((i + 1) * len(t) / steps)
+        o = float(np.mean(opening[a:b]))
+        part = _formants(voice, [260 + 420 * o, 720 + 600 * o, 2200], [80, 160, 300], [1.0, 0.6, 0.12])
+        voiced[a:b] = part[a:b]
+    sub = _osc(38.0 + 14.0 * np.sin(np.pi * np.clip(t / 1.8, 0, 1))) * 0.35
+    body = (voiced * 1.6 + sub) * _env(t, 0.22, 1.1) * (1.0 - 0.1 * np.sin(2 * np.pi * 6.0 * t))
+    body = np.tanh(1.4 * body)
+    _bubbles(rng, body, 28, 0.2, 2.3, 140.0, 420.0, 0.22)
+    return _norm(_trim_tail(_reverb(body, 3.2, 0.42, rng)), PEAK_SFX)
+
+
+def make_angler_charge(rng):
+    seconds = 1.5
+    t = _t(seconds)
+    k = np.clip(t / 1.1, 0, 1)
+    # Water pushed aside: a cluster of low tones swelling and gliding up.
+    rush = np.zeros_like(t)
+    for base in (62.0, 74.0, 93.0, 118.0, 141.0):
+        detune = rng.uniform(0.98, 1.02)
+        rush += _osc(base * detune * (1.0 + 0.45 * k ** 1.5), partials=((1.0, 1.0), (2.0, 0.35), (3.0, 0.12)))
+    rush = _filter(rush, "lowpass", 900.0) * (k ** 1.2) * np.exp(-np.clip(t - 1.1, 0, None) / 0.18)
+    growl = _formants(_throat(70.0 + 30.0 * k, t, 10), [380, 900], [90, 180], [1.0, 0.4]) * (k ** 2) * 0.8
+    out = rush + growl * np.exp(-np.clip(t - 1.1, 0, None) / 0.2)
+    _bubbles(rng, out, 40, 0.1, 1.2, 180.0, 650.0, 0.25)
+    return _norm(_trim_tail(_reverb(np.tanh(1.2 * out), 1.6, 0.32, rng)), PEAK_SFX * 0.9)
+
+
+def make_angler_bite(rng):
+    seconds = 0.7
+    out = np.zeros(int(seconds * SAMPLE_RATE))
+    # A short wet inhale as the jaw opens...
+    t_open = _t(0.16)
+    gulp = _osc(160.0 - 60.0 * t_open / 0.16, partials=((1.0, 1.0), (2.0, 0.4))) * np.sin(np.pi * t_open / 0.16) ** 2 * 0.35
+    _place(out, _formants(gulp, [300, 800], [80, 160], [1.0, 0.5]), 0.0)
+    # ...then the snap: a heavy low thud and bony clacks of the teeth.
+    snap_at = 0.16
+    _place(out, _kick(150.0, 42.0, 0.09, 0.4) * 1.2, snap_at)
+    for i, freq in enumerate((1850.0, 2650.0, 2200.0)):
+        tc = _t(0.03)
+        clack = _osc(freq * rng.uniform(0.97, 1.03), 0.03, partials=((1.0, 1.0), (2.3, 0.4))) * _env(tc, 0.0008, 0.006)
+        _place(out, clack, snap_at + 0.004 + i * 0.007, 0.5 - i * 0.1)
+    _bubbles(rng, out, 7, snap_at + 0.02, snap_at + 0.25, 220.0, 520.0, 0.3)
+    return _norm(_trim_tail(_reverb(out, 1.0, 0.25, rng)), PEAK_SFX)
+
+
+def make_angler_death(rng):
+    seconds = 5.0
+    t = _t(seconds)
+    k = np.clip(t / 3.6, 0, 1)
+    # A long moan that sinks and slows, the mouth slowly closing.
+    f = 120.0 * (1.0 - 0.62 * k ** 0.8)
+    voice = _throat(f, t, 12)
+    voiced = np.zeros_like(voice)
+    steps = 16
+    for i in range(steps):
+        a, b = int(i * len(t) / steps), int((i + 1) * len(t) / steps)
+        c = 1.0 - i / steps
+        part = _formants(voice, [220 + 380 * c, 600 + 500 * c], [70, 140], [1.0, 0.45 * c])
+        voiced[a:b] = part[a:b]
+    sub = _osc(44.0 - 18.0 * k) * 0.35
+    moan = (voiced * 1.5 + sub) * _env(t, 0.15, 1.6) * (1.0 - 0.15 * np.sin(2 * np.pi * (5.0 - 3.5 * k) * t))
+    out = np.tanh(1.3 * moan)
+    # Bubbles rise off the sinking body: few at first, a last stream at the end.
+    _bubbles(rng, out, 30, 0.4, 3.0, 160.0, 500.0, 0.2)
+    _bubbles(rng, out, 45, 2.8, 4.4, 200.0, 700.0, 0.16)
+    _place(out, _kick(90.0, 30.0, 0.3, 0.8) * 0.5, 3.9)
+    return _norm(_trim_tail(_reverb(out, 3.5, 0.45, rng)), PEAK_SFX)
+
+
 def make_shard_pickup(rng):
     out = _chord([1046.5, 1568.0, 2093.0, 2637.0], 1.0, 0.002, 0.3, ((1.0, 1.0), (2.0, 0.2)), stagger=0.05)
     return _norm(_trim_tail(_reverb(out, 1.8, 0.35, rng)), PEAK_SFX * 0.75)
@@ -1130,6 +1242,10 @@ def _preview_list():
         ("world_shard_hum", make_shard_hum, True),
         ("world_shard_pickup", make_shard_pickup, False),
         ("skill_ready", make_skill_ready, False),
+        ("boss_angler_roar", make_angler_roar, False),
+        ("boss_angler_charge", make_angler_charge, False),
+        ("boss_angler_bite", make_angler_bite, False),
+        ("boss_angler_death", make_angler_death, False),
         ("world_barrier_close", make_barrier_close, False),
         ("world_barrier_open", make_barrier_open, False),
         ("world_collapse_rumble", make_collapse_rumble, True),

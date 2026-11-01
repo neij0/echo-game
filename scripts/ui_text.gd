@@ -74,6 +74,10 @@ const STRINGS: Dictionary = {
 	"distress_cooldown": {"en": "Distress pulse in %.1f s", "ar": "نبضة الاستغاثة بعد %.1f ث"},
 	"arena_open": {"en": "The arena door is open", "ar": "انفتح باب الساحة"},
 
+	# Bosses (BossTitle)
+	"boss_angler_name": {"en": "THE ANGLER", "ar": "أبو صنارة العملاق"},
+	"boss_angler_subtitle": {"en": "It hunts with light", "ar": "يصطاد بالضوء"},
+
 	# Characters
 	"char_echo": {"en": "Echo", "ar": "إيكو"},
 	"char_guardian": {"en": "Guardian", "ar": "الحارس"},
