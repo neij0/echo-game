@@ -173,7 +173,12 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   Navigated with the `ui_*` actions (keyboard + every gamepad).
 - **Testing one stage**: run `game.tscn` on its own (F6). The `StageManager` then uses its
   `world`, `test_stage_index`, `test_mode` and `test_skills` (`"far_echo:2"`, `"shield"`...)
-  exports and never writes the save.
+  exports and never writes the save. `test_level_index` starts the stage at that level (2 =
+  the boss level; a Challenge retry goes back to it too) and `test_start_at` (boss level
+  only): LEVEL_START, ARENA_DOOR (every shard counted, the door open, the players just
+  outside it) or IN_ARENA (already inside: the boss wakes). A Calm retry returns to that spot.
+  E.g. the Angler from inside its arena: `test_stage_index` 0, `test_level_index` 2,
+  `test_start_at` IN_ARENA.
 
 ## Skills
 Data-driven: every skill is a `SkillDefinition` (.tres in `skills/<echo|guardian|shared>/`,

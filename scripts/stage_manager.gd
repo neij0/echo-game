@@ -36,6 +36,9 @@ signal between_levels(next_level_index: int)
 signal stage_completed(stage_index: int)
 ## Emitted when a level starts and whenever an Echo Shard is collected.
 signal shards_changed(collected: int, total: int)
+
+## Playtest start on a boss level (test_start_at, F6 only).
+enum TestStart { LEVEL_START, ARENA_DOOR, IN_ARENA }
 ## Emitted the moment a level is won (the ancient light wakes or the boss
 ## falls), before the level-cleared screen (music stinger).
 signal level_won
@@ -49,6 +52,17 @@ signal skills_chosen(picks: Dictionary)
 @export var test_stage_index: int = 0
 ## Mode used when game.tscn runs on its own.
 @export var test_mode: SaveData.Mode = SaveData.Mode.CALM
+## Level the stage starts at when game.tscn runs on its own (0-based; 2 = the
+## boss level). A Challenge retry also goes back to it.
+@export var test_level_index: int = 0
+## Where a boss level starts when game.tscn runs on its own (with
+## test_level_index on the boss level): LEVEL_START = its start room;
+## ARENA_DOOR = every shard counted, the door open, the players just outside
+## it; IN_ARENA = the same, the players already inside (the boss wakes).
+@export var test_start_at: TestStart = TestStart.LEVEL_START
+## How far from the arena door's middle the players are put (outside / inside).
+@export var test_door_outside_distance: float = 150.0
+@export var test_door_inside_distance: float = 230.0
 @export var level_builder: LevelBuilder
 @export var awareness: DepthAwareness
 @export var end_screen: EndScreen
@@ -148,7 +162,15 @@ func _start_stage() -> void:
 	loadout = _initial_loadout()
 	_stage_start_loadout = loadout.copy()
 	_apply_loadout()
-	_start_level(0)
+	_start_level(_first_level_index())
+
+
+## The level a stage (or a Challenge retry) starts at: 0, or test_level_index
+## when game.tscn runs on its own.
+func _first_level_index() -> int:
+	if Game.started_from_menu:
+		return 0
+	return clampi(test_level_index, 0, get_level_count() - 1)
 
 
 func register_player(player: Player) -> void:
@@ -189,10 +211,38 @@ func _start_level(index: int) -> void:
 		awareness.reset()
 	if escape_event:
 		escape_event.stop()
+	_apply_test_start()
 	var camera := get_viewport().get_camera_2d() as SharedCamera
 	if camera:
 		camera.snap_to_players()
 	level_started.emit(index)
+
+
+## F6 playtests of a boss: every shard counted, the arena door open and the
+## players at the door (outside) or already inside (test_start_at).
+func _apply_test_start() -> void:
+	if Game.started_from_menu or test_start_at == TestStart.LEVEL_START or level_builder == null:
+		return
+	if level_index != _first_level_index() or not is_boss_level():
+		return
+	var door: ShardDoor = level_builder.get_exit_door()
+	var boss: Creature = level_builder.get_boss()
+	if door == null or boss == null:
+		return
+	for shard: EchoShard in level_builder.get_shards():
+		if is_instance_valid(shard):
+			shard.queue_free()
+	shards_collected = shards_total
+	level_builder.open_exit()
+	_update_exit_lock()
+	var door_center: Vector2 = door.to_global(door._center)
+	var inward: Vector2 = door_center.direction_to(boss.global_position)
+	var distance: float = test_door_inside_distance if test_start_at == TestStart.IN_ARENA else -test_door_outside_distance
+	var spot: Vector2 = door_center + inward * distance
+	for player: Player in players:
+		var side: float = -1.0 if player.player_number == 1 else 1.0
+		player.global_position = spot + inward.orthogonal() * side * 30.0
+		player.velocity = Vector2.ZERO
 
 
 func _on_level_built(_index: int) -> void:
@@ -301,7 +351,7 @@ func _retry() -> void:
 		loadout = _stage_start_loadout.copy()
 		_apply_loadout()
 		_restore_counts([0, 0, 0])
-		_start_level(0)
+		_start_level(_first_level_index())
 	get_tree().paused = false
 
 

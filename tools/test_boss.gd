@@ -21,7 +21,10 @@ extends Node
 ## - partner mending in a boss fight: open while it is stunned / recovering /
 ##   far, closed during a telegraph or an attack and while it is close;
 ## - the HUD: F1 shows / hides the debug lines, the boss bar never overlaps
-##   a HUD part (debug lines shown or hidden).
+##   a HUD part (debug lines shown or hidden);
+## - the F6 playtest start (StageManager.test_level_index / test_start_at):
+##   at the arena door (door open, boss asleep), inside the arena (it wakes),
+##   and a Calm retry back to the same spot.
 
 const GAME_SCENE: String = "res://scenes/game.tscn"
 const PHYSICS_FPS: float = 60.0
@@ -63,6 +66,7 @@ func _run() -> void:
 	await _test_hud()
 	await _test_placeholder()
 	await _test_hit_count()
+	await _test_playtest_start()
 
 	print("RESULT: %s" % ("ALL BOSS CHECKS PASSED" if _failures == 0 else "%d CHECK(S) FAILED" % _failures))
 	_game.queue_free()
@@ -511,6 +515,43 @@ func _test_hit_count() -> void:
 	_stage._retry()
 	await _frames(5)
 	_check(_stage.hits_taken == 0, "a Challenge retry (stage from level 1) starts the count again")
+	_protect_players()
+
+
+func _test_playtest_start() -> void:
+	print("== F6 playtest start at the boss ==")
+	_stage.mode = SaveData.Mode.CALM
+	_stage.stage_index = 0
+	_stage.test_level_index = 2
+	_stage.test_start_at = StageManager.TestStart.ARENA_DOOR
+	_stage._start_level(_stage._first_level_index())
+	await _frames(10)
+	var boss := _builder.get_boss() as Boss
+	var door: ShardDoor = _builder.get_exit_door()
+	var door_center: Vector2 = door.to_global(door._center)
+	_check(_stage.level_index == 2 and boss != null, "test_level_index 2 starts the boss level")
+	_check(door.is_open and _stage.shards_collected == _stage.shards_total, "ARENA_DOOR: every shard counted, the door open")
+	var outside: bool = _echo.global_position.distance_to(boss.global_position) > door_center.distance_to(boss.global_position)
+	_check(outside and _echo.global_position.distance_to(door_center) < 200.0, "ARENA_DOOR: the players stand just outside the door")
+	_check(boss.mode == Boss.Mode.DORMANT, "ARENA_DOOR: the boss still sleeps")
+	_stage.test_start_at = StageManager.TestStart.IN_ARENA
+	_stage._start_level(_stage._first_level_index())
+	await _frames(10)
+	boss = _builder.get_boss() as Boss
+	door = _builder.get_exit_door()
+	door_center = door.to_global(door._center)
+	var inside: bool = _echo.global_position.distance_to(boss.global_position) < door_center.distance_to(boss.global_position)
+	_check(door.is_open and inside, "IN_ARENA: the players are inside the arena")
+	_check(boss.mode == Boss.Mode.INTRO, "IN_ARENA: the boss wakes (intro)")
+	var spot: Vector2 = _echo.global_position
+	if boss.killed.is_connected(_stage._on_boss_killed):
+		boss.killed.disconnect(_stage._on_boss_killed)
+	_stage._retry()
+	await _frames(10)
+	_check(_stage.level_index == 2 and _echo.global_position.distance_to(spot) < 40.0 and _builder.get_exit_door().is_open, "a Calm retry starts at the same spot")
+	_stage.test_level_index = 0
+	_stage.test_start_at = StageManager.TestStart.LEVEL_START
+	_stage.mode = SaveData.Mode.CHALLENGE
 	_protect_players()
 
 
