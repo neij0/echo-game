@@ -1,8 +1,14 @@
-[gd_resource type="Resource" script_class="LevelDefinition" load_steps=33 format=3]
+[gd_resource type="Resource" script_class="LevelDefinition" format=3 uid="uid://dpotsmheigtm7"]
 
-[ext_resource type="Script" path="res://scripts/level_definition.gd" id="1_level"]
-[ext_resource type="Script" path="res://scripts/creature_spawn.gd" id="2_spawn"]
-[ext_resource type="Script" path="res://scripts/room_placement.gd" id="3_room"]
+[ext_resource type="Script" uid="uid://cm73u60v08s6t" path="res://scripts/level_definition.gd" id="1_level"]
+[ext_resource type="Script" uid="uid://bicpm113ja1v1" path="res://scripts/creature_spawn.gd" id="2_spawn"]
+[ext_resource type="Script" uid="uid://dw55y71dqgmgj" path="res://scripts/room_placement.gd" id="3_room"]
+[ext_resource type="PackedScene" path="res://scenes/boss_placeholder.tscn" id="boss"]
+[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_0"]
+[ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_1"]
+[ext_resource type="Script" uid="uid://bs1832sq2xgqq" path="res://scripts/landmark_placement.gd" id="lm_script"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_statue.tscn" id="lm_statue"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_whale.tscn" id="lm_whale"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_boss_arena.tscn" id="room_boss_arena"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_cavern.tscn" id="room_cavern"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_crossroads.tscn" id="room_crossroads"]
@@ -12,12 +18,6 @@
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_shard_alcove.tscn" id="room_shard_alcove"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_tunnel_bend.tscn" id="room_tunnel_bend"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_tunnel_straight.tscn" id="room_tunnel_straight"]
-[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_0"]
-[ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_1"]
-[ext_resource type="PackedScene" path="res://scenes/boss_placeholder.tscn" id="boss"]
-[ext_resource type="Script" path="res://scripts/landmark_placement.gd" id="lm_script"]
-[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_statue.tscn" id="lm_statue"]
-[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_whale.tscn" id="lm_whale"]
 
 [sub_resource type="Resource" id="Spawn_0"]
 script = ExtResource("2_spawn")
@@ -29,11 +29,30 @@ script = ExtResource("2_spawn")
 scene = ExtResource("creature_1")
 count = 2
 
+[sub_resource type="Resource" id="Landmark_0"]
+script = ExtResource("lm_script")
+cell = Vector2i(0, 1)
+scene = ExtResource("lm_whale")
+offset = Vector2(760, 560)
+mirrored = true
+size_scale = 0.77
+floor_turn_degrees = -14
+damage = 0.6
+variant = 2
+
+[sub_resource type="Resource" id="Landmark_1"]
+script = ExtResource("lm_script")
+cell = Vector2i(1, 2)
+scene = ExtResource("lm_statue")
+offset = Vector2(600, 760)
+mirrored = true
+size_scale = 0.95
+damage = 0.8
+variant = 2
+
 [sub_resource type="Resource" id="Room_0"]
 script = ExtResource("3_room")
-cell = Vector2i(0, 0)
 room = ExtResource("room_cavern")
-quarter_turns = 0
 
 [sub_resource type="Resource" id="Room_1"]
 script = ExtResource("3_room")
@@ -63,7 +82,6 @@ quarter_turns = 1
 script = ExtResource("3_room")
 cell = Vector2i(1, 1)
 room = ExtResource("room_crossroads")
-quarter_turns = 0
 
 [sub_resource type="Resource" id="Room_6"]
 script = ExtResource("3_room")
@@ -81,49 +99,20 @@ quarter_turns = 3
 script = ExtResource("3_room")
 cell = Vector2i(1, 2)
 room = ExtResource("room_dead_end_grotto")
-quarter_turns = 0
 
 [sub_resource type="Resource" id="Room_9"]
 script = ExtResource("3_room")
 cell = Vector2i(3, 2)
 room = ExtResource("room_boss_arena")
-quarter_turns = 0
-
-[sub_resource type="Resource" id="Landmark_0"]
-script = ExtResource("lm_script")
-cell = Vector2i(0, 1)
-scene = ExtResource("lm_whale")
-offset = Vector2(760, 560)
-mirrored = true
-size_scale = 0.77
-floor_turn_degrees = -14
-damage = 0.6
-variant = 2
-
-[sub_resource type="Resource" id="Landmark_1"]
-script = ExtResource("lm_script")
-cell = Vector2i(1, 2)
-scene = ExtResource("lm_statue")
-offset = Vector2(600, 760)
-mirrored = true
-size_scale = 0.95
-floor_turn_degrees = 0
-damage = 0.8
-variant = 2
 
 [resource]
 script = ExtResource("1_level")
 rooms = Array[ExtResource("3_room")]([SubResource("Room_0"), SubResource("Room_1"), SubResource("Room_2"), SubResource("Room_3"), SubResource("Room_4"), SubResource("Room_5"), SubResource("Room_6"), SubResource("Room_7"), SubResource("Room_8"), SubResource("Room_9")])
-start_cell = Vector2i(0, 0)
 exit_cell = Vector2i(3, 2)
 lockdown_cell = Vector2i(3, 1)
-landmarks = Array[ExtResource("lm_script")]([SubResource("Landmark_0"), SubResource("Landmark_1")])
-lockdown_wave_calm = 2
 lockdown_wave_challenge = 4
+landmarks = Array[ExtResource("lm_script")]([SubResource("Landmark_0"), SubResource("Landmark_1")])
 shard_count = 2
-sentinels = 1
 creatures = Array[ExtResource("2_spawn")]([SubResource("Spawn_0"), SubResource("Spawn_1")])
-corals = 4
-stations = 2
 boss = ExtResource("boss")
 boss_max_health = 52

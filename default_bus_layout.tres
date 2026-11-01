@@ -1,4 +1,4 @@
-[gd_resource type="AudioBusLayout" load_steps=8 format=3]
+[gd_resource type="AudioBusLayout" format=3 uid="uid://c2scshl0cvvsy"]
 
 [sub_resource type="AudioEffectAmplify" id="MusicDuck"]
 resource_name = "Duck"
@@ -15,7 +15,6 @@ resource_name = "Reverb"
 room_size = 0.7
 damping = 0.6
 spread = 0.8
-dry = 1.0
 wet = 0.2
 
 [sub_resource type="AudioEffectAmplify" id="AmbienceGate"]
@@ -30,7 +29,6 @@ resource_name = "Reverb"
 room_size = 0.7
 damping = 0.6
 spread = 0.8
-dry = 1.0
 wet = 0.2
 
 [resource]

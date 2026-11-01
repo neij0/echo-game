@@ -1,8 +1,14 @@
-[gd_resource type="Resource" script_class="LevelDefinition" load_steps=37 format=3]
+[gd_resource type="Resource" script_class="LevelDefinition" format=3 uid="uid://b0nxjb1tj73wp"]
 
-[ext_resource type="Script" path="res://scripts/level_definition.gd" id="1_level"]
-[ext_resource type="Script" path="res://scripts/creature_spawn.gd" id="2_spawn"]
-[ext_resource type="Script" path="res://scripts/room_placement.gd" id="3_room"]
+[ext_resource type="Script" uid="uid://cm73u60v08s6t" path="res://scripts/level_definition.gd" id="1_level"]
+[ext_resource type="Script" uid="uid://bicpm113ja1v1" path="res://scripts/creature_spawn.gd" id="2_spawn"]
+[ext_resource type="Script" uid="uid://dw55y71dqgmgj" path="res://scripts/room_placement.gd" id="3_room"]
+[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_0"]
+[ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_1"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_anemones.tscn" id="lm_anemones"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_coral_tree.tscn" id="lm_coral_tree"]
+[ext_resource type="Script" uid="uid://bs1832sq2xgqq" path="res://scripts/landmark_placement.gd" id="lm_script"]
+[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_wreck.tscn" id="lm_wreck"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_arena.tscn" id="room_arena"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_cavern.tscn" id="room_cavern"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_crossroads.tscn" id="room_crossroads"]
@@ -11,12 +17,6 @@
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_ledge_cave.tscn" id="room_ledge_cave"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_pillars.tscn" id="room_pillars"]
 [ext_resource type="PackedScene" path="res://scenes/chunks/ocean/room_tunnel_bend.tscn" id="room_tunnel_bend"]
-[ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="creature_0"]
-[ext_resource type="PackedScene" path="res://scenes/light_hunter.tscn" id="creature_1"]
-[ext_resource type="Script" path="res://scripts/landmark_placement.gd" id="lm_script"]
-[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_anemones.tscn" id="lm_anemones"]
-[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_coral_tree.tscn" id="lm_coral_tree"]
-[ext_resource type="PackedScene" path="res://scenes/landmarks/ocean/landmark_wreck.tscn" id="lm_wreck"]
 
 [sub_resource type="Resource" id="Spawn_0"]
 script = ExtResource("2_spawn")
@@ -28,11 +28,40 @@ script = ExtResource("2_spawn")
 scene = ExtResource("creature_1")
 count = 2
 
+[sub_resource type="Resource" id="Landmark_0"]
+script = ExtResource("lm_script")
+cell = Vector2i(0, 2)
+scene = ExtResource("lm_wreck")
+offset = Vector2(1080, 800)
+mirrored = true
+size_scale = 0.9
+floor_turn_degrees = 35
+damage = 0.75
+variant = 2
+
+[sub_resource type="Resource" id="Landmark_1"]
+script = ExtResource("lm_script")
+cell = Vector2i(0, 3)
+scene = ExtResource("lm_coral_tree")
+offset = Vector2(640, 800)
+mirrored = true
+size_scale = 0.85
+variant = 2
+accent_color = Color(0.12, 0.26, 0.42, 0.33)
+
+[sub_resource type="Resource" id="Landmark_2"]
+script = ExtResource("lm_script")
+cell = Vector2i(1, 0)
+scene = ExtResource("lm_anemones")
+offset = Vector2(800, 400)
+mirrored = true
+size_scale = 1.1
+variant = 2
+
 [sub_resource type="Resource" id="Room_0"]
 script = ExtResource("3_room")
 cell = Vector2i(1, 0)
 room = ExtResource("room_cavern")
-quarter_turns = 0
 
 [sub_resource type="Resource" id="Room_1"]
 script = ExtResource("3_room")
@@ -50,7 +79,6 @@ quarter_turns = 2
 script = ExtResource("3_room")
 cell = Vector2i(0, 1)
 room = ExtResource("room_pillars")
-quarter_turns = 0
 
 [sub_resource type="Resource" id="Room_4"]
 script = ExtResource("3_room")
@@ -62,13 +90,11 @@ quarter_turns = 3
 script = ExtResource("3_room")
 cell = Vector2i(2, 1)
 room = ExtResource("room_pillars")
-quarter_turns = 0
 
 [sub_resource type="Resource" id="Room_6"]
 script = ExtResource("3_room")
 cell = Vector2i(3, 1)
 room = ExtResource("room_crossroads")
-quarter_turns = 0
 
 [sub_resource type="Resource" id="Room_7"]
 script = ExtResource("3_room")
@@ -92,19 +118,16 @@ quarter_turns = 2
 script = ExtResource("3_room")
 cell = Vector2i(0, 3)
 room = ExtResource("room_dead_end_grotto")
-quarter_turns = 0
 
 [sub_resource type="Resource" id="Room_11"]
 script = ExtResource("3_room")
 cell = Vector2i(1, 3)
 room = ExtResource("room_arena")
-quarter_turns = 0
 
 [sub_resource type="Resource" id="Room_12"]
 script = ExtResource("3_room")
 cell = Vector2i(2, 3)
 room = ExtResource("room_kelp_maze")
-quarter_turns = 0
 
 [sub_resource type="Resource" id="Room_13"]
 script = ExtResource("3_room")
@@ -112,50 +135,14 @@ cell = Vector2i(3, 3)
 room = ExtResource("room_dead_end_grotto")
 quarter_turns = 3
 
-[sub_resource type="Resource" id="Landmark_0"]
-script = ExtResource("lm_script")
-cell = Vector2i(0, 2)
-scene = ExtResource("lm_wreck")
-offset = Vector2(1080, 800)
-mirrored = true
-size_scale = 0.9
-floor_turn_degrees = 35
-damage = 0.75
-variant = 2
-
-[sub_resource type="Resource" id="Landmark_1"]
-script = ExtResource("lm_script")
-cell = Vector2i(0, 3)
-scene = ExtResource("lm_coral_tree")
-offset = Vector2(640, 800)
-mirrored = true
-size_scale = 0.85
-floor_turn_degrees = 0
-damage = 0.5
-variant = 2
-accent_color = Color(0.12, 0.26, 0.42, 0.33)
-
-[sub_resource type="Resource" id="Landmark_2"]
-script = ExtResource("lm_script")
-cell = Vector2i(1, 0)
-scene = ExtResource("lm_anemones")
-offset = Vector2(800, 400)
-mirrored = true
-size_scale = 1.1
-floor_turn_degrees = 0
-damage = 0.5
-variant = 2
-
 [resource]
 script = ExtResource("1_level")
 rooms = Array[ExtResource("3_room")]([SubResource("Room_0"), SubResource("Room_1"), SubResource("Room_2"), SubResource("Room_3"), SubResource("Room_4"), SubResource("Room_5"), SubResource("Room_6"), SubResource("Room_7"), SubResource("Room_8"), SubResource("Room_9"), SubResource("Room_10"), SubResource("Room_11"), SubResource("Room_12"), SubResource("Room_13")])
 start_cell = Vector2i(1, 1)
 exit_cell = Vector2i(2, 2)
 lockdown_cell = Vector2i(1, 3)
-landmarks = Array[ExtResource("lm_script")]([SubResource("Landmark_0"), SubResource("Landmark_1"), SubResource("Landmark_2")])
-lockdown_wave_calm = 2
 lockdown_wave_challenge = 4
-shard_count = 3
+landmarks = Array[ExtResource("lm_script")]([SubResource("Landmark_0"), SubResource("Landmark_1"), SubResource("Landmark_2")])
 sentinels = 2
 creatures = Array[ExtResource("2_spawn")]([SubResource("Spawn_0"), SubResource("Spawn_1")])
 corals = 5
