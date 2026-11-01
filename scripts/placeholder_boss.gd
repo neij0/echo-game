@@ -9,7 +9,8 @@ extends Boss
 ##   dash; rock ends it, the Shield stops it (a longer recovery).
 ## - "slam": a ring shows its reach (telegraph), then every player inside
 ##   slam_radius is hit once.
-## Every phase makes it a little faster (phase_speed_bonus).
+## Every phase makes it a little faster (phase_speed_bonus). Damage: the
+## Boss's armour model (armoured unless a pulse makes it Exposed).
 
 @export_group("Lunge")
 @export var dash_speed: float = 540.0

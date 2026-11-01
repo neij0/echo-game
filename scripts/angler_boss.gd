@@ -23,12 +23,8 @@ extends Boss
 ## Touching it never hurts (Boss: soft push only).
 
 @export_group("Armor")
-## Sword damage while armoured (not Exposed).
-@export var armored_damage_scale: float = 0.1
-## Exposed by a pulse: quick hits at their normal damage, the finisher x1.5.
-@export var exposed_damage_scale: float = 1.0
-@export var exposed_finisher_scale: float = 1.5
-## Stunned against a pillar (the real opening): on top of Exposed.
+## Stunned against a pillar (the real opening): on top of Exposed (the armour
+## and Exposed values are the Boss's).
 @export var stunned_damage_scale: float = 1.5
 
 @export_group("Charge")
@@ -161,10 +157,8 @@ func get_bite_point() -> Vector2:
 # --- Boss hooks ------------------------------------------------------------------
 
 func _damage_multipliers(is_finisher: bool) -> Dictionary:
-	if not is_exposed():
-		return {"armor": armored_damage_scale}
-	var multipliers: Dictionary = {"exposed": exposed_finisher_scale if is_finisher else exposed_damage_scale}
-	if mode == Mode.STUNNED:
+	var multipliers: Dictionary = super(is_finisher)
+	if is_exposed() and mode == Mode.STUNNED:
 		multipliers["stunned"] = stunned_damage_scale
 	return multipliers
 

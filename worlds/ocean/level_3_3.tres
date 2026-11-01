@@ -150,4 +150,4 @@ sentinels = 2
 creatures = Array[ExtResource("2_spawn")]([SubResource("Spawn_0"), SubResource("Spawn_1"), SubResource("Spawn_2")])
 stations = 3
 boss = ExtResource("boss")
-boss_max_health = 64
+boss_max_health = 280

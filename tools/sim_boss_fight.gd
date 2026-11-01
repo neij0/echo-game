@@ -1,25 +1,36 @@
 extends Node
-## Headless fight simulation: the real game (game.tscn, stage 1 level 3, the
-## Angler) with two bots playing it like a good pair, to measure how long the
-## fight lasts and where the damage comes from:
-##   godot --headless --path . --fixed-fps 60 res://tools/sim_boss_fight.tscn [-- calm|challenge|both] [log]
+## Headless fight simulation: the real game (game.tscn, the boss level of each
+## stage: 1 = the Angler, 2 / 3 = the placeholder boss) with two bots playing it
+## like a good pair, to measure how long the fights last and where the damage
+## comes from:
+##   godot --headless --path . --fixed-fps 60 res://tools/sim_boss_fight.tscn [-- calm|challenge] [1|2|3] [log]
+## (no mode = both, no stage = all three).
 ## - Guardian: stays at sword range and swings whenever the boss can be hurt
 ##   and is revealed (real SwordAbility input, real damage path);
 ## - Echo: stays by him (her light reveals it), pulses whenever the pulse is
-##   ready (real sonar -> Exposed), and when the Lure is ready baits a charge
-##   at a pillar (the decoy just in front of it, Lure cooldown respected);
-## - both get out of the way during every telegraph / attack (out of the
-##   charge's line, away from the jaws), so its attacks can still land.
-## A downed bot is revived after revive_delay. Reports the fight time, the
-## time and damage per phase, the damage by kind (armoured / Exposed /
-## stunned), pillar stuns and the hits the players took (StageManager's
-## "Hits taken"). Fails if a fight is shorter than MIN_FIGHT_SECONDS or the
-## boss is still alive after MAX_FIGHT_SECONDS. "log" prints every damage event.
+##   ready (real sonar -> Exposed); against the Angler, when the Lure is ready
+##   she baits a charge at a pillar (the decoy just in front of it, Lure
+##   cooldown respected);
+## - both get out of the way during every telegraph / attack (out of a dash's
+##   line, away from the jaws / the slam ring), so its attacks can still land.
+## A downed bot is revived after revive_delay. Reports the fight time (and the
+## target window), the time and damage per phase, the damage by kind
+## (armoured / Exposed / stunned), pillar stuns and the hits the players took
+## (StageManager's "Hits taken"). Fails if a fight is shorter than
+## MIN_FIGHT_SECONDS or the boss is still alive after MAX_FIGHT_SECONDS.
+## "log" prints every damage event.
 
 const GAME_SCENE: String = "res://scenes/game.tscn"
 const PHYSICS_FPS: float = 60.0
 const MIN_FIGHT_SECONDS: float = 90.0
 const MAX_FIGHT_SECONDS: float = 600.0
+## Target fight length with these bots (seconds) per stage: [Calm, Challenge]
+## windows (reported, not a failure; only MIN_FIGHT_SECONDS fails).
+const TARGETS: Dictionary = {
+	0: [Vector2(120.0, 240.0), Vector2(180.0, 300.0)],
+	1: [Vector2(90.0, 150.0), Vector2(120.0, 180.0)],
+	2: [Vector2(90.0, 150.0), Vector2(120.0, 180.0)],
+}
 ## Skills the pair has by the boss (two picks each in stage 1).
 const ECHO_SKILLS: Dictionary = {"lure_pulse": 1, "longer_exposure": 1}
 const GUARDIAN_SKILLS: Dictionary = {"wide_swing": 1, "iron_lungs": 1}
@@ -30,6 +41,8 @@ var echo_side_offset: float = 60.0
 ## Dodging: how far out of the charge line / from the jaws they go.
 var charge_dodge: float = 190.0
 var bite_dodge: float = 320.0
+## Out of the slam ring by this much.
+var slam_dodge_margin: float = 100.0
 var revive_delay: float = 3.0
 ## A pillar is used for a bait when it is this far from the boss.
 var bait_min: float = 250.0
@@ -40,7 +53,7 @@ var _stage: StageManager
 var _builder: LevelBuilder
 var _echo: Player
 var _guardian: Player
-var _boss: AnglerBoss
+var _boss: Boss
 var _failures: int = 0
 var _attack_toggle: bool = false
 var _downed_time: Dictionary = {}
@@ -63,7 +76,6 @@ func _ready() -> void:
 
 func _run() -> void:
 	var args: PackedStringArray = OS.get_cmdline_user_args()
-	var which: String = args[0] if args.size() > 0 else "both"
 	Boss.damage_log_enabled = args.has("log")
 	_game = (load(GAME_SCENE) as PackedScene).instantiate() as Node2D
 	_stage = _game.get_node("StageManager") as StageManager
@@ -79,13 +91,20 @@ func _run() -> void:
 		if player.health.downed.is_connected(_stage._on_player_downed):
 			player.health.downed.disconnect(_stage._on_player_downed)
 	var modes: Array[SaveData.Mode] = []
-	if which != "challenge":
+	if not args.has("challenge"):
 		modes.append(SaveData.Mode.CALM)
-	if which != "calm":
+	if not args.has("calm"):
 		modes.append(SaveData.Mode.CHALLENGE)
+	var stages: Array[int] = []
+	for stage: int in [0, 1, 2]:
+		if args.has(str(stage + 1)):
+			stages.append(stage)
+	if stages.is_empty():
+		stages = [0, 1, 2]
 	var lines: PackedStringArray = PackedStringArray()
-	for mode: SaveData.Mode in modes:
-		lines.append(await _fight(mode))
+	for stage: int in stages:
+		for mode: SaveData.Mode in modes:
+			lines.append(await _fight(stage, mode))
 	print("\n".join(lines))
 	print("RESULT: %s" % ("FIGHT LENGTH OK" if _failures == 0 else "%d PROBLEM(S)" % _failures))
 	_game.queue_free()
@@ -95,11 +114,12 @@ func _run() -> void:
 	get_tree().quit(0 if _failures == 0 else 1)
 
 
-func _fight(mode: SaveData.Mode) -> String:
-	var mode_name: String = "Calm" if mode == SaveData.Mode.CALM else "Challenge"
+func _fight(stage: int, mode: SaveData.Mode) -> String:
+	var challenge: bool = mode == SaveData.Mode.CHALLENGE
+	var mode_name: String = "Stage %d %s" % [stage + 1, "Challenge" if challenge else "Calm"]
 	print("== Fight (%s) ==" % mode_name)
 	_stage.mode = mode
-	_stage.stage_index = 0
+	_stage.stage_index = stage
 	_stage._start_level(2)
 	for node: Node in get_tree().get_nodes_in_group("creatures"):
 		if node != _builder.get_boss():
@@ -107,7 +127,7 @@ func _fight(mode: SaveData.Mode) -> String:
 			node.queue_free()
 	if _builder.get_lockdown():
 		_builder.get_lockdown().enabled = false
-	_boss = _builder.get_boss() as AnglerBoss
+	_boss = _builder.get_boss() as Boss
 	_boss.killed.disconnect(_stage._on_boss_killed)
 	_boss.damage_taken.connect(_on_damage)
 	_echo.skills.set_skills(ECHO_SKILLS, Game.skill_catalog)
@@ -150,10 +170,12 @@ func _fight(mode: SaveData.Mode) -> String:
 		var start: float = float(_phase_start.get(p, -1.0))
 		var end: float = float(_phase_start.get(p + 1, _time))
 		phase_text.append("phase %d: %s, %.1f dmg" % [p, "%.0f s" % (end - start) if start >= 0.0 else "-", float(_phase_damage[p])])
-	var summary: String = "%s: %s in %d:%02d (%.0f s) | HP %.0f | %s | damage armoured %.1f / Exposed %.1f / stunned %.1f | %d hits, %d ignored, %d duplicate swings | %d pillar stuns, %d baits, %d pillars broken | hits taken by the players: %d, revives %d, defeats %d" % [
-		mode_name, "killed" if killed else "NOT killed", int(_time) / 60, int(_time) % 60, _time, _boss.boss_max_health,
+	var target: Vector2 = (TARGETS[stage] as Array)[1 if challenge else 0]
+	var angler := _boss as AnglerBoss
+	var summary: String = "%s (%s): %s in %d:%02d (%.0f s, target %.0f-%.0f s) | HP %.0f | %s | damage armoured %.1f / Exposed %.1f / stunned %.1f | %d hits, %d ignored, %d duplicate swings | %d pillar stuns, %d baits, %d pillars broken | hits taken by the players: %d, revives %d, defeats %d" % [
+		mode_name, _boss.name, "killed" if killed else "NOT killed", int(_time) / 60, int(_time) % 60, _time, target.x, target.y, _boss.boss_max_health,
 		" / ".join(phase_text), float(_kind_damage["armor"]), float(_kind_damage["exposed"]), float(_kind_damage["stunned"]),
-		_hits_logged, _ignored, _duplicates, _boss.pillar_stuns, _baits, _broken_pillars(), hits, _revives, _defeats]
+		_hits_logged, _ignored, _duplicates, angler.pillar_stuns if angler else 0, _baits, _broken_pillars(), hits, _revives, _defeats]
 	print("  " + summary)
 	if not killed:
 		_failures += 1
@@ -162,7 +184,8 @@ func _fight(mode: SaveData.Mode) -> String:
 		_failures += 1
 		print("  [FAIL] the fight lasted %.0f s (< %.0f s)" % [_time, MIN_FIGHT_SECONDS])
 	else:
-		print("  [ok] the fight lasted %.0f s (>= %.0f s)" % [_time, MIN_FIGHT_SECONDS])
+		print("  [ok] the fight lasted %.0f s (>= %.0f s)%s" % [_time, MIN_FIGHT_SECONDS,
+			"" if _time >= target.x and _time <= target.y else " - outside the target %.0f-%.0f s" % [target.x, target.y]])
 	_boss.damage_taken.disconnect(_on_damage)
 	_stage.mode = SaveData.Mode.CALM
 	return summary
@@ -190,7 +213,7 @@ func _approach(delta: float) -> void:
 	var side: Vector2 = center.direction_to(_guardian.global_position)
 	if side == Vector2.ZERO:
 		side = Vector2.UP
-	var guardian_spot: Vector2 = center + side * guardian_distance
+	var guardian_spot: Vector2 = center + side * minf(guardian_distance, _boss.body_radius + 50.0)
 	_move(_guardian, guardian_spot, delta)
 	_move(_echo, guardian_spot + side.orthogonal() * echo_side_offset + side * 20.0, delta)
 	_guardian.facing = _guardian.global_position.direction_to(center)
@@ -200,13 +223,17 @@ func _dodge(player: Player, delta: float) -> void:
 	if player.health.is_downed or _boss.current_attack == null:
 		return
 	var spot: Vector2 = player.global_position
-	if _boss.current_attack.id == &"charge":
+	var attack: StringName = _boss.current_attack.id
+	if attack == &"charge" or attack == &"lunge":
 		# Out of the line of the dash, to the nearer side.
-		var aim: Vector2 = _boss.get_aim()
+		var aim: Vector2 = _boss.call("get_aim")
 		var offset: Vector2 = player.global_position - _boss.global_position
 		var across: Vector2 = aim.orthogonal()
 		var side: float = signf(offset.dot(across)) if absf(offset.dot(across)) > 1.0 else 1.0
 		spot = _boss.global_position + aim * maxf(offset.dot(aim), 0.0) + across * side * charge_dodge
+	elif attack == &"slam":
+		var ring: float = float(_boss.get("slam_radius")) + slam_dodge_margin
+		spot = _boss.global_position + _boss.global_position.direction_to(player.global_position) * ring
 	else:
 		spot = _boss.global_position + _boss.global_position.direction_to(player.global_position) * bite_dodge
 	_move(player, spot, delta)
@@ -241,8 +268,9 @@ func _echo_pulse() -> void:
 
 
 func _echo_bait() -> void:
+	var angler := _boss as AnglerBoss
 	var lure := _echo.skills.active as LurePulseSkill
-	if lure == null or not lure.is_ready() or _boss.mode != Boss.Mode.IDLE or _echo.health.is_downed:
+	if angler == null or lure == null or not lure.is_ready() or _boss.mode != Boss.Mode.IDLE or _echo.health.is_downed:
 		return
 	var best_point: Vector2 = Vector2.INF
 	for node: Node in get_tree().get_nodes_in_group("arena_pillars"):
@@ -261,7 +289,7 @@ func _echo_bait() -> void:
 	# The Echo throws it (cooldown, cost); the boss hears it like a real ping.
 	lure._mark_used()
 	_baits += 1
-	_boss.hear_decoy(best_point, 500.0)
+	angler.hear_decoy(best_point, 500.0)
 
 
 func _handle_downed(player: Player, delta: float) -> void:

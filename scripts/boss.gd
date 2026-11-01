@@ -19,8 +19,10 @@ extends Creature
 ## - STUNNED (stun(seconds)): helpless; counts as Exposed when stun_exposed.
 ## - Calm vs Challenge: per-attack timing / damage, challenge_health_scale,
 ##   challenge_speed_scale.
-## A pulse makes it Exposed (with the Echo's "exposed_time_add" bonus), but a
-## finisher on an Exposed boss never kills it outright: _damage_multipliers decides.
+## Armoured: the sword deals armored_damage_scale unless it is Exposed (a
+## pulse, with the Echo's "exposed_time_add" bonus, or a stun): then
+## exposed_damage_scale / exposed_finisher_scale. A finisher never kills it
+## outright, and a new phase clears Exposed. _damage_multipliers decides.
 ## The boss stays in the "creatures" group (the sword, the sonar, the music:
 ## Creature.state is CHASE while it fights) but ignores pulses, noise, alerts
 ## and frenzy. Downed players are never targeted.
@@ -53,6 +55,11 @@ enum Mode { DORMANT, INTRO, IDLE, TELEGRAPH, ACTIVE, RECOVERY, TRANSITION, STUNN
 ## Challenge: more health and a little faster.
 @export var challenge_health_scale: float = 1.25
 @export var challenge_speed_scale: float = 1.1
+## Armour: sword damage share while it is not Exposed...
+@export var armored_damage_scale: float = 0.1
+## ...and while Exposed (a pulse, a stun): quick hits / the finisher.
+@export var exposed_damage_scale: float = 1.0
+@export var exposed_finisher_scale: float = 1.5
 ## Damage share taken during an attack's recovery (the vulnerable window).
 @export var recovery_damage_scale: float = 1.0
 ## A stun counts as Exposed (finisher damage, the Exposed look).
@@ -620,10 +627,12 @@ func _sees_a_player() -> bool:
 
 # --- Hooks for the boss script ------------------------------------------------
 
-## Named factors on a sword hit's damage (armour, Exposed, finisher...): their
-## product is applied; the damage log prints each one.
-func _damage_multipliers(_is_finisher: bool) -> Dictionary:
-	return {}
+## Named factors on a sword hit's damage: their product is applied; the damage
+## log prints each one. Armoured unless Exposed (boss scripts add their own).
+func _damage_multipliers(is_finisher: bool) -> Dictionary:
+	if not is_exposed():
+		return {"armor": armored_damage_scale}
+	return {"exposed": exposed_finisher_scale if is_finisher else exposed_damage_scale}
 
 
 ## How far a player is from the body's edge (negative = inside it).

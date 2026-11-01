@@ -40,7 +40,7 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   "Bosses"); stages 2-3 use "The Hollow Brute" (`PlaceholderBoss`,
   `scenes/boss_placeholder.tscn`: the plain round creature on the boss framework, with a
   telegraphed lunge (a dashed line shows the path) and a slam (a ring shows its reach); faster
-  each phase) until they get their own bosses. `test_stuck` uses `tools/large_creature.tscn`
+  each phase; HP 250 / 280, Challenge x1.35) until they get their own bosses. `test_stuck` uses `tools/large_creature.tscn`
   (a plain creature of boss size) instead.
   **Mending in a boss fight** (`Boss.allows_mending`): allowed while the boss is stunned or
   recovering, or farther than `mend_safe_distance` (400 px) from both players; never during a
@@ -56,8 +56,10 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   once per attack and player with a short knockback (`PlayerHealth.take_hit(from, source,
   damage, knockback)`) + the normal invulnerability, so hits never chain. Phases at
   `phase_thresholds` (66 % / 33 %) with a TRANSITION (cannot be hurt; one hit never skips a
-  phase). `stun(s)` counts as Exposed. A pulse makes it Exposed (+ `exposed_time_add`); a
-  finisher never kills it outright. Calm / Challenge: `challenge_health_scale`,
+  phase; a new phase clears Exposed). `stun(s)` counts as Exposed. **Armour** (every boss):
+  the sword deals `armored_damage_scale` (0.1) unless it is Exposed (a pulse, +
+  `exposed_time_add`, or a stun): then `exposed_damage_scale` (1) / `exposed_finisher_scale`
+  (1.5); a finisher never kills it outright. Calm / Challenge: `challenge_health_scale`,
   `challenge_speed_scale`, per-attack values. Ignores pulses, noise, alerts, frenzy;
   `Creature.state` is CHASE while it fights (boss music). Hooks: `_damage_multipliers`,
   `_contact_distance`, `_attack_distance`, `_pick_attack`, `_on_telegraph*`, `_on_attack_*`,
@@ -523,8 +525,9 @@ The world is tilted to match the characters, still 2D:
   - `sim_boss_fight.tscn`: the Angler fight in the real game played by two bots (pulse on
     cooldown, Lure baits into pillars, sword in every opening, dodging every telegraph);
     reports the fight time, time + damage per phase, damage by kind, pillar stuns and the
-    players' hits taken; fails under 90 s (target: Calm 2-4 min, Challenge 3-5):
-    `godot --headless --path . --fixed-fps 60 res://tools/sim_boss_fight.tscn -- both [log]`
+    players' hits taken, for every stage's boss (placeholders: no Lure baits); fails under
+    90 s; targets (reported): Angler Calm 2-4 min / Challenge 3-5, placeholders 1.5-2.5 / 2-3:
+    `godot --headless --path . --fixed-fps 60 res://tools/sim_boss_fight.tscn [-- calm|challenge] [1|2|3] [log]`
   - `angler_preview.tscn`: look preview of the Angler's states (F6; `-- capture <folder>`
     saves screenshots, needs a window)
   - `sound_test.tscn`: listen to every sound and the music crossfades (run it with F6)
