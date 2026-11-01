@@ -18,7 +18,6 @@ extends Node
 ## - cooldown readability: icon states, the ready flash and the ReadyCue on
 ##   the character (active skills and the Echo's pulse).
 
-const GAME_SCENE: String = "res://scenes/game.tscn"
 const CREATURE_SCENE: String = "res://scenes/creature.tscn"
 ## Random offers built per rule check.
 const OFFER_RUNS: int = 300
@@ -40,9 +39,8 @@ func _ready() -> void:
 
 func _run() -> void:
 	_catalog = Game.skill_catalog
-	_game = (load(GAME_SCENE) as PackedScene).instantiate() as Node2D
+	_game = GameSceneLoader.instantiate(SaveData.Mode.CALM)
 	_stage = _game.get_node("StageManager") as StageManager
-	_stage.test_mode = SaveData.Mode.CALM
 	add_child(_game)
 	_builder = _game.get_node("LevelBuilder") as LevelBuilder
 	_echo = _game.get_node("Echo") as Player

@@ -29,7 +29,6 @@ extends Node
 ##   crabs scuttle, plants and anemones shrink on a pulse, creatures ignore it
 ##   and the music stays calm.
 
-const GAME_SCENE: String = "res://scenes/game.tscn"
 const CREATURE_SCENE: String = "res://scenes/creature.tscn"
 const PHYSICS_FPS: float = 60.0
 ## Pathing runs per level (navigation on) and baseline runs (navigation off).
@@ -54,9 +53,8 @@ func _ready() -> void:
 
 
 func _run() -> void:
-	_game = (load(GAME_SCENE) as PackedScene).instantiate() as Node2D
+	_game = GameSceneLoader.instantiate(SaveData.Mode.CHALLENGE)
 	_stage = _game.get_node("StageManager") as StageManager
-	_stage.test_mode = SaveData.Mode.CHALLENGE
 	add_child(_game)
 	_builder = _game.get_node("LevelBuilder") as LevelBuilder
 	_awareness = _game.get_node("DepthAwareness") as DepthAwareness

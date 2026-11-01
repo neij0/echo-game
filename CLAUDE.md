@@ -554,7 +554,7 @@ The world is tilted to match the characters, still 2D:
     time and a little off, mines only known once revealed, oxygen from the vents only,
     revives by walking over); reports per run and averaged: fight time vs target, time /
     damage per phase, hits taken per phase and by what, defeats, revives, lowest oxygen;
-    fails under 90 s. Targets: Angler Calm 2:30-3:45 / Challenge 3-4 min, placeholders
+    fails when the mean of a stage + mode is under 90 s (single runs are noisy; min / max reported). Targets: Angler Calm 2:30-3:45 / Challenge 3-4 min, placeholders
     1.5-2.5 / 2-3:
     `godot --headless --path . --fixed-fps 60 res://tools/sim_boss_fight.tscn [-- calm|challenge] [1|2|3] [runs N] [log]`
   - `angler_preview.tscn`: look preview of the Angler's states (F6; `-- capture <folder>`
@@ -564,6 +564,10 @@ The world is tilted to match the characters, still 2D:
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it
     and saves it as `worlds/<world>/proposed_<seed>.tres` to edit by hand.
   - Note: `-s` tools run without autoloads, so they must not load scripts that use `Game`.
+  - `game_scene_loader.gd` (`GameSceneLoader.instantiate(mode)`): every scene test and the sim
+    load `game.tscn` through it; it resets the F6 playtest exports (`test_stage_index`,
+    `test_level_index`, `test_start_at`, `test_skills`), so playtest settings saved in the
+    scene never change a test.
 - `skills/` — `SkillDefinition`s (`echo/`, `guardian/`, `shared/`, `fallback/`) and
   `skill_catalog.tres`; `scenes/skills/` — the active skill scenes
 - `docs/` — design notes (e.g. `skills.md`: more skill ideas for later)

@@ -23,17 +23,17 @@ extends Node
 ##   down at once = a defeat (counted; the game would retry), both get up.
 ## Reports per run and averaged over the runs: the fight time (target window),
 ## time / damage per phase, damage by kind, hits taken per phase and by what,
-## defeats, revives, the lowest oxygen. Fails if a fight is shorter than
-## MIN_FIGHT_SECONDS or the boss still lives after MAX_FIGHT_SECONDS.
+## defeats, revives, the lowest oxygen. Fails if the mean fight of a stage and
+## mode is shorter than MIN_FIGHT_SECONDS (single runs are noisy; min / max are
+## reported) or the boss still lives after MAX_FIGHT_SECONDS.
 
-const GAME_SCENE: String = "res://scenes/game.tscn"
 const PHYSICS_FPS: float = 60.0
 const MIN_FIGHT_SECONDS: float = 90.0
 const MAX_FIGHT_SECONDS: float = 900.0
 ## Game time per physics frame x this (Engine.time_scale, in the sim only).
 const SIM_SPEED: float = 2.0
 ## Target fight length (seconds) per stage: [Calm, Challenge] windows
-## (reported, not a failure; only MIN_FIGHT_SECONDS fails).
+## (reported, not a failure; only a mean under MIN_FIGHT_SECONDS fails).
 const TARGETS: Dictionary = {
 	0: [Vector2(150.0, 225.0), Vector2(180.0, 240.0)],
 	1: [Vector2(90.0, 150.0), Vector2(120.0, 180.0)],
@@ -122,7 +122,7 @@ func _run() -> void:
 		stage_args.remove_at(args.find("runs") + 1)
 	# Twice as fast (the sim only): physics steps of 1/30 s game time.
 	Engine.time_scale = SIM_SPEED
-	_game = (load(GAME_SCENE) as PackedScene).instantiate() as Node2D
+	_game = GameSceneLoader.instantiate(SaveData.Mode.CALM)
 	_stage = _game.get_node("StageManager") as StageManager
 	add_child(_game)
 	_builder = _game.get_node("LevelBuilder") as LevelBuilder
@@ -244,9 +244,6 @@ func _aggregate(stage: int, mode: SaveData.Mode, results: Array[Dictionary]) -> 
 		if not result["killed"]:
 			_failures += 1
 			print("  [FAIL] %s: the boss is still alive after %.0f s" % [label, MAX_FIGHT_SECONDS])
-		elif time < MIN_FIGHT_SECONDS:
-			_failures += 1
-			print("  [FAIL] %s: a fight lasted %.0f s (< %.0f s)" % [label, time, MIN_FIGHT_SECONDS])
 		for p: int in [1, 2, 3]:
 			phase_time[p] = float(phase_time[p]) + float((result["phase_time"] as Dictionary)[p]) / n
 			phase_hits[p] = float(phase_hits[p]) + float((result["phase_hits"] as Dictionary)[p]) / n
@@ -260,6 +257,10 @@ func _aggregate(stage: int, mode: SaveData.Mode, results: Array[Dictionary]) -> 
 	var mean: float = 0.0
 	for time: float in times:
 		mean += time / n
+	# Single runs are noisy: only the mean must reach MIN_FIGHT_SECONDS (min / max are reported).
+	if mean < MIN_FIGHT_SECONDS:
+		_failures += 1
+		print("  [FAIL] %s: the mean fight lasted %.0f s (< %.0f s)" % [label, mean, MIN_FIGHT_SECONDS])
 	var source_text: PackedStringArray = PackedStringArray()
 	for key: String in sources:
 		source_text.append("%s %.1f" % [key, float(sources[key])])

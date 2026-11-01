@@ -11,7 +11,6 @@ extends Node
 ## Optional: -- log        (print every stuck window)
 ##           -- norecover  (safety net off: shows the real causes)
 
-const GAME_SCENE: String = "res://scenes/game.tscn"
 const CREATURE_SCENES: Array[String] = ["res://scenes/creature.tscn", "res://tools/large_creature.tscn"]
 const PHYSICS_FPS: float = 60.0
 const RUNS_PER_LEVEL: int = 4
@@ -21,6 +20,10 @@ const HOPS_PER_RUN: int = 4
 ## Stuck this many windows in a row = a real stuck (not a short bump).
 const STUCK_FAIL_WINDOWS: int = 2
 const MAX_PRINTED: int = 12
+## Fixed spawn seed and random seed: every run plays the same levels the same way.
+const SPAWN_SEED: int = 4242
+## Frames to wait at most for the navigation maps to sync after a build.
+const NAV_SYNC_MAX_FRAMES: int = 600
 
 var _game: Node2D
 var _stage: StageManager
@@ -39,11 +42,12 @@ func _run() -> void:
 	CreatureStuckWatch.log_enabled = "log" in OS.get_cmdline_user_args()
 	_recover = not "norecover" in OS.get_cmdline_user_args()
 	print("Safety net %s" % ("on" if _recover else "OFF"))
-	_game = (load(GAME_SCENE) as PackedScene).instantiate() as Node2D
+	seed(SPAWN_SEED)
+	_game = GameSceneLoader.instantiate(SaveData.Mode.CHALLENGE)
 	_stage = _game.get_node("StageManager") as StageManager
-	_stage.test_mode = SaveData.Mode.CHALLENGE
-	add_child(_game)
 	_builder = _game.get_node("LevelBuilder") as LevelBuilder
+	_builder.forced_seed = SPAWN_SEED
+	add_child(_game)
 	_echo = _game.get_node("Echo") as Player
 	_guardian = _game.get_node("Guardian") as Player
 	(_game.get_node("DepthAwareness") as DepthAwareness).decay_per_second = 0.0
@@ -204,6 +208,9 @@ func _safety_net_check() -> int:
 
 
 func _build(stage_index: int, level_index: int) -> void:
+	var map: RID = get_viewport().world_2d.navigation_map
+	var map_before: int = NavigationServer2D.map_get_iteration_id(map)
+	var large_before: int = NavigationServer2D.map_get_iteration_id(_builder._large_map) if _builder._large_map.is_valid() else -1
 	_stage.stage_index = stage_index
 	_stage._start_level(level_index)
 	for node: Node in get_tree().get_nodes_in_group("creatures"):
@@ -211,6 +218,15 @@ func _build(stage_index: int, level_index: int) -> void:
 		node.queue_free()
 	if _builder.get_lockdown():
 		_builder.get_lockdown().enabled = false
+	# The navigation maps sync on a worker thread (async iterations): under CPU
+	# load that takes more frames, so wait until both carry the new level.
+	for i: int in NAV_SYNC_MAX_FRAMES:
+		await _frames(1)
+		var large: RID = _builder._large_map
+		var large_synced: bool = not large.is_valid() or (NavigationServer2D.map_get_iteration_id(large) != large_before
+			and NavigationServer2D.map_get_iteration_id(large) > 0)
+		if NavigationServer2D.map_get_iteration_id(map) != map_before and large_synced:
+			break
 	await _frames(12)
 
 

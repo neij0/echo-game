@@ -29,8 +29,9 @@ extends Node
 ##   send them back, a stun), lure mines (count, dim, pulse reveal, touch,
 ##   fuse, a charge over one), the bubble vents (refill, vent prey).
 
-const GAME_SCENE: String = "res://scenes/game.tscn"
 const PHYSICS_FPS: float = 60.0
+## Fuse of the mine in the "fuse runs out" check (fixed, so it never depends on the lob).
+const MINE_TEST_FUSE: float = 1.0
 
 var _game: Node2D
 var _stage: StageManager
@@ -46,9 +47,8 @@ func _ready() -> void:
 
 
 func _run() -> void:
-	_game = (load(GAME_SCENE) as PackedScene).instantiate() as Node2D
+	_game = GameSceneLoader.instantiate(SaveData.Mode.CHALLENGE)
 	_stage = _game.get_node("StageManager") as StageManager
-	_stage.test_mode = SaveData.Mode.CHALLENGE
 	add_child(_game)
 	_builder = _game.get_node("LevelBuilder") as LevelBuilder
 	_echo = _game.get_node("Echo") as Player
@@ -744,21 +744,30 @@ func _test_mines() -> void:
 	_check(is_equal_approx(guardian_full - _guardian.health.value, _boss.challenge_mine_damage), "one hit from the blast")
 	_teleport(_guardian, _entrance())
 	# The fuse: a player beside (not on) a mine is hit when it blows.
-	var fused: AnglerMine = null
+	# Deterministic: one mine only, on a fixed open spot, with a fixed fuse.
+	var fused: AnglerMine = _mines()[0]
 	for mine: AnglerMine in _mines():
-		if fused == null or mine.get_fuse_left() < fused.get_fuse_left():
-			fused = mine
-	_teleport(_echo, fused.global_position + Vector2(60.0, 0.0))
+		if mine != fused:
+			mine.fizzle()
+	var fuse_spot: Vector2 = _boss.global_position + Vector2(0.0, -300.0)
+	fused.global_position = fuse_spot
+	fused._fuse_left = MINE_TEST_FUSE
+	_teleport(_guardian, _entrance())
+	_protect_players()
+	_teleport(_echo, fuse_spot + Vector2(60.0, 0.0))
 	_echo.health._invulnerable_left = 0.0
 	var echo_full: float = _echo.health.value
-	var fuse_left: float = fused.get_fuse_left()
-	for i: int in int((fuse_left + 0.5) * PHYSICS_FPS):
+	var blast_frame: int = -1
+	for i: int in int((MINE_TEST_FUSE + 0.5) * PHYSICS_FPS):
 		await _frames(1)
 		if _echo.health.value < echo_full:
+			blast_frame = i
 			break
-		if is_instance_valid(fused):
-			_teleport(_echo, fused.global_position + Vector2(60.0, 0.0))
-	_check(is_equal_approx(echo_full - _echo.health.value, _boss.challenge_mine_damage), "its fuse runs out: the blast hits her once (%.1f s)" % fuse_left)
+		_teleport(_echo, fuse_spot + Vector2(60.0, 0.0))
+	var blast_time: float = float(blast_frame + 1) / PHYSICS_FPS
+	_check(blast_frame >= 0 and absf(blast_time - MINE_TEST_FUSE) < 0.1
+		and is_equal_approx(echo_full - _echo.health.value, _boss.challenge_mine_damage),
+		"its fuse runs out: the blast hits her once (after %.2f s, fuse %.1f s)" % [blast_time, MINE_TEST_FUSE])
 	_teleport(_echo, _entrance())
 	for mine: AnglerMine in _mines():
 		mine.fizzle()

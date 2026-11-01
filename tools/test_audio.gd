@@ -10,7 +10,6 @@ extends Node
 ## players' sounds, the mending hum, the shard hum, the collapse sounds and
 ## the ambience one-shots.
 
-const GAME_SCENE: String = "res://scenes/game.tscn"
 const PHYSICS_FPS: float = 60.0
 const REQUIRED_SOUNDS: Array[String] = [
 	"sword_whoosh_1", "sword_whoosh_2", "sword_whoosh_3", "sword_impact", "sword_impact_heavy", "sword_finisher",
@@ -42,9 +41,8 @@ func _ready() -> void:
 
 
 func _run() -> void:
-	_game = (load(GAME_SCENE) as PackedScene).instantiate() as Node2D
+	_game = GameSceneLoader.instantiate(SaveData.Mode.CHALLENGE)
 	_stage = _game.get_node("StageManager") as StageManager
-	_stage.test_mode = SaveData.Mode.CHALLENGE
 	add_child(_game)
 	_builder = _game.get_node("LevelBuilder") as LevelBuilder
 	_audio = _game.get_node("AudioDirector") as AudioDirector
