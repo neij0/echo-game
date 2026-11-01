@@ -65,6 +65,8 @@ signal exposed_kill(creature_position: Vector2)
 @export_group("Combo")
 ## Seconds after a hit ends during which pressing continues the combo.
 @export var combo_window: float = 0.45
+## Deflectables (the Angler's orbs) are hit this much beyond the blade's reach.
+@export var deflect_margin: float = 18.0
 
 @export_group("Noise")
 ## Depth Awareness added by every swing.
@@ -315,6 +317,15 @@ func _apply_damage() -> void:
 		else:
 			_play(heavy_impact_sound if is_finisher else impact_sound, creature_position)
 		hit_landed.emit(creature, damage)
+	# Things the blade can knock back (the Angler's orbs): deflect(attacker).
+	for node: Node in get_tree().get_nodes_in_group("deflectables"):
+		var target := node as Node2D
+		if target == null:
+			continue
+		var offset: Vector2 = target.global_position - player.global_position
+		if offset.length() <= reach + deflect_margin and absf(_swing_dir.angle_to(offset)) <= half_arc:
+			if target.call("deflect", player):
+				_play(impact_sound, target.global_position)
 
 
 func _on_exposed_kill(creature_position: Vector2) -> void:

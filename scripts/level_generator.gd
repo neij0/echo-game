@@ -57,6 +57,7 @@ func propose(world: WorldConfig, proposal_seed: int) -> LevelDefinition:
 		definition.stations = template.stations
 		definition.shard_count = template.shard_count
 		definition.boss_max_health = template.boss_max_health
+		definition.boss_challenge_health_scale = template.boss_challenge_health_scale
 	definition.boss = boss_scene
 	return definition
 

@@ -116,6 +116,13 @@ var lunge: float = 0.0
 var roll: float = 0.0
 var gill_open: float = 0.0
 var fin_tuck: float = 0.0
+## 0-1: fins spread wide and long (the tail sweep's warning).
+var fin_flare: float = 0.0
+## Sideways bend at the tail (pixels, signed): the tail sweep.
+var sweep_curl: float = 0.0
+## The pectoral fin rays drawn last frame (world segments: root, tip), for
+## AnglerGlow's fin flare.
+var fin_rays: Array[PackedVector2Array] = []
 ## Extra sideways kink at the middle (hit flinch), pixels.
 var kink: float = 0.0
 var _time: float = 0.0
@@ -196,7 +203,7 @@ func _update_shape(wave_scale: float = 1.0) -> void:
 		var side: Vector2 = forward.orthogonal()
 		var amplitude: float = wave_amplitude * wave_scale * lerpf(wave_head_share, 1.0, s * s)
 		var lateral: float = sin(_wave_phase - s * TAU * wave_count) * amplitude
-		lateral += coil * coil_curl * s * s + kink * sin(s * PI)
+		lateral += coil * coil_curl * s * s + kink * sin(s * PI) + sweep_curl * s * s
 		shape[i] = spine[i] + side * lateral
 		widths[i] = head_half_width * _profile(s)
 	# Forward directions from the waved shape (the outline follows the wave).
@@ -420,8 +427,11 @@ func _draw() -> void:
 	_draw_tail_fin()
 	_draw_fin(pelvic_at, pelvic_length, 4, 50.0, 1.0)
 	_draw_fin(pelvic_at, pelvic_length, 4, 50.0, -1.0)
-	_draw_fin(pectoral_at, pectoral_length * (1.0 - 0.45 * fin_tuck), pectoral_rays, pectoral_spread_degrees, 1.0)
-	_draw_fin(pectoral_at, pectoral_length * (1.0 - 0.45 * fin_tuck), pectoral_rays, pectoral_spread_degrees, -1.0)
+	fin_rays.clear()
+	var pectoral: float = pectoral_length * (1.0 - 0.45 * fin_tuck) * (1.0 + 0.7 * fin_flare)
+	var spread: float = pectoral_spread_degrees + 35.0 * fin_flare
+	_draw_fin(pectoral_at, pectoral, pectoral_rays, spread, 1.0, true)
+	_draw_fin(pectoral_at, pectoral, pectoral_rays, spread, -1.0, true)
 	# The flank (3/4 view) and the lower jaw's flank.
 	draw_colored_polygon(_offset(local_outline, down), flank_color)
 	var jaw: PackedVector2Array = _jaw_polygon(0.0)
@@ -467,7 +477,7 @@ func _jaw_polygon(inset: float) -> PackedVector2Array:
 	return polygon
 
 
-func _draw_fin(at: float, length: float, rays: int, spread_degrees: float, side: float) -> void:
+func _draw_fin(at: float, length: float, rays: int, spread_degrees: float, side: float, record: bool = false) -> void:
 	var root: Vector2 = point_at(at, side * 0.92)
 	var forward: Vector2 = forward_at(at)
 	var outward: Vector2 = forward.orthogonal() * side
@@ -492,6 +502,8 @@ func _draw_fin(at: float, length: float, rays: int, spread_degrees: float, side:
 		_batch.add_convex(PackedVector2Array([local_root, to_local(edge[k]), to_local(edge[k + 1])]), fin_color)
 	for tip: Vector2 in ray_tips:
 		_batch.add_segment(local_root, to_local(tip), 1.6, 0.6, fin_ray_color)
+		if record:
+			fin_rays.append(PackedVector2Array([root, tip]))
 	_batch.draw(self)
 
 

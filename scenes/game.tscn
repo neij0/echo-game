@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://bneoqles2aqj7"]
 
 [ext_resource type="Script" uid="uid://ddvhutml5xxh5" path="res://scripts/level_builder.gd" id="1_level"]
-[ext_resource type="Resource" path="res://worlds/ocean.tres" id="2_world"]
+[ext_resource type="Resource" uid="uid://qp2rgn1walox" path="res://worlds/ocean.tres" id="2_world"]
 [ext_resource type="PackedScene" path="res://scenes/echo.tscn" id="3_echo"]
 [ext_resource type="PackedScene" path="res://scenes/guardian.tscn" id="4_guardian"]
 [ext_resource type="Script" uid="uid://c4pm0e3pr1yx0" path="res://scripts/depth_awareness.gd" id="6_awareness"]
@@ -101,6 +101,8 @@ script = ExtResource("9_glow")
 [node name="StageManager" type="Node" parent="." unique_id=1761008208 node_paths=PackedStringArray("level_builder", "awareness", "end_screen", "escape_event", "skill_choice_screen")]
 script = ExtResource("15_stage")
 world = ExtResource("2_world")
+test_level_index = 2
+test_start_at = 1
 level_builder = NodePath("../LevelBuilder")
 awareness = NodePath("../DepthAwareness")
 end_screen = NodePath("../EndScreen")

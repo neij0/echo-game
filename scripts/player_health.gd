@@ -58,6 +58,10 @@ var value: float = 0.0
 var is_downed: bool = false
 var last_cause: Cause = Cause.CREATURE
 var challenge_mode: bool = false
+## The last take_hit: was it blocked (the Shield), and what sent it (a creature,
+## a boss, an orb, a mine...). Read right after take_hit.
+var last_hit_blocked: bool = false
+var last_hit_source: Node2D
 var _invulnerable_left: float = 0.0
 var _since_damage: float = 0.0
 
@@ -121,9 +125,12 @@ func make_invulnerable(seconds: float) -> void:
 ## damage / knockback < 0 = this mode's hit damage / knockback_speed (a boss
 ## attack passes its own).
 func take_hit(from_position: Vector2, source: Node2D = null, damage: float = -1.0, knockback: float = -1.0) -> void:
+	last_hit_blocked = false
+	last_hit_source = source
 	if is_downed or is_invulnerable():
 		return
 	if player and _is_blocked(from_position, source):
+		last_hit_blocked = true
 		hit_blocked.emit()
 		return
 	hit_taken.emit()

@@ -63,6 +63,8 @@ extends Resource
 @export var boss: PackedScene
 ## Overrides the boss scene's max_health (0 = keep the scene's value).
 @export var boss_max_health: int = 0
+## Overrides the boss scene's challenge_health_scale (0 = keep the scene's value).
+@export var boss_challenge_health_scale: float = 0.0
 
 
 func is_boss_level() -> bool:

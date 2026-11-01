@@ -1,9 +1,11 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/angler_boss.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/creature_echo.gd" id="2_echo"]
 [ext_resource type="Script" path="res://scripts/boss_attack.gd" id="3_attack"]
 [ext_resource type="PackedScene" path="res://scenes/creature.tscn" id="4_summon"]
+[ext_resource type="PackedScene" path="res://scenes/bosses/angler_orb.tscn" id="5_orb"]
+[ext_resource type="PackedScene" path="res://scenes/bosses/angler_mine.tscn" id="6_mine"]
 
 [sub_resource type="Resource" id="Attack_charge"]
 script = ExtResource("3_attack")
@@ -11,12 +13,12 @@ id = &"charge"
 weight = 2.0
 min_range = 160.0
 max_range = 1400.0
-calm_telegraph = 1.1
-challenge_telegraph = 0.9
+calm_telegraph = 1.0
+challenge_telegraph = 0.85
 active_time = 1.6
-calm_recovery = 1.6
-challenge_recovery = 1.2
-cooldown = 2.5
+calm_recovery = 1.4
+challenge_recovery = 1.0
+cooldown = 1.8
 calm_damage = 1.0
 challenge_damage = 1.5
 knockback_speed = 380.0
@@ -25,16 +27,63 @@ knockback_speed = 380.0
 script = ExtResource("3_attack")
 id = &"bite"
 weight = 3.0
-max_range = 190.0
-calm_telegraph = 1.0
+max_range = 200.0
+calm_telegraph = 0.95
 challenge_telegraph = 0.8
 active_time = 1.2
-calm_recovery = 1.4
-challenge_recovery = 1.0
-cooldown = 3.5
+calm_recovery = 1.2
+challenge_recovery = 0.9
+cooldown = 2.5
 calm_damage = 1.0
 challenge_damage = 1.5
 knockback_speed = 340.0
+
+[sub_resource type="Resource" id="Attack_sweep"]
+script = ExtResource("3_attack")
+id = &"sweep"
+weight = 0.0
+max_range = 400.0
+calm_telegraph = 0.9
+challenge_telegraph = 0.75
+active_time = 0.45
+calm_recovery = 1.1
+challenge_recovery = 0.8
+cooldown = 4.0
+calm_damage = 1.0
+challenge_damage = 1.5
+knockback_speed = 520.0
+
+[sub_resource type="Resource" id="Attack_orbs"]
+script = ExtResource("3_attack")
+id = &"orbs"
+min_phase = 2
+weight = 2.0
+max_range = 1400.0
+calm_telegraph = 1.0
+challenge_telegraph = 0.85
+active_time = 1.2
+calm_recovery = 1.0
+challenge_recovery = 0.8
+cooldown = 6.0
+calm_damage = 1.0
+challenge_damage = 1.5
+knockback_speed = 280.0
+
+[sub_resource type="Resource" id="Attack_mines"]
+script = ExtResource("3_attack")
+id = &"mines"
+min_phase = 3
+weight = 2.5
+max_range = 1400.0
+calm_telegraph = 1.1
+challenge_telegraph = 0.9
+active_time = 1.2
+calm_recovery = 1.1
+challenge_recovery = 0.8
+cooldown = 9.0
+calm_damage = 1.0
+challenge_damage = 1.5
+knockback_speed = 420.0
 
 [sub_resource type="CircleShape2D" id="Shape_body"]
 radius = 50.0
@@ -48,11 +97,19 @@ collision_mask = 1
 motion_mode = 1
 script = ExtResource("1_script")
 summon_scene = ExtResource("4_summon")
+orb_scene = ExtResource("5_orb")
+mine_scene = ExtResource("6_mine")
 name_key = "boss_angler_name"
 subtitle_key = "boss_angler_subtitle"
-attacks = Array[ExtResource("3_attack")]([SubResource("Attack_charge"), SubResource("Attack_bite")])
-max_health = 360
-challenge_health_scale = 1.45
+attacks = Array[ExtResource("3_attack")]([SubResource("Attack_charge"), SubResource("Attack_bite"), SubResource("Attack_sweep"), SubResource("Attack_orbs"), SubResource("Attack_mines")])
+challenge_health_scale = 1.15
+phase_thresholds = PackedFloat32Array(0.62, 0.3)
+move_speed = 150.0
+keep_distance = 200.0
+circle_speed_ratio = 0.25
+attack_gap = 0.45
+challenge_attack_gap = 0.3
+max_health = 130
 body_radius = 80.0
 body_color = Color(0.25, 1, 0.85, 1)
 eye_color = Color(0.75, 0.9, 1, 1)

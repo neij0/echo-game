@@ -40,7 +40,7 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   "Bosses"); stages 2-3 use "The Hollow Brute" (`PlaceholderBoss`,
   `scenes/boss_placeholder.tscn`: the plain round creature on the boss framework, with a
   telegraphed lunge (a dashed line shows the path) and a slam (a ring shows its reach); faster
-  each phase; HP 250 / 280, Challenge x1.35) until they get their own bosses. `test_stuck` uses `tools/large_creature.tscn`
+  each phase; HP 48 / 50, Challenge x1.25 per level via `LevelDefinition.boss_challenge_health_scale`) until they get their own bosses. `test_stuck` uses `tools/large_creature.tscn`
   (a plain creature of boss size) instead.
   **Mending in a boss fight** (`Boss.allows_mending`): allowed while the boss is stunned or
   recovering, or farther than `mend_safe_distance` (400 px) from both players; never during a
@@ -66,8 +66,9 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   `_on_recovery*`, `_on_blocked` (Shield), `_on_stunned`, `_on_phase_start`, `_on_death`...
 - **The Angler** (`AnglerBoss`, look = `AnglerVisual` + `AnglerVoice`): armoured
   (`armored_damage_scale` 0.1; Exposed by a pulse: quick hits x1, finisher x1.5; stunned
-  against a pillar: x1.5 on top). HP 360 (Calm), x1.45 in Challenge. A new phase clears
-  Exposed; transitions last 2.4 s. Damage log: `Boss.damage_log_enabled` / `log_damage`
+  against a pillar: x1.5 on top). HP: see the level (tuned with the human-like bots of
+  `sim_boss_fight`). Aggressive: short `attack_gap` (Calm / Challenge), little circling. A new phase clears
+  Exposed; transitions last 2.0 s. Damage log: `Boss.damage_log_enabled` / `log_damage`
   prints every hit (source, base, multipliers, HP before / after, phase, mode, distance) and
   `damage_taken` carries it; one damage per swing and target (same attacker + same physics
   frame = ignored). **Charge** (telegraph: lure
@@ -76,11 +77,31 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   3: rubble, dust, no collision, navigation rebaked); a wall ends the dash; the raised Shield
   blocks it (recoil + longer recovery); a Lure Pulse decoy within its hearing
   (`decoy_listeners` group, `hear_decoy`) baits the next charge at the decoy. **Bite** (player
-  near the head): jaw opens, 2 snaps. Phase 2: charges x1.3, the lure now and then goes dark
-  and glows at a fake spot (its light moves). Phase 3: summons (`calm_summon_count` 1,
-  `challenge_summon_count` 2) and a darker arena (`Darkness.set_extra_darkness`, lifted when
-  it dies). The visual is always a side profile (flips left/right, tilts at most 30°).
-  The boss arena room has 4 pillars (diamond round the Boss marker).
+  near the head): jaw opens, 2 snaps. **Tail sweep** (every phase, weight 0 = only as a
+  punish): a player within `sweep_trigger_distance` of its body for `*_sweep_trigger_time`
+  (Calm 3.5 s / Challenge 3 s) -> it coils with flared, glowing fins (telegraph ~0.8 s), then
+  spins its tail round (a glowing arc, half a turn = a flip): everyone within `sweep_reach`
+  is hit once and knocked away. **Vents**: a player lingering at a `BubbleVent` may become its
+  prey (`*_vent_punish_chance`): its next charge goes at them. Phase 2: charges x1.3, the
+  lure now and then goes dark and glows at a fake spot (its light moves), and **homing orbs**
+  (`AnglerOrb`, `orbs` attack: 2 / 3 slow electric orbs, ~8 s, slow turn; the pulse pops them
+  (`sonar_targets`); the sword (`deflectables` group, `SwordAbility` calls `deflect`) or a
+  Shield block (`PlayerHealth.last_hit_blocked`) sends them home: a returning orb stuns it
+  `orb_stun_time` (Exposed)). Phase 3: summons (`calm_summon_count` 1,
+  `challenge_summon_count` 2), a darker arena (`Darkness.set_extra_darkness`, lifted when it
+  dies), orbs less often (`orb_phase3_cooldown_scale`) and **lure mines** (`AnglerMine`,
+  `mines` attack: 4 / 5 lobbed round the arena; dim, the pulse reveals them; a fuse with a
+  speeding blink and the blast ring just before it; touching one or the fuse = a blast
+  (`mine_blast_radius` 110, one hit each); charging over one blows it up on the Angler:
+  `mine_damage_ratio` of its health + `mine_stun_time`, so a Lure bait can lead it there).
+  Its orbs and mines fizzle when it dies. Every attack: per-mode values, one hit per player,
+  the normal invulnerability (no chained knockback), procedural sounds (`boss_angler_*`).
+  The visual is always a side profile (flips left/right, tilts at most 30°). The boss arena
+  room has 4 pillars (diamond round the Boss marker) and 2 `Vent*` markers.
+- **Bubble vents** (`BubbleVent`, `WorldConfig.bubble_vent_scene`, spawned by the
+  LevelBuilder on the boss arena's `Vent*` markers): a player standing within `radius`
+  refills `refill_per_second` (22 %/s) of their oxygen; rising bubbles + a soft light; the
+  `world_vent_breathe` sound while someone breathes there.
 - **Every attempt** (retries included) reshuffles creature, coral, station and shard spawn
   points with a new seed, so a retry never plays exactly the same.
 - **Room grid rules** (`LevelBuilder`, `RoomGrid`): every room is a square of
@@ -527,12 +548,15 @@ The world is tilted to match the characters, still 2D:
     break (navigation), Shield block, Lure baiting, no chained hits (bite), phases per mode
     (transition, fake lure, summons, darkness, death):
     `godot --headless --path . --fixed-fps 60 res://tools/test_boss.tscn`
-  - `sim_boss_fight.tscn`: the Angler fight in the real game played by two bots (pulse on
-    cooldown, Lure baits into pillars, sword in every opening, dodging every telegraph);
-    reports the fight time, time + damage per phase, damage by kind, pillar stuns and the
-    players' hits taken, for every stage's boss (placeholders: no Lure baits); fails under
-    90 s; targets (reported): Angler Calm 2-4 min / Challenge 3-5, placeholders 1.5-2.5 / 2-3:
-    `godot --headless --path . --fixed-fps 60 res://tools/sim_boss_fight.tscn [-- calm|challenge] [1|2|3] [log]`
+  - `sim_boss_fight.tscn`: every stage's boss fight in the real game played by two
+    human-like bots (reaction 0.4-0.6 s, sometimes frozen, imperfect dodges, 30 % of openings
+    missed, orbs batted back 60 % of the time, Lure baits at pillars / known mines half the
+    time and a little off, mines only known once revealed, oxygen from the vents only,
+    revives by walking over); reports per run and averaged: fight time vs target, time /
+    damage per phase, hits taken per phase and by what, defeats, revives, lowest oxygen;
+    fails under 90 s. Targets: Angler Calm 2:30-3:45 / Challenge 3-4 min, placeholders
+    1.5-2.5 / 2-3:
+    `godot --headless --path . --fixed-fps 60 res://tools/sim_boss_fight.tscn [-- calm|challenge] [1|2|3] [runs N] [log]`
   - `angler_preview.tscn`: look preview of the Angler's states (F6; `-- capture <folder>`
     saves screenshots, needs a window)
   - `sound_test.tscn`: listen to every sound and the music crossfades (run it with F6)

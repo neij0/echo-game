@@ -15,7 +15,8 @@ extends Node2D
 ## the seed), a muted colour accent per room (AreaAccent), the Echo Shards on
 ## the planned spots, Sentinels next to some of them, the LockdownRoom in the lockdown cell, a ShardDoor on the boss
 ## arena's doorway (boss levels; its ArenaPillars rebake the mesh when they
-## break), and a navigation mesh baked from every rock,
+## break, BubbleVents on its "Vent*" markers), and a navigation mesh baked
+## from every rock,
 ## so creatures can path through doorways and around corners. When a door or a
 ## lockdown barrier changes, the mesh is rebaked one frame later, while the
 ## camera shake started by that event hides the short hitch. Large creatures
@@ -163,6 +164,8 @@ class Layout:
 	## Boss levels: the rock that seals the arena's doorway until all shards
 	## are collected (this node's space).
 	var door_polygon: PackedVector2Array = PackedVector2Array()
+	## Boss levels: the arena's oxygen vents ("Vent*" markers).
+	var vents: Array[Vector2] = []
 	## Reference point of the lockdown room (its Goal marker), if any.
 	var lockdown_point: Vector2
 	var has_lockdown: bool = false
@@ -354,6 +357,7 @@ func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 		return layout
 	layout.goal = exit_room.position + goal_markers[0].position
 	if layout.has_boss:
+		layout.vents = _marker_positions(exit_room, "Vent")
 		# The arena's doorway gets a door (the same shape as a seal).
 		for side: int in RoomGrid.SIDES:
 			if layout.links[definition.exit_cell].has(definition.exit_cell + RoomGrid.direction(side)):
@@ -659,6 +663,8 @@ func _instantiate(layout: Layout) -> void:
 	if layout.has_boss:
 		_boss = _spawn_boss(layout.goal)
 		_add_door(layout.door_polygon, floor_color.lightened(world.rock_fill_lift))
+		for vent: Vector2 in layout.vents:
+			_spawn(world.bubble_vent_scene, vent)
 	else:
 		_goal = _spawn(world.goal_scene, layout.goal) as AncientLight
 	_add_lockdown(layout, floor_color.lightened(world.rock_fill_lift))
@@ -853,6 +859,8 @@ func _spawn_boss(at: Vector2) -> Creature:
 	# Before _ready, so the creature starts with the overridden health.
 	if _definition.boss_max_health > 0:
 		boss.max_health = _definition.boss_max_health
+	if _definition.boss_challenge_health_scale > 0.0 and boss is Boss:
+		(boss as Boss).challenge_health_scale = _definition.boss_challenge_health_scale
 	boss.position = at
 	# The Echo's echo points to it once the arena door is open.
 	boss.add_to_group("level_exit")

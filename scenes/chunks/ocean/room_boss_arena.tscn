@@ -48,6 +48,12 @@ position = Vector2(800, 880)
 [node name="Boss" type="Marker2D" parent="Spawns"]
 position = Vector2(800, 1000)
 
+[node name="Vent1" type="Marker2D" parent="Spawns"]
+position = Vector2(520, 1200)
+
+[node name="Vent2" type="Marker2D" parent="Spawns"]
+position = Vector2(1080, 1200)
+
 [node name="Coral1" type="Marker2D" parent="Spawns"]
 position = Vector2(430, 820)
 

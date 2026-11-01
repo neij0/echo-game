@@ -21,6 +21,8 @@ extends Resource
 @export var shard_scene: PackedScene
 ## The sealed doorway of a boss arena (ShardDoor), opened by the shards.
 @export var shard_door_scene: PackedScene
+## The oxygen vents of a boss arena (BubbleVent), on its "Vent*" markers.
+@export var bubble_vent_scene: PackedScene
 ## The Sentinel that guards some of the shards (LevelDefinition.sentinels).
 @export var sentinel_scene: PackedScene
 ## The creature type of the lockdown wave.

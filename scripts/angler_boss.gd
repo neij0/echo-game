@@ -16,10 +16,24 @@ extends Boss
 ##   decoy ("decoy_listeners" group: hear_decoy).
 ## - Bite ("bite" attack, a player close to its head): the jaw opens wide
 ##   (telegraph), then bite_snaps snaps, each one lunging a little.
+## - Tail sweep ("sweep", every phase, weight 0: only as a punish): a player
+##   close to its body for sweep_trigger_time (per mode) makes it coil with
+##   flared fins (telegraph), then it spins and sweeps its tail round: every
+##   player within sweep_reach of its body is hit once and knocked away.
+## - Bubble vents (BubbleVent) refill oxygen; a player standing at one for
+##   vent_notice_time may become its "vent prey" (vent_punish_chance per stay,
+##   per mode): its next charge goes at them.
 ## - Phase 2: faster charges; now and then the lure goes dark and glows at a
-##   fake spot (its light moves there too).
-## - Phase 3: calls small creatures (summon_scene, per mode) and the arena
-##   gets darker (Darkness.set_extra_darkness).
+##   fake spot (its light moves there too). Homing orbs ("orbs"): the lure
+##   flares, then fires orb_count (per mode) slow electric AnglerOrbs at the
+##   players; the Echo's pulse pops them, the Guardian's sword or Shield sends
+##   them back: an orb that comes home stuns it (orb_stun_time, Exposed).
+## - Phase 3: calls small creatures (summon_scene, per mode), the arena gets
+##   darker (Darkness.set_extra_darkness), orbs come less often
+##   (orb_phase3_cooldown_scale), and lure mines ("mines"): mine_count (per
+##   mode) AnglerMines lobbed round the arena, dim until a pulse shows them,
+##   each blowing up after its fuse or when touched; charging over one blows it
+##   up on the Angler (mine_damage_ratio of its health + mine_stun_time).
 ## Touching it never hurts (Boss: soft push only).
 
 @export_group("Armor")
@@ -77,6 +91,64 @@ extends Boss
 @export var summon_distance: float = 360.0
 @export_range(0.0, 1.0) var phase3_darkness: float = 0.35
 
+@export_group("Tail Sweep")
+## A player this close to its body (contact distance) for sweep_trigger_time
+## (Calm / Challenge) seconds makes it sweep.
+@export var sweep_trigger_distance: float = 110.0
+@export var calm_sweep_trigger_time: float = 3.5
+@export var challenge_sweep_trigger_time: float = 3.0
+## The tail reaches this far from its body.
+@export var sweep_reach: float = 130.0
+@export var sweep_shake_strength: float = 6.0
+@export var sweep_shake_time: float = 0.3
+
+@export_group("Vents")
+## Standing at a vent this long makes a player noticed...
+@export var vent_notice_time: float = 1.2
+## ...and with this chance (once per stay) its next charge goes at them.
+@export_range(0.0, 1.0) var calm_vent_punish_chance: float = 0.4
+@export_range(0.0, 1.0) var challenge_vent_punish_chance: float = 0.6
+
+@export_group("Orbs")
+@export var orb_scene: PackedScene
+@export var calm_orb_count: int = 2
+@export var challenge_orb_count: int = 3
+## Seconds between two orbs of one volley.
+@export var orb_interval: float = 0.18
+@export var calm_orb_speed: float = 100.0
+@export var challenge_orb_speed: float = 125.0
+## Degrees per second an orb turns towards its player (slow: they can be outrun).
+@export var calm_orb_turn_rate: float = 55.0
+@export var challenge_orb_turn_rate: float = 75.0
+@export var orb_lifetime: float = 8.0
+@export var calm_orb_damage: float = 1.0
+@export var challenge_orb_damage: float = 1.5
+@export var orb_knockback: float = 280.0
+## A deflected orb that reaches it stuns it this long (counts as Exposed).
+@export var orb_stun_time: float = 1.8
+## Phase 3 fires orbs less often (cooldown x this).
+@export var orb_phase3_cooldown_scale: float = 1.7
+
+@export_group("Mines")
+@export var mine_scene: PackedScene
+@export var calm_mine_count: int = 4
+@export var challenge_mine_count: int = 5
+## Seconds between two mines of one volley.
+@export var mine_interval: float = 0.12
+## Fuse (seconds) picked in this range per mine.
+@export var calm_mine_fuse: Vector2 = Vector2(7.0, 8.5)
+@export var challenge_mine_fuse: Vector2 = Vector2(6.0, 7.0)
+@export var mine_blast_radius: float = 110.0
+@export var calm_mine_damage: float = 1.0
+@export var challenge_mine_damage: float = 1.5
+@export var mine_knockback: float = 420.0
+## Mines land this far from it, at least mine_spacing apart.
+@export var mine_distance: Vector2 = Vector2(180.0, 620.0)
+@export var mine_spacing: float = 150.0
+## A mine blowing up on it: this share of its health and a short stun.
+@export var mine_damage_ratio: float = 0.05
+@export var mine_stun_time: float = 1.5
+
 @export_group("Body")
 ## Half thickness of its body (contact push, charge hits).
 @export var body_half_width: float = 46.0
@@ -87,6 +159,21 @@ var charges_blocked: int = 0
 var pillar_stuns: int = 0
 var wall_bumps: int = 0
 var summoned: Array[Creature] = []
+var sweeps_done: int = 0
+var orbs_fired: int = 0
+var orb_stuns: int = 0
+var mines_launched: int = 0
+var mine_hits: int = 0
+var vent_charges: int = 0
+## Seconds a player has been close to its body (the sweep trigger).
+var close_time: float = 0.0
+var _vent_time: Dictionary = {}
+var _vent_rolled: Dictionary = {}
+var _vent_prey: Player
+var _shots_left: int = 0
+var _shot_left: float = 0.0
+var _volley_target: int = 0
+var _mine_spots: Array[Vector2] = []
 var bait_point: Vector2 = Vector2.ZERO
 var _bait_left: float = 0.0
 ## The charge / bite direction.
@@ -117,7 +204,11 @@ func _physics_process(delta: float) -> void:
 		return
 	_bait_left = maxf(_bait_left - delta, 0.0)
 	visual.set_exposed(1.0 if is_exposed() and mode != Mode.DEAD else 0.0)
+	visual.set_sweep_wind(clampf(1.0 - mode_left / maxf(current_attack.get_telegraph(challenge_mode), 0.01), 0.0, 1.0)
+		if mode == Mode.TELEGRAPH and current_attack and current_attack.id == &"sweep" else 0.0)
 	_update_fake_lure(delta)
+	_update_close_time(delta)
+	_update_vents(delta)
 
 
 ## A Lure Pulse ping (LurePulseSkill): within its hearing the decoy draws the
@@ -180,12 +271,32 @@ func _attack_distance(attack: BossAttack, player: Player) -> float:
 	return global_position.distance_to(player.global_position)
 
 
-## A decoy beats the usual choice: the next attack is a charge at it.
+## A player too close for too long -> the tail sweep; a decoy -> a charge at
+## it; a noticed player at a vent -> a charge at them; else the usual choice.
 func _pick_attack() -> BossAttack:
+	var sweep: BossAttack = get_attack(&"sweep")
+	if sweep and close_time >= get_sweep_trigger_time() and get_cooldown(&"sweep") <= 0.0:
+		close_time = 0.0
+		return sweep
 	var charge: BossAttack = get_attack(&"charge")
 	if _bait_left > 0.0 and charge and charge.min_phase <= phase:
 		return charge
+	if is_instance_valid(_vent_prey) and charge and get_cooldown(&"charge") <= 0.0 and _at_vent(_vent_prey):
+		target_player = _vent_prey
+		_vent_prey = null
+		vent_charges += 1
+		return charge
 	return super()
+
+
+func _attack_cooldown(attack: BossAttack) -> float:
+	if attack.id == &"orbs" and phase >= 3:
+		return attack.cooldown * orb_phase3_cooldown_scale
+	return attack.cooldown
+
+
+func get_sweep_trigger_time() -> float:
+	return challenge_sweep_trigger_time if challenge_mode else calm_sweep_trigger_time
 
 
 func _on_fight_start() -> void:
@@ -199,8 +310,16 @@ func _on_idle_start() -> void:
 
 func _on_telegraph_start(attack: BossAttack) -> void:
 	_aim = _aim_direction()
+	if attack.id == &"sweep":
+		# Coils with flared fins (AnglerVisual.set_sweep_wind), no lure flare.
+		visual.set_state(AnglerVisual.State.SWIM)
+		visual.face(Vector2.ZERO)
+		_play("boss_angler_sweep_wind")
+		return
 	visual.set_state(AnglerVisual.State.TELEGRAPH)
 	visual.face(_aim)
+	if attack.id == &"orbs":
+		_play("boss_angler_orb_charge")
 	if attack.id == &"bite":
 		_snaps_done = 0
 		_snap_left = 0.0
@@ -209,7 +328,12 @@ func _on_telegraph_start(attack: BossAttack) -> void:
 
 func _on_telegraph(attack: BossAttack, delta: float) -> void:
 	var desired: Vector2 = Vector2.ZERO
-	if attack.id == &"charge":
+	if attack.id == &"sweep" or attack.id == &"orbs" or attack.id == &"mines":
+		# It holds still (it gathers itself / its lure flares) and faces its prey.
+		if attack.id != &"sweep":
+			_aim = _aim_direction()
+			visual.face(_aim)
+	elif attack.id == &"charge":
 		# It keeps turning on its target until the aim locks.
 		if mode_left > charge_aim_lock:
 			_aim = _aim_direction()
@@ -223,6 +347,21 @@ func _on_telegraph(attack: BossAttack, delta: float) -> void:
 
 
 func _on_attack_start(attack: BossAttack) -> void:
+	if attack.id == &"sweep":
+		sweeps_done += 1
+		visual.sweep(attack.active_time)
+		_play("boss_angler_sweep")
+		get_tree().call_group("shared_camera", "shake_with", sweep_shake_strength, sweep_shake_time)
+		velocity = Vector2.ZERO
+		return
+	if attack.id == &"orbs" or attack.id == &"mines":
+		visual.set_state(AnglerVisual.State.SWIM)
+		_shots_left = (challenge_orb_count if challenge_mode else calm_orb_count) if attack.id == &"orbs" \
+			else (challenge_mine_count if challenge_mode else calm_mine_count)
+		_shot_left = 0.0
+		_mine_spots.clear()
+		velocity = Vector2.ZERO
+		return
 	if attack.id == &"charge":
 		_bait_left = 0.0
 		visual.face(Vector2.ZERO)
@@ -234,10 +373,15 @@ func _on_attack_start(attack: BossAttack) -> void:
 
 
 func _on_attack_active(attack: BossAttack, delta: float) -> void:
-	if attack.id == &"charge":
-		_update_charge(delta)
-	else:
-		_update_bite(delta)
+	match attack.id:
+		&"charge":
+			_update_charge(delta)
+		&"bite":
+			_update_bite(delta)
+		&"sweep":
+			_update_sweep(delta)
+		&"orbs", &"mines":
+			_update_volley(attack, delta)
 
 
 func _on_recovery_start(_attack: BossAttack) -> void:
@@ -287,6 +431,32 @@ func _on_phase_start(new_phase: int) -> void:
 func _on_death() -> void:
 	visual.set_fake_lure(Vector2.ZERO, 0.0)
 	visual.die()
+	# Its orbs and mines go out with it.
+	for node: Node in get_tree().get_nodes_in_group("angler_projectiles"):
+		if node.has_method("fizzle"):
+			node.call("fizzle")
+		elif node.has_method("pop"):
+			node.call("pop")
+
+
+## A deflected orb came home: stunned (Exposed).
+func on_orb_return(_orb: Node2D) -> void:
+	if not is_fighting() or mode == Mode.TRANSITION:
+		return
+	orb_stuns += 1
+	visual.hit(global_position + Vector2.UP * 40.0)
+	stun(orb_stun_time)
+
+
+## A mine blew up on it (it charged over it): damage and a short stun.
+func on_mine_hit(_mine: Node2D) -> void:
+	if not is_fighting():
+		return
+	mine_hits += 1
+	apply_external_damage(boss_max_health * mine_damage_ratio, "mine")
+	if is_fighting() and mode != Mode.TRANSITION:
+		visual.hit(_mine.global_position if is_instance_valid(_mine) else global_position)
+		stun(mine_stun_time)
 
 
 func _after_move(_delta: float) -> void:
@@ -329,6 +499,11 @@ func _update_charge(delta: float) -> void:
 	if not hit.is_empty() and hit["collider"] is RockWall:
 		_charge_hit_rock(hit["collider"] as RockWall)
 		return
+	# Over a mine: it blows up on the Angler (AnglerMine -> on_mine_hit).
+	for node: Node in get_tree().get_nodes_in_group("angler_mines"):
+		var mine := node as AnglerMine
+		if mine and mine.try_trigger_by_boss(_contact_distance(mine.global_position)):
+			return
 	for player: Player in Players.all(get_tree()):
 		if mode != Mode.ACTIVE:
 			return
@@ -375,6 +550,140 @@ func _update_bite(delta: float) -> void:
 					strike(player)
 	if _snaps_done >= bite_snaps and _snap_left <= 0.0 and _snap_check_left < 0.0:
 		end_active()
+
+
+## The tail sweep: whoever is within sweep_reach of its body while it spins is
+## hit once (Boss.strike: one per attack and player, knockback, invulnerability).
+func _update_sweep(delta: float) -> void:
+	velocity = velocity.lerp(Vector2.ZERO, 1.0 - exp(-steering * delta))
+	for player: Player in Players.all(get_tree()):
+		if mode != Mode.ACTIVE:
+			return
+		if _contact_distance(player.global_position) <= sweep_reach:
+			strike(player)
+
+
+## Orbs / mines: one launch every orb_interval / mine_interval from the lure.
+func _update_volley(attack: BossAttack, delta: float) -> void:
+	velocity = velocity.lerp(Vector2.ZERO, 1.0 - exp(-steering * delta))
+	_shot_left -= delta
+	if _shots_left > 0 and _shot_left <= 0.0:
+		_shots_left -= 1
+		if attack.id == &"orbs":
+			_shot_left = orb_interval
+			_fire_orb()
+		else:
+			_shot_left = mine_interval
+			_launch_mine()
+	if _shots_left <= 0 and _shot_left <= 0.0:
+		end_active()
+
+
+func _fire_orb() -> void:
+	if orb_scene == null:
+		return
+	var prey: Array[Player] = _standing_players()
+	if prey.is_empty():
+		return
+	var chosen: Player = prey[_volley_target % prey.size()]
+	_volley_target += 1
+	var orb := orb_scene.instantiate() as AnglerOrb
+	var from: Vector2 = visual.get_orb_position()
+	var spread: float = randf_range(-0.6, 0.6)
+	orb.setup(self, chosen, from.direction_to(chosen.global_position).rotated(spread),
+		challenge_orb_speed if challenge_mode else calm_orb_speed,
+		challenge_orb_turn_rate if challenge_mode else calm_orb_turn_rate, orb_lifetime,
+		challenge_orb_damage if challenge_mode else calm_orb_damage, orb_knockback)
+	orb.position = get_parent().to_local(from)
+	get_parent().add_child(orb)
+	orbs_fired += 1
+	_play("boss_angler_orb_fire")
+
+
+func _launch_mine() -> void:
+	if mine_scene == null:
+		return
+	var spot: Vector2 = _pick_mine_spot()
+	_mine_spots.append(spot)
+	var fuse_range: Vector2 = challenge_mine_fuse if challenge_mode else calm_mine_fuse
+	var mine := mine_scene.instantiate() as AnglerMine
+	var from: Vector2 = visual.get_orb_position()
+	mine.setup(self, get_parent().to_local(from), get_parent().to_local(spot), randf_range(fuse_range.x, fuse_range.y),
+		mine_blast_radius, challenge_mine_damage if challenge_mode else calm_mine_damage, mine_knockback)
+	get_parent().add_child(mine)
+	mines_launched += 1
+	_play("boss_angler_mine_launch")
+
+
+## Open floor round it, away from the other mines of this volley and rock.
+func _pick_mine_spot() -> Vector2:
+	var map: RID = get_world_2d().navigation_map
+	var best: Vector2 = global_position
+	var best_gap: float = -INF
+	for attempt: int in 12:
+		var wanted: Vector2 = global_position + Vector2.from_angle(randf() * TAU) * randf_range(mine_distance.x, mine_distance.y)
+		var spot: Vector2 = NavigationServer2D.map_get_closest_point(map, wanted)
+		var gap: float = INF
+		for other: Vector2 in _mine_spots:
+			gap = minf(gap, other.distance_to(spot))
+		for node: Node in get_tree().get_nodes_in_group("angler_mines"):
+			gap = minf(gap, (node as Node2D).global_position.distance_to(spot))
+		if gap >= mine_spacing:
+			return spot
+		if gap > best_gap:
+			best_gap = gap
+			best = spot
+	return best
+
+
+func _standing_players() -> Array[Player]:
+	var result: Array[Player] = []
+	for player: Player in Players.all(get_tree()):
+		if not player.health.is_downed:
+			result.append(player)
+	return result
+
+
+## How long a standing player has stayed close (the sweep trigger).
+func _update_close_time(delta: float) -> void:
+	if mode != Mode.IDLE and mode != Mode.RECOVERY:
+		return
+	var close: bool = false
+	for player: Player in _standing_players():
+		if _contact_distance(player.global_position) <= sweep_trigger_distance:
+			close = true
+	close_time = close_time + delta if close else maxf(close_time - delta * 2.0, 0.0)
+
+
+## Players lingering at a vent may become its prey.
+func _update_vents(delta: float) -> void:
+	if not is_fighting():
+		return
+	var chance: float = challenge_vent_punish_chance if challenge_mode else calm_vent_punish_chance
+	for player: Player in Players.all(get_tree()):
+		if not _at_vent(player):
+			_vent_time.erase(player)
+			_vent_rolled.erase(player)
+			continue
+		_vent_time[player] = float(_vent_time.get(player, 0.0)) + delta
+		if float(_vent_time[player]) >= vent_notice_time and not _vent_rolled.has(player):
+			_vent_rolled[player] = true
+			if randf() < chance:
+				_vent_prey = player
+
+
+func _at_vent(player: Player) -> bool:
+	for node: Node in get_tree().get_nodes_in_group("bubble_vents"):
+		var vent := node as BubbleVent
+		if vent and vent.is_player_at(player):
+			return true
+	return false
+
+
+func _play(sound_name: String) -> void:
+	var audio: AudioDirector = AudioDirector.find(get_tree())
+	if audio:
+		audio.play(sound_name, global_position)
 
 
 func _aim_direction() -> Vector2:

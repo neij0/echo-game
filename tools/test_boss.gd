@@ -24,7 +24,10 @@ extends Node
 ##   a HUD part (debug lines shown or hidden);
 ## - the F6 playtest start (StageManager.test_level_index / test_start_at):
 ##   at the arena door (door open, boss asleep), inside the arena (it wakes),
-##   and a Calm retry back to the same spot.
+##   and a Calm retry back to the same spot;
+## - the tail sweep (staying close), homing orbs (pulse pops, sword / Shield
+##   send them back, a stun), lure mines (count, dim, pulse reveal, touch,
+##   fuse, a charge over one), the bubble vents (refill, vent prey).
 
 const GAME_SCENE: String = "res://scenes/game.tscn"
 const PHYSICS_FPS: float = 60.0
@@ -67,6 +70,10 @@ func _run() -> void:
 	await _test_placeholder()
 	await _test_hit_count()
 	await _test_playtest_start()
+	await _test_sweep()
+	await _test_orbs()
+	await _test_mines()
+	await _test_vents()
 
 	print("RESULT: %s" % ("ALL BOSS CHECKS PASSED" if _failures == 0 else "%d CHECK(S) FAILED" % _failures))
 	_game.queue_free()
@@ -553,6 +560,283 @@ func _test_playtest_start() -> void:
 	_stage.test_start_at = StageManager.TestStart.LEVEL_START
 	_stage.mode = SaveData.Mode.CHALLENGE
 	_protect_players()
+
+
+## Every attack frozen except these ids.
+func _freeze_except(boss: Boss, ids: Array[StringName]) -> void:
+	for attack: BossAttack in boss.attacks:
+		boss._cooldowns[attack.id] = 0.0 if ids.has(attack.id) else 999.0
+
+
+## Damages it into a phase (and waits out the transition).
+func _to_phase(target_phase: int) -> void:
+	while _boss.phase < target_phase:
+		_boss.expose(5.0)
+		await _frames(1)
+		_boss.take_damage(1000, _guardian, 0.0, 0.0, true)
+	await _frames(int((_boss.transition_time + 0.2) * PHYSICS_FPS))
+	_freeze(_boss)
+
+
+func _test_sweep() -> void:
+	print("== Tail sweep (players stay close) ==")
+	await _build_fighting()
+	_freeze_except(_boss, [&"sweep"])
+	_boss.move_speed = 0.0
+	_teleport(_guardian, _entrance())
+	_teleport(_echo, _boss.global_position + Vector2(0.0, -95.0))
+	_echo.health._invulnerable_left = 0.0
+	var full: float = _echo.health.value
+	var wound: bool = false
+	var hit_speed: float = 0.0
+	var waited: float = 0.0
+	for i: int in int((_boss.get_sweep_trigger_time() + 3.5) * PHYSICS_FPS):
+		await _frames(1)
+		waited += 1.0 / PHYSICS_FPS
+		if _boss.visual._sweep_wind > 0.3:
+			wound = true
+		if hit_speed == 0.0 and _echo.health.value < full:
+			hit_speed = _echo.velocity.length()
+		if _boss.sweeps_done > 0 and _boss.mode == Boss.Mode.RECOVERY:
+			break
+		# She stays close (the player keeps hugging it) until it sweeps.
+		if _boss.mode == Boss.Mode.IDLE:
+			_teleport(_echo, _boss.global_position + Vector2(0.0, -95.0))
+	var sweep: BossAttack = _boss.get_attack(&"sweep")
+	print("  swept after %.1f s, knockback %.0f px/s" % [waited, hit_speed])
+	_check(_boss.sweeps_done == 1, "staying close makes it sweep (after ~%.1f s)" % _boss.get_sweep_trigger_time())
+	_check(wound, "the telegraph: it coils with flared fins")
+	_check(is_equal_approx(full - _echo.health.value, sweep.get_damage(true)) and _boss.strikes_landed == 1, "one hit")
+	_check(hit_speed > 300.0, "it knocks her away")
+
+
+func _test_orbs() -> void:
+	print("== Homing orbs (phase 2) ==")
+	await _build_fighting()
+	await _to_phase(2)
+	_boss.move_speed = 0.0
+	_teleport(_echo, _boss.global_position + Vector2(380.0, -380.0))
+	_teleport(_guardian, _boss.global_position + Vector2(430.0, -340.0))
+	_boss.start_attack(_boss.get_attack(&"orbs"))
+	var volley: float = _boss.get_attack(&"orbs").get_telegraph(true) + _boss.orb_interval * float(_boss.challenge_orb_count) + 0.1
+	await _frames(int(volley * PHYSICS_FPS))
+	var orbs: Array[AnglerOrb] = _orbs()
+	_check(orbs.size() == _boss.challenge_orb_count and _boss.orbs_fired == _boss.challenge_orb_count, "it fires %d orbs (Challenge)" % orbs.size())
+	_check(_boss.get_attack(&"orbs").min_phase == 2, "orbs start in phase 2")
+	# The Echo's pulse pops them.
+	var pulse: PulseAbility = _echo.find_children("*", "PulseAbility", true, false)[0] as PulseAbility
+	pulse.cooldown_left = 0.0
+	pulse.emit_pulse()
+	await _frames(int(1.6 * PHYSICS_FPS))
+	var homing: int = 0
+	for orb: AnglerOrb in orbs:
+		if is_instance_valid(orb) and orb.is_homing():
+			homing += 1
+	_check(homing == 0, "the Echo's pulse pops them")
+	# The Guardian's sword sends one back: it stuns the Angler.
+	_freeze(_boss)
+	await _frames(int(2.0 * PHYSICS_FPS))
+	_freeze(_boss)
+	_boss.start_attack(_boss.get_attack(&"orbs"))
+	await _frames(int(1.5 * PHYSICS_FPS))
+	# The Echo stays behind him (the shared camera keeps them together).
+	_teleport(_echo, _guardian.global_position + _boss.global_position.direction_to(_guardian.global_position) * 120.0)
+	var orb: AnglerOrb = _orbs()[0] if not _orbs().is_empty() else null
+	_check(orb != null, "a new volley")
+	if orb == null:
+		return
+	for other: AnglerOrb in _orbs():
+		if other != orb:
+			other.pop()
+	orb.target = _guardian
+	var swung: bool = false
+	for i: int in int(6.0 * PHYSICS_FPS):
+		await _frames(1)
+		if not is_instance_valid(orb):
+			break
+		_guardian.facing = _guardian.global_position.direction_to(orb.global_position)
+		if orb.is_homing() and orb.global_position.distance_to(_guardian.global_position) < 70.0 and not swung:
+			swung = true
+			Input.action_press("p2_action")
+		elif swung:
+			Input.action_release("p2_action")
+		if _boss.orb_stuns > 0:
+			break
+	Input.action_release("p2_action")
+	_check(_boss.orb_stuns == 1, "a sword hit sends it back: it stuns the Angler")
+	_check(_boss.mode == Boss.Mode.STUNNED and _boss.is_exposed(), "stunned counts as Exposed")
+	# The Shield sends one back too.
+	await _frames(int((_boss.orb_stun_time + 0.3) * PHYSICS_FPS))
+	_freeze(_boss)
+	_give(_guardian, "shield", 1)
+	var shield := _guardian.skills.active as ShieldSkill
+	Input.action_press("p2_skill")
+	await _frames(3)
+	_boss.start_attack(_boss.get_attack(&"orbs"))
+	await _frames(int(1.5 * PHYSICS_FPS))
+	orb = _orbs()[0] if not _orbs().is_empty() else null
+	for other: AnglerOrb in _orbs():
+		if other != orb:
+			other.pop()
+	_guardian.health._invulnerable_left = 0.0
+	var guardian_full: float = _guardian.health.value
+	var deflected: bool = false
+	if orb:
+		orb.target = _guardian
+		for i: int in int(6.0 * PHYSICS_FPS):
+			await _frames(1)
+			if not is_instance_valid(orb):
+				break
+			shield.shield_direction = _guardian.global_position.direction_to(orb.global_position)
+			if orb.is_deflected():
+				deflected = true
+				break
+	Input.action_release("p2_skill")
+	_check(deflected and _guardian.health.value == guardian_full, "the Shield sends it back (no damage)")
+	_give(_guardian, "", 0)
+	_protect_players()
+
+
+func _test_mines() -> void:
+	print("== Lure mines (phase 3) ==")
+	await _build_fighting()
+	await _to_phase(3)
+	for creature: Creature in _boss.summoned:
+		if is_instance_valid(creature):
+			creature.queue_free()
+	_boss.move_speed = 0.0
+	_teleport(_echo, _entrance())
+	_teleport(_guardian, _entrance() + Vector2(40.0, 0.0))
+	_boss.start_attack(_boss.get_attack(&"mines"))
+	await _frames(int(3.2 * PHYSICS_FPS))
+	var mines: Array[AnglerMine] = _mines()
+	_check(mines.size() == _boss.challenge_mine_count, "it lobs %d mines (Challenge)" % mines.size())
+	var dim: bool = true
+	for mine: AnglerMine in mines:
+		dim = dim and not mine.is_revealed()
+	_check(dim, "they lie dim in the dark")
+	var pulse: PulseAbility = _echo.find_children("*", "PulseAbility", true, false)[0] as PulseAbility
+	_teleport(_echo, _boss.global_position + Vector2(0.0, -300.0))
+	pulse.cooldown_left = 0.0
+	pulse.emit_pulse()
+	await _frames(int(1.6 * PHYSICS_FPS))
+	var revealed: int = 0
+	for mine: AnglerMine in mines:
+		if is_instance_valid(mine) and mine.is_revealed():
+			revealed += 1
+	# Every mine the pulse front can see (no rock in between) is revealed.
+	var space: PhysicsDirectSpaceState2D = get_viewport().world_2d.direct_space_state
+	var visible_mines: int = 0
+	for mine: AnglerMine in mines:
+		if not is_instance_valid(mine) or mine.global_position.distance_to(_echo.global_position) > pulse.get_radius():
+			continue
+		var query := PhysicsRayQueryParameters2D.create(_echo.global_position, mine.global_position, 1)
+		if space.intersect_ray(query).is_empty():
+			visible_mines += 1
+	_check(revealed >= visible_mines and revealed > 0, "the pulse reveals every mine in its sight (%d revealed, %d in sight, %d total)" % [revealed, visible_mines, mines.size()])
+	# Touching one blows it up; the blast hits once.
+	var touched: AnglerMine = mines[0]
+	_guardian.health._invulnerable_left = 0.0
+	var guardian_full: float = _guardian.health.value
+	_teleport(_guardian, touched.global_position)
+	await _frames(2)
+	_check(not is_instance_valid(touched) or not touched.is_armed(), "touching a mine blows it up")
+	_check(is_equal_approx(guardian_full - _guardian.health.value, _boss.challenge_mine_damage), "one hit from the blast")
+	_teleport(_guardian, _entrance())
+	# The fuse: a player beside (not on) a mine is hit when it blows.
+	var fused: AnglerMine = null
+	for mine: AnglerMine in _mines():
+		if fused == null or mine.get_fuse_left() < fused.get_fuse_left():
+			fused = mine
+	_teleport(_echo, fused.global_position + Vector2(60.0, 0.0))
+	_echo.health._invulnerable_left = 0.0
+	var echo_full: float = _echo.health.value
+	var fuse_left: float = fused.get_fuse_left()
+	for i: int in int((fuse_left + 0.5) * PHYSICS_FPS):
+		await _frames(1)
+		if _echo.health.value < echo_full:
+			break
+		if is_instance_valid(fused):
+			_teleport(_echo, fused.global_position + Vector2(60.0, 0.0))
+	_check(is_equal_approx(echo_full - _echo.health.value, _boss.challenge_mine_damage), "its fuse runs out: the blast hits her once (%.1f s)" % fuse_left)
+	_teleport(_echo, _entrance())
+	for mine: AnglerMine in _mines():
+		mine.fizzle()
+	# Charging over a mine blows it up on the Angler.
+	await _frames(int(1.0 * PHYSICS_FPS))
+	_freeze(_boss)
+	await _frames(int(2.0 * PHYSICS_FPS))
+	_freeze(_boss)
+	var direction := Vector2(0.0, -1.0)
+	var bait: Vector2 = _boss.global_position + Vector2(-260.0, -60.0)
+	direction = _boss.global_position.direction_to(bait)
+	var planted := (load("res://scenes/bosses/angler_mine.tscn") as PackedScene).instantiate() as AnglerMine
+	var spot: Vector2 = _boss.global_position + direction * 170.0
+	planted.setup(_boss, _builder._level.to_local(spot), _builder._level.to_local(spot), 30.0, _boss.mine_blast_radius, 1.0, 300.0)
+	_builder._level.add_child(planted)
+	await _frames(int(1.0 * PHYSICS_FPS))
+	_teleport(_echo, bait)
+	_boss.target_player = _echo
+	var before: float = _boss.boss_health
+	_boss.start_attack(_boss.get_attack(&"charge"))
+	for i: int in int(3.0 * PHYSICS_FPS):
+		await _frames(1)
+		if _boss.mine_hits > 0:
+			break
+	_check(_boss.mine_hits == 1, "charging over a mine blows it up on the Angler")
+	_check(_boss.mode == Boss.Mode.STUNNED and before - _boss.boss_health >= _boss.boss_max_health * _boss.mine_damage_ratio - 0.01, "damage + a short stun")
+	_protect_players()
+
+
+func _test_vents() -> void:
+	print("== Bubble vents ==")
+	await _build_fighting()
+	var vents: Array[Node] = get_tree().get_nodes_in_group("bubble_vents")
+	_check(vents.size() == 2, "the arena has 2 vents")
+	if vents.is_empty():
+		return
+	var vent := vents[0] as BubbleVent
+	_freeze(_boss)
+	_boss.move_speed = 0.0
+	# The Guardian stays close (the shared camera keeps the players together),
+	# just outside the vent.
+	_teleport(_guardian, vent.global_position + Vector2(0.0, -(vent.radius + 50.0)))
+	_teleport(_echo, vent.global_position)
+	_echo.pressure.value = _echo.pressure.max_value * 0.2
+	await _frames(int(2.0 * PHYSICS_FPS))
+	_check(_echo.pressure.get_ratio() > 0.55, "standing at a vent refills oxygen (20 %% -> %.0f %% in 2 s)" % (_echo.pressure.get_ratio() * 100.0))
+	# A player lingering there may become its prey (chance forced to 1 here).
+	_boss.challenge_vent_punish_chance = 1.0
+	_teleport(_echo, vent.global_position + Vector2(0.0, -(vent.radius + 30.0)))
+	await _frames(2)
+	_teleport(_echo, vent.global_position)
+	_freeze_except(_boss, [&"charge"])
+	_boss._gap_left = 999.0
+	await _frames(int((_boss.vent_notice_time + 0.3) * PHYSICS_FPS))
+	_boss._gap_left = 0.0
+	var charged: bool = false
+	for i: int in int(1.0 * PHYSICS_FPS):
+		await _frames(1)
+		if _boss.current_attack and _boss.current_attack.id == &"charge":
+			charged = true
+			break
+	_check(charged and _boss.target_player == _echo and _boss.vent_charges == 1, "it charges the player at the vent")
+	_protect_players()
+
+
+func _orbs() -> Array[AnglerOrb]:
+	var result: Array[AnglerOrb] = []
+	for node: Node in get_tree().get_nodes_in_group("angler_projectiles"):
+		if node is AnglerOrb and (node as AnglerOrb).is_homing():
+			result.append(node as AnglerOrb)
+	return result
+
+
+func _mines() -> Array[AnglerMine]:
+	var result: Array[AnglerMine] = []
+	for node: Node in get_tree().get_nodes_in_group("angler_mines"):
+		result.append(node as AnglerMine)
+	return result
 
 
 # --- Helpers -----------------------------------------------------------------------

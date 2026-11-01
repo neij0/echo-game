@@ -42,7 +42,7 @@ const ESCAPE_MIN_RATIO: float = 1.6
 ## Generator proposals checked (normal and boss levels each).
 const GENERATOR_PROPOSALS: int = 3
 const GENERATOR_TRIES: int = 60
-const MARKER_PREFIXES: Array[String] = ["Player", "Goal", "Boss", "Shard", "Creature", "Coral", "Station"]
+const MARKER_PREFIXES: Array[String] = ["Player", "Goal", "Boss", "Shard", "Creature", "Coral", "Station", "Vent"]
 ## Landmarks per level, free space from the room's rock (beyond the footprint),
 ## from every spawn marker, and from the doorway corridors.
 const LANDMARKS_MIN: int = 1

@@ -51,7 +51,7 @@ enum Mode { DORMANT, INTRO, IDLE, TELEGRAPH, ACTIVE, RECOVERY, TRANSITION, STUNN
 ## Health shares where a new phase starts (phase 2 at the first, 3 at the next).
 @export var phase_thresholds: PackedFloat32Array = PackedFloat32Array([0.66, 0.33])
 ## Seconds of a phase change (it roars; cannot be hurt).
-@export var transition_time: float = 2.4
+@export var transition_time: float = 2.0
 ## Challenge: more health and a little faster.
 @export var challenge_health_scale: float = 1.25
 @export var challenge_speed_scale: float = 1.1
@@ -87,6 +87,7 @@ enum Mode { DORMANT, INTRO, IDLE, TELEGRAPH, ACTIVE, RECOVERY, TRANSITION, STUNN
 @export_range(0.0, 1.0) var circle_speed_ratio: float = 0.4
 ## Seconds between two attacks at least (after a recovery).
 @export var attack_gap: float = 0.7
+@export var challenge_attack_gap: float = 0.5
 
 @export_group("Contact")
 ## A player this close to the body (Boss._contact_distance) is pushed aside
@@ -235,6 +236,30 @@ func take_damage(amount: int, attacker: Player, _stagger_time: float, _knockback
 	return is_finisher and was_exposed
 
 
+## Damage that is not a sword hit (a mine, ...): no armour, the phase gates
+## and the log as usual.
+func apply_external_damage(amount: float, source_name: String) -> void:
+	var info: Dictionary = {
+		"time": Time.get_ticks_msec() / 1000.0, "source": source_name, "base": int(roundf(amount)),
+		"finisher": false, "phase": phase, "mode": get_mode_name(), "hp_before": boss_health,
+		"hp_after": boss_health, "dealt": 0.0, "multipliers": {}, "distance": 0.0, "contact": 0.0, "result": "",
+	}
+	if not can_be_hurt():
+		info["result"] = "ignored (%s)" % get_mode_name()
+		_log_damage(info)
+		return
+	_flash_left = hit_flash_time
+	_apply_damage(amount)
+	info["dealt"] = amount
+	info["hp_after"] = boss_health
+	info["result"] = "phase %d -> %d" % [int(info["phase"]), phase] if phase != int(info["phase"]) else ("dead" if _dying else "hit")
+	_log_damage(info)
+
+
+func get_attack_gap() -> float:
+	return challenge_attack_gap if challenge_mode else attack_gap
+
+
 func _log_damage(info: Dictionary) -> void:
 	damage_taken.emit(info)
 	if not (log_damage or damage_log_enabled):
@@ -312,7 +337,7 @@ func start_fight() -> void:
 	if mode != Mode.INTRO:
 		return
 	mode = Mode.IDLE
-	_gap_left = attack_gap
+	_gap_left = get_attack_gap()
 	_health_bar.show_bar(name_key, get_health_ratio(), phase_thresholds)
 	if name_key != "":
 		_title.show_title(name_key, subtitle_key)
@@ -346,7 +371,7 @@ func stun(seconds: float) -> void:
 	if not is_fighting() or mode == Mode.TRANSITION:
 		return
 	if current_attack:
-		_cooldowns[current_attack.id] = current_attack.cooldown
+		_cooldowns[current_attack.id] = _attack_cooldown(current_attack)
 	current_attack = null
 	mode = Mode.STUNNED
 	mode_left = seconds
@@ -505,14 +530,14 @@ func _move_towards_target(speed: float, delta: float) -> void:
 
 func _finish_attack() -> void:
 	if current_attack:
-		_cooldowns[current_attack.id] = current_attack.cooldown
+		_cooldowns[current_attack.id] = _attack_cooldown(current_attack)
 	_back_to_idle()
 
 
 func _back_to_idle() -> void:
 	current_attack = null
 	mode = Mode.IDLE
-	_gap_left = attack_gap
+	_gap_left = get_attack_gap()
 	_on_idle_start()
 
 
@@ -521,7 +546,8 @@ func _pick_attack() -> BossAttack:
 	var fitting: Array[BossAttack] = []
 	var total: float = 0.0
 	for attack: BossAttack in attacks:
-		if attack.min_phase > phase or get_cooldown(attack.id) > 0.0:
+		# Weight 0 = only started on purpose by the boss script (e.g. a punish).
+		if attack.weight <= 0.0 or attack.min_phase > phase or get_cooldown(attack.id) > 0.0:
 			continue
 		var distance: float = _attack_distance(attack, target_player)
 		if distance < attack.min_range or distance > attack.max_range:
@@ -644,6 +670,11 @@ func _contact_distance(point: Vector2) -> float:
 func _push_direction(point: Vector2) -> Vector2:
 	var away: Vector2 = point - global_position
 	return away.normalized() if away.length() > 0.01 else Vector2.DOWN
+
+
+## Seconds before this attack can be used again (after it ends).
+func _attack_cooldown(attack: BossAttack) -> float:
+	return attack.cooldown
 
 
 ## Distance used for an attack's range check.

@@ -130,6 +130,12 @@ enum State { SWIM, TELEGRAPH, CHARGE, STUNNED }
 @export var lure_hold_until: float = 3.0
 @export var bubbles_per_second: float = 16.0
 
+@export_group("Tail Sweep")
+## The tail bends this far (pixels) while it coils and when it sweeps.
+@export var sweep_curl_amount: float = 70.0
+## Radius of the glowing arc the sweep traces round it.
+@export var sweep_arc_radius: float = 190.0
+
 @export_group("Intro")
 @export var reveal_time: float = 0.6
 
@@ -157,6 +163,11 @@ var _face: Vector2 = Vector2.ZERO
 var _shown: Vector2 = Vector2.RIGHT
 var _flip_left: float = 0.0
 var _fake: float = 0.0
+## The sweep's warning (0-1, set by the fight logic) and the sweep itself.
+var _sweep_wind: float = 0.0
+var _sweep_age: float = -1.0
+var _sweep_time: float = 0.45
+var _sweep_flipped: bool = false
 var _fake_offset: Vector2 = Vector2.ZERO
 var _telegraph: float = 0.0
 var _charge: float = 0.0
@@ -284,6 +295,22 @@ func set_fake_lure(offset: Vector2, strength: float) -> void:
 	_fake = clampf(strength, 0.0, 1.0)
 
 
+## The tail sweep's warning: 0 = none, 1 = fully coiled, fins flared.
+func set_sweep_wind(amount: float) -> void:
+	_sweep_wind = clampf(amount, 0.0, 1.0)
+
+
+## The tail sweep: the tail whips round (one turn in duration seconds, the
+## body turning about halfway) and a glowing arc traces it.
+func sweep(duration: float) -> void:
+	if is_dead:
+		return
+	_sweep_age = 0.0
+	_sweep_time = maxf(duration, 0.05)
+	_sweep_flipped = false
+	glow.start_sweep(duration, sweep_arc_radius, signf(heading.x))
+
+
 func is_death_done() -> bool:
 	return is_dead and _death_age >= death_time
 
@@ -323,7 +350,9 @@ func _process(delta: float) -> void:
 
 	body.heading = _shown
 	body.jaw_open = jaw
-	body.coil = _telegraph * (1.0 - _charge)
+	body.coil = maxf(_telegraph * (1.0 - _charge), _sweep_wind * 0.9)
+	body.fin_flare = maxf(_sweep_wind, 1.0 if _sweep_age >= 0.0 else 0.0)
+	body.sweep_curl = _sweep_curl()
 	body.lunge = _bite_lunge() - _hit_flinch()
 	body.roll = maxf(_stun, minf(_death_age / 2.0, 1.0) * 0.6 if is_dead else 0.0)
 	body.fin_tuck = _charge
@@ -421,6 +450,14 @@ func _advance_one_shots(delta: float) -> void:
 			_reveal_age = -1.0
 	if _death_age >= 0.0:
 		_death_age += delta
+	if _sweep_age >= 0.0:
+		_sweep_age += delta
+		# Halfway round it faces the other way (it spun).
+		if not _sweep_flipped and _sweep_age >= _sweep_time * 0.5:
+			_sweep_flipped = true
+			_flip()
+		if _sweep_age >= _sweep_time:
+			_sweep_age = -1.0
 	_flash = maxf(_flash - flash_decay * delta, 0.0)
 
 
@@ -455,6 +492,14 @@ func _hit_curve() -> float:
 		return 0.0
 	var t: float = _hit_age / hit_time
 	return sin(minf(t * 3.0, 1.0) * PI * 0.5) * (1.0 - t)
+
+
+## The tail's sideways bend: curled back while it winds up, then a whip that
+## swings it across and back during the sweep.
+func _sweep_curl() -> float:
+	if _sweep_age >= 0.0:
+		return sweep_curl_amount * 1.6 * sin(_sweep_age / _sweep_time * TAU)
+	return -sweep_curl_amount * _sweep_wind
 
 
 func _death_sag() -> float:
@@ -509,6 +554,7 @@ func _update_lure_glow(_delta: float) -> void:
 func _update_glow(delta: float) -> void:
 	glow.exposed = _exposed
 	glow.stun = _stun
+	glow.fin_flare = maxf(_sweep_wind, 1.0 if _sweep_age >= 0.0 else 0.0)
 	glow.rim_flash = 1.0 - clampf(_hit_age / rim_flash_time, 0.0, 1.0) if _hit_age >= 0.0 else 0.0
 	glow.teeth_flash = 0.0
 	if _bite_age >= bite_snap_at:

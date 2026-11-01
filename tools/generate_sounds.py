@@ -1106,6 +1106,138 @@ def make_angler_bite(rng):
     return _norm(_trim_tail(_reverb(out, 1.0, 0.25, rng)), PEAK_SFX)
 
 
+def _fm(carrier, ratio: float, index, t):
+    """A frequency-modulated tone (carrier: a number or an array): metallic /
+    electric colours without any noise."""
+    carrier = np.broadcast_to(np.asarray(carrier, dtype=float), t.shape)
+    phase_c = 2.0 * np.pi * np.cumsum(carrier) / SAMPLE_RATE
+    phase_m = 2.0 * np.pi * np.cumsum(carrier * ratio) / SAMPLE_RATE
+    return np.sin(phase_c + np.asarray(index) * np.sin(phase_m))
+
+
+def make_angler_sweep_wind(rng):
+    seconds = 0.9
+    t = _t(seconds)
+    k = np.clip(t / seconds, 0, 1)
+    # The body winds up: a low creaking tone rising, the fins fluttering.
+    creak = _osc(70.0 + 50.0 * k ** 1.5, partials=((1.0, 1.0), (2.0, 0.5), (3.0, 0.25), (5.0, 0.1)))
+    flutter = 0.6 + 0.4 * np.sin(2 * np.pi * (9.0 + 14.0 * k) * t)
+    out = _filter(creak, "lowpass", 1100.0) * flutter * (0.2 + 0.8 * k ** 1.3)
+    out += _formants(_throat(90.0 + 40.0 * k, t, 8), [350, 850], [90, 170], [1.0, 0.4]) * 0.35 * k ** 2
+    return _norm(_trim_tail(_reverb(np.tanh(1.3 * out), 1.0, 0.25, rng)), PEAK_SFX * 0.75)
+
+
+def make_angler_sweep(rng):
+    seconds = 0.9
+    out = np.zeros(int(seconds * SAMPLE_RATE))
+    t = _t(0.5)
+    # The tail whips round: a tonal swoop down through the water...
+    swoop = _osc(520.0 * np.exp(-t / 0.18) + 70.0, partials=((1.0, 1.0), (2.0, 0.35), (3.0, 0.15)))
+    swoop = _filter(swoop, "lowpass", 1500.0) * np.sin(np.pi * np.clip(t / 0.5, 0, 1)) ** 1.5
+    _place(out, swoop * 0.8, 0.0)
+    # ...and a heavy thud of the water it shoves.
+    _place(out, _kick(120.0, 38.0, 0.16, 0.5) * 1.1, 0.18)
+    _bubbles(rng, out, 18, 0.15, 0.6, 160.0, 520.0, 0.25)
+    return _norm(_trim_tail(_reverb(np.tanh(1.2 * out), 1.2, 0.3, rng)), PEAK_SFX)
+
+
+def make_angler_orb_charge(rng):
+    seconds = 1.0
+    t = _t(seconds)
+    k = np.clip(t / seconds, 0, 1)
+    # The lure gathers charge: an electric hum rising, brighter and brighter.
+    hum = _fm(180.0 + 260.0 * k ** 1.4, 1.5, 0.8 + 3.5 * k, t)
+    # Brighter as it rises: the filtered tone fades into the full one.
+    dull = _filter(hum, "lowpass", 900.0)
+    out = (dull * (1.0 - k) + _filter(hum, "lowpass", 3800.0) * k) * (0.15 + 0.85 * k ** 1.6)
+    return _norm(_trim_tail(_reverb(out, 0.8, 0.25, rng)), PEAK_SFX * 0.6)
+
+
+def make_angler_orb_fire(rng):
+    seconds = 0.45
+    t = _t(seconds)
+    # A zap: a bright FM chirp falling away.
+    zap = _fm(1400.0 * np.exp(-t / 0.08) + 220.0, 2.01, 4.0 * np.exp(-t / 0.12), t) * _env(t, 0.003, 0.11)
+    body = _osc(160.0 * np.exp(-t / 0.2) + 90.0, partials=((1.0, 1.0), (2.0, 0.4))) * _env(t, 0.005, 0.15) * 0.5
+    return _norm(_trim_tail(_reverb(zap + body, 0.7, 0.22, rng)), PEAK_SFX * 0.7)
+
+
+def make_angler_orb_crackle(rng):
+    seconds = 0.3
+    out = np.zeros(int(seconds * SAMPLE_RATE))
+    # A few tiny electric blips (short FM grains at uneven times).
+    for i in range(5):
+        tg = _t(0.025)
+        f = rng.uniform(1800.0, 3600.0)
+        grain = _fm(f, rng.uniform(1.3, 2.7), 3.0, tg) * _env(tg, 0.001, 0.006)
+        _place(out, grain, rng.uniform(0.0, 0.25), rng.uniform(0.4, 1.0))
+    return _norm(_trim_tail(out), PEAK_SFX * 0.35)
+
+
+def make_angler_orb_pop(rng):
+    seconds = 0.6
+    out = np.zeros(int(seconds * SAMPLE_RATE))
+    # The orb bursts: a fat bubble pop and a glassy ring.
+    _place(out, _bubble(rng, 300.0, 700.0, 0.09) * 1.2, 0.0)
+    t = _t(0.5)
+    ring = _osc(1250.0 * (1.0 + 0.02 * np.sin(2 * np.pi * 7.0 * t)), partials=((1.0, 1.0), (2.76, 0.35), (5.4, 0.12))) * _env(t, 0.002, 0.14)
+    _place(out, ring * 0.5, 0.01)
+    _bubbles(rng, out, 6, 0.02, 0.3, 400.0, 900.0, 0.25)
+    return _norm(_trim_tail(_reverb(out, 0.8, 0.25, rng)), PEAK_SFX * 0.7)
+
+
+def make_angler_orb_deflect(rng):
+    seconds = 0.6
+    t = _t(seconds)
+    # Struck back: a bright metallic ping that bends upwards, with a zap.
+    ping = _osc(900.0 * (1.0 + 0.5 * np.clip(t / 0.25, 0, 1)), partials=((1.0, 1.0), (2.4, 0.4), (4.1, 0.15))) * _env(t, 0.002, 0.18)
+    zap = _fm(2400.0, 1.5, 2.5 * np.exp(-t / 0.05), t) * _env(t, 0.001, 0.04) * 0.5
+    return _norm(_trim_tail(_reverb(ping + zap, 0.9, 0.25, rng)), PEAK_SFX * 0.8)
+
+
+def make_angler_mine_launch(rng):
+    seconds = 0.7
+    out = np.zeros(int(seconds * SAMPLE_RATE))
+    # A soft thunk from the lure, then the mine whistles up through the water.
+    _place(out, _kick(180.0, 70.0, 0.06, 0.25) * 0.7, 0.0)
+    t = _t(0.55)
+    whistle = _osc(420.0 + 380.0 * np.sin(np.pi * np.clip(t / 0.55, 0, 1)), partials=((1.0, 1.0), (2.0, 0.2))) * np.sin(np.pi * t / 0.55) ** 2
+    _place(out, whistle * 0.35, 0.03)
+    _bubbles(rng, out, 5, 0.0, 0.2, 260.0, 600.0, 0.2)
+    return _norm(_trim_tail(_reverb(out, 0.8, 0.22, rng)), PEAK_SFX * 0.6)
+
+
+def make_angler_mine_tick(rng):
+    seconds = 0.25
+    t = _t(seconds)
+    # A short, hollow sonar-like beep (the fuse counting down).
+    beep = _osc(1320.0, seconds, partials=((1.0, 1.0), (2.0, 0.25), (3.0, 0.08))) * _env(t, 0.002, 0.045)
+    return _norm(_trim_tail(_reverb(beep, 0.5, 0.2, rng)), PEAK_SFX * 0.45)
+
+
+def make_angler_mine_blast(rng):
+    seconds = 1.6
+    out = np.zeros(int(seconds * SAMPLE_RATE))
+    # A deep underwater boom, a tonal ring of the shockwave, bubbles.
+    _place(out, _kick(110.0, 30.0, 0.32, 1.0) * 1.4, 0.0)
+    t = _t(1.0)
+    ring = _osc(240.0 * (1.0 - 0.3 * np.clip(t / 1.0, 0, 1)), partials=((1.0, 1.0), (1.5, 0.5), (2.0, 0.3), (3.0, 0.12))) * _env(t, 0.004, 0.3)
+    _place(out, _filter(ring, "lowpass", 1400.0) * 0.6, 0.0)
+    _bubbles(rng, out, 40, 0.03, 1.2, 140.0, 600.0, 0.3)
+    return _norm(_trim_tail(_reverb(np.tanh(1.3 * out), 2.0, 0.38, rng)), PEAK_SFX)
+
+
+def make_vent_breathe(rng):
+    seconds = 1.2
+    out = np.zeros(int(seconds * SAMPLE_RATE))
+    # A vent breathes out: a soft burst of rising bubbles.
+    _bubbles(rng, out, 26, 0.0, 1.0, 220.0, 700.0, 0.35)
+    t = _t(1.0)
+    sigh = _osc(95.0 + 25.0 * np.clip(t, 0, 1), partials=((1.0, 1.0), (2.0, 0.3))) * np.sin(np.pi * np.clip(t, 0, 1)) ** 2 * 0.25
+    _place(out, _filter(sigh, "lowpass", 500.0), 0.0)
+    return _norm(_trim_tail(_reverb(out, 1.2, 0.35, rng)), PEAK_SFX * 0.4)
+
+
 def make_angler_death(rng):
     seconds = 5.0
     t = _t(seconds)
@@ -1246,6 +1378,17 @@ def _preview_list():
         ("boss_angler_charge", make_angler_charge, False),
         ("boss_angler_bite", make_angler_bite, False),
         ("boss_angler_death", make_angler_death, False),
+        ("boss_angler_sweep_wind", make_angler_sweep_wind, False),
+        ("boss_angler_sweep", make_angler_sweep, False),
+        ("boss_angler_orb_charge", make_angler_orb_charge, False),
+        ("boss_angler_orb_fire", make_angler_orb_fire, False),
+        ("boss_angler_orb_crackle", make_angler_orb_crackle, False),
+        ("boss_angler_orb_pop", make_angler_orb_pop, False),
+        ("boss_angler_orb_deflect", make_angler_orb_deflect, False),
+        ("boss_angler_mine_launch", make_angler_mine_launch, False),
+        ("boss_angler_mine_tick", make_angler_mine_tick, False),
+        ("boss_angler_mine_blast", make_angler_mine_blast, False),
+        ("world_vent_breathe", make_vent_breathe, False),
         ("world_barrier_close", make_barrier_close, False),
         ("world_barrier_open", make_barrier_open, False),
         ("world_collapse_rumble", make_collapse_rumble, True),

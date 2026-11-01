@@ -68,6 +68,16 @@ extends Node2D
 @export var ring_band_width: float = 70.0
 @export_range(0.0, 1.0) var ring_alpha: float = 0.07
 
+@export_group("Tail Sweep")
+## Flared fins glow along their rays (the sweep's warning).
+@export var fin_glow_color: Color = Color(0.5, 0.95, 1.0)
+@export var fin_glow_energy: float = 1.8
+@export var sweep_color: Color = Color(0.7, 1.0, 0.95)
+@export var sweep_energy: float = 2.4
+@export var sweep_width: float = 9.0
+## How much of the circle trails behind the arc's head (radians).
+@export var sweep_trail: float = 2.4
+
 @export_group("Bubbles")
 @export var bubble_color: Color = Color(0.6, 0.8, 0.95)
 @export var bubble_energy: float = 1.2
@@ -89,6 +99,13 @@ var body_glow: float = 1.0
 ## Phase 2 fake lure: the real orb dims and one glows at orb + fake_offset.
 var fake: float = 0.0
 var fake_offset: Vector2 = Vector2.ZERO
+## 0-1: the fins glow (set by AnglerVisual).
+var fin_flare: float = 0.0
+var _sweep_age: float = -1.0
+var _sweep_time: float = 0.45
+var _sweep_radius: float = 190.0
+var _sweep_turn: float = 1.0
+var _sweep_center: Vector2 = Vector2.ZERO
 var _time: float = 0.0
 var _trail: Array[PackedVector2Array] = []
 var _trail_ages: PackedFloat32Array = PackedFloat32Array()
@@ -100,6 +117,11 @@ var _bubble_ages: PackedFloat32Array = PackedFloat32Array()
 
 func step(delta: float) -> void:
 	_time += delta
+	if _sweep_age >= 0.0:
+		_sweep_age += delta
+		# It fades out a little after the turn.
+		if _sweep_age >= _sweep_time + 0.2:
+			_sweep_age = -1.0
 	for i: int in range(_trail_ages.size() - 1, -1, -1):
 		_trail_ages[i] += delta
 		if _trail_ages[i] >= trail_life:
@@ -120,6 +142,14 @@ func step(delta: float) -> void:
 			_bubble_ages.remove_at(i)
 			_bubbles.remove_at(i)
 	queue_redraw()
+
+
+## The sweep's arc: once round in duration seconds (turn = +1 / -1 direction).
+func start_sweep(duration: float, radius: float, turn: float) -> void:
+	_sweep_age = 0.0
+	_sweep_time = maxf(duration, 0.05)
+	_sweep_radius = radius
+	_sweep_turn = turn if turn != 0.0 else 1.0
 
 
 func add_trail_snapshot(outline: PackedVector2Array) -> void:
@@ -154,6 +184,8 @@ func _draw() -> void:
 		_draw_exposed()
 		_draw_flashes()
 		_draw_stars()
+		_draw_fin_flare()
+		_draw_sweep()
 	_draw_bubbles()
 	_draw_rings()
 	_draw_orb()
@@ -220,6 +252,36 @@ func _draw_flashes() -> void:
 	if teeth_flash > 0.01:
 		for tooth: PackedVector2Array in body.get_teeth():
 			draw_colored_polygon(tooth, _hdr(teeth_flash_color, teeth_flash_energy, teeth_flash))
+
+
+func _draw_fin_flare() -> void:
+	if fin_flare <= 0.01:
+		return
+	var color: Color = _hdr(fin_glow_color, fin_glow_energy, 0.7 * fin_flare * body_glow)
+	for ray: PackedVector2Array in body.fin_rays:
+		draw_line(ray[0], ray[1], color, 1.6)
+		draw_circle(ray[1], 2.2, color)
+
+
+func _draw_sweep() -> void:
+	if _sweep_age < 0.0:
+		return
+	# Round its middle, following it.
+	_sweep_center = body.point_at(0.35, 0.0)
+	var t: float = clampf(_sweep_age / _sweep_time, 0.0, 1.0)
+	var fade: float = 1.0 - clampf((_sweep_age - _sweep_time) / 0.2, 0.0, 1.0)
+	var head_angle: float = -PI * 0.5 + _sweep_turn * t * TAU
+	var steps: int = 16
+	for k: int in steps:
+		# The arc's head is bright and thick, its trail thins and fades.
+		var a0: float = head_angle - _sweep_turn * sweep_trail * float(k) / float(steps)
+		var a1: float = head_angle - _sweep_turn * sweep_trail * float(k + 1) / float(steps)
+		var share: float = 1.0 - float(k) / float(steps)
+		var trail_scale: float = minf(t * TAU / sweep_trail, 1.0)
+		if float(k) / float(steps) > trail_scale:
+			break
+		draw_arc(_sweep_center, _sweep_radius, minf(a0, a1), maxf(a0, a1), 6,
+			_hdr(sweep_color, sweep_energy, share * fade), sweep_width * share + 1.0, false)
 
 
 func _draw_trail() -> void:
