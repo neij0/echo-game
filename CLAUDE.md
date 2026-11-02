@@ -23,7 +23,7 @@ Pillars:
 World (5, in this order: Ocean, Caves, Forest, Desert, Snow)
  └─ 3 Stages per world          (progress is saved after each completed stage)
      └─ 3 Levels per stage      (the last level of each stage ends in a boss arena)
-After the 3rd stage of a world: a story text screen, then the World Map.
+After the 3rd stage of a world: a story text screen, then the Journey screen.
 ```
 - **Level** = a small, hand-designed **grid of rooms** (`LevelDefinition`, 3x3 to 4x4 cells,
   not all filled) with branches, at least one loop and dead ends, in any direction: start and
@@ -185,8 +185,14 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   worlds, mode, the skills (`SkillLoadout` as owned at the end of the last completed stage).
   Settings (`user://settings.json`): language (English/Arabic), mode, brightness, one volume
   per audio bus (Options sliders).
-- **Screens**: main menu (Continue if a save exists, New Game, Mode, Language, Options, Quit) →
-  stage (`game.tscn`) → stage summary → next stage, or story screen → World Map.
+- **Screens** (see "UI style"): splash (studio logo, placeholder name) → title ("press any
+  button": that device becomes Player 1's, `Game.assign_player_one` moves each player's gamepad
+  events in the InputMap) → main menu (Continue if a save exists, New Game, Mode, Language,
+  Options, Quit). New Game → the intro story (`story/intro_*.txt`) → stage 1; Continue → the
+  Journey screen, whose Continue plays the saved stage (`Game.play_current`). Stage (`game.tscn`)
+  → stage summary → the Journey (the island lights up one step: `Game.journey_step_from`, set by
+  `complete_stage`) → next stage; after a world's last stage: its story → the Journey. Every
+  change of screen fades through black (`Game._change_scene` + `ScreenFader`).
 - **Skills** (see "Skills" below): after every completed level both players pick at the same
   time (`SkillChoiceScreen`), then the next level starts.
 - **Stage summary counts** (`StageManager`: pulses, hits taken, kills): hits taken = real
@@ -206,7 +212,7 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   Restart level (`StageManager.restart_level`; Calm: the level again with the meters, health
   and skills of its start; Challenge: shown as "Restart stage", the whole stage from level 1
   like both downed, with its own confirmation text),
-  Quit to World Map, Quit to Main Menu (the last three with a confirmation; quitting loses the
+  Quit to the Journey, Quit to Main Menu (the last three with a confirmation; quitting loses the
   stage's progress since the last save). Shows the mode and both players' skills (read-only).
   Navigated with the `ui_*` actions (keyboard + every gamepad).
 - **Testing one stage**: run `game.tscn` on its own (F6). The `StageManager` then uses its
@@ -265,9 +271,11 @@ value per rank), name / description / co-op tip in EN + AR, `available_from_worl
   Cards / picks per stage in `StageDefinition` (`skill_offer_count`, `skill_pick_count`,
   `boss_skill_*`; Ocean: stage 1 = 1 of 2, stages 2-3 = 1 of 3, 2 of 3 after a boss); none
   after the world's final level.
-- **Screen** (`SkillChoiceScreen`): Echo left / Guardian right (not mirrored in Arabic, the text
-  inside is), each with their own move up / down + action; both ready -> the picks + tips for
-  `summary_time` (2 s).
+- **Screen** (`SkillChoiceScreen`, "UI style"): Echo left / Guardian right (not mirrored in
+  Arabic, the text inside is), each half uncovered by a pulse wipe, cards = `SkillCard` (focus:
+  glowing edge in the side's colour, ripple, wavy underline; picked: gold + check), each player
+  with their own move up / down + action and drawn prompts for their device; both ready -> the
+  picks + tips for `summary_time` (2 s).
 - **Lifetime**: `StageManager.loadout` (a `SkillLoadout`: character -> {id: rank}); a Calm retry
   restores the skills of the level start, a Challenge retry those of the stage start; saved
   with every completed stage (`Game.complete_stage(loadout)`); cleared when the next world
@@ -303,7 +311,9 @@ numbered variant) replaces one without code changes.
 **New sounds wait for approval**: `python tools/generate_sounds.py preview <name>` writes them to
 `assets/audio/preview/` (same names as the files they would replace; the game never reads
 that folder); the Sound Test lists them first, each beside the current version. Once approved
-they are copied over the files in `sfx/` (and deleted from `preview/`).
+they are copied over the files in `sfx/` (`music/` for music) and deleted from `preview/`
+(pending: the Journey themes `music_map_ocean` / `_caves` / `_forest` / `_desert` / `_snow`; the
+Journey already asks for them by name and stays silent until the files exist).
 - **Buses** (`default_bus_layout.tres`): Master, Music (a "Duck" amplify), SFX and Ambience
   (a "Gate" amplify + the world's underwater low-pass + reverb), UI. Volumes: `Game.volumes`
   (Options sliders, saved).
@@ -331,6 +341,58 @@ they are copied over the files in `sfx/` (and deleted from `preview/`).
 - Loops carry a WAV "smpl" loop chunk (Godot: "Detect From WAV").
 - Tools: `tools/sound_test.tscn` (every sound, the music crossfades, ambience),
   `tools/test_audio.tscn` (headless checks).
+
+## UI style ("silhouette + glow")
+- **One Theme** (`assets/ui/echo_theme.tres`, `Game.ui_theme`): near-black / deep navy, cyan
+  for the Echo, dim gold for the Guardian, red only for danger; Tajawal (bold / title weights are
+  `FontVariation`s). No grey boxes: `Button` styles are empty, text glows (focus colours are
+  over-bright, so they bloom where a `GlowEnvironment` covers the layer). Label variations:
+  `TitleLabel` / `TitleArabicLabel`, `SubtitleLabel` / `SubtitleLatinLabel`, `HeaderLabel`,
+  `EchoLabel`, `GuardianLabel`, `DimLabel`, `DangerLabel`, `PromptLabel`; panels: `Card` (styles
+  `panel` / `focus` / `picked`, tinted in code); custom items for `GlowButton` and `GlyphPrompt`.
+  Restyled so far: splash, title, main menu, Journey, skill choice (each sets the theme on its
+  root); the other screens still use the old look.
+- **`GlowButton`**: glowing text; keyboard, gamepad and mouse share one focus (hover focuses;
+  the theme's hover colour is the normal one and losing the focus clears the underline at once,
+  so only one button is ever lit). `help_text` is sent with `help_shown` on focus (the main
+  menu's help line: the save for Continue, the mode's rule for Mode).
+  Focus = a dot before the text + a sonar ripple out of it + a wavy glowing underline + the
+  `ui_focus` ping (`focus_quietly()` skips the ping); press = a brighter flash + `ui_press`.
+  Mirrors in Arabic. Drawing helpers: `GlowFx` (ripple, wave line, glow line, dot); `WaveRule`
+  (a drifting wave line under titles).
+- **`PulseReveal`** (wrap a panel): `reveal(origin_share)` uncovers it with a growing circle (a
+  screen-space shader mask shared through `use_parent_material` while it runs) and a glowing
+  ring. Not `clip_children`: that drew a black disc over the HDR / bloom background.
+- **`ScreenFader`** + `UiAudio` live in the `Game` autoload: scenes fade through black (the old
+  one stays paused under the black; a second request is ignored), the game opens with a fade
+  in; `UiAudio.play_in(tree, name)` plays the menu sounds on the UI bus (silent if missing).
+- **Button prompts** (`InputPrompt` + `InputGlyph`): drawn key caps, arrow keys, face buttons
+  (A / B / X / Y), D-pad, stick, read from the InputMap (a rebinding shows by itself). Player
+  prompts follow that player's own device; menu prompts follow whatever was used last
+  (`InputPrompt.menu_device`, kept between screens).
+- **Backdrop** (`NightSky`): navy gradient, twinkling stars, drifting motes, vignette (parallax
+  `scroll`). Each menu screen has its own `GlowEnvironment`.
+- **Splash** (`SplashScreen`, the project's main scene): a sonar mark + `studio_name` fade in /
+  out on black; any press skips. **Title** (`TitleScreen`): the big title, a slow sonar ring,
+  "press any button" breathing.
+- **Main menu** (`MainMenu`): dark; far behind it the Journey tower (small, dim, drifting, lit
+  by the save) and the small Echo and Guardian seen from behind on a ledge, looking up
+  (`MenuSilhouettes`, a soft backlight). The title "ECHO" / "صدى" (the other language small
+  under it), the button column (revealed by a pulse wipe), the help line and prompts at the
+  bottom. Arabic: the column moves right, the tower left. Music: `music_menu`, fading with the
+  screen.
+- **Journey** (`JourneyScreen`, replaces the World Map): `JourneyTower` = the five worlds as
+  floating islands (`JourneyIsland` + one script per kind: Ocean water slab, corals, crystals,
+  bubbles; Caves stalactites and crystals in a cave mouth; Forest trees and fireflies; Desert
+  dunes and ruins; Snow peaks and a star), Ocean at the bottom, joined by a glowing path
+  climbing up (lit up to the current world, a spark running along it). Each island's `light`
+  (0 locked: near-black, faint rim; 1 / 2 / 3 = the stage reached: a few lights, more, all
+  with its marker) fades its lights in one by one (`lit(step, order)`); finished worlds stay at
+  3. `play_step` animates the last step (or the path climbing to the next world), any press
+  skips. Beside it `JourneyTimeline` (names, "Stage 2" / restored / locked + padlock, the line
+  lit up to the current world). Up / down moves the camera to a world and its theme plays
+  (`JourneyMusic`: `WorldConfig.map_theme` else `music_map_<id>.wav`, 1.5 s crossfades, a locked
+  world muffled by a low-pass on its own bus); Continue plays the save or says "coming soon".
 
 ## Lighting (layers)
 The pulse is the main way to read the layout from a distance; nothing else may make far
@@ -517,14 +579,16 @@ The world is tilted to match the characters, still 2D:
   set as the project's custom font so Arabic renders everywhere.
 
 ## Folders
-- `scenes/` — `.tscn` scenes (`main_menu`, `game`, `story_screen`, `world_map`, and
+- `scenes/` — `.tscn` scenes (`splash_screen`, `title_screen`, `main_menu`, `journey_screen`,
+  `game`, `story_screen`, and
   `game_state.tscn` = the `Game` autoload)
 - `scenes/chunks/<world>/` — the hand-made room chunks of each world (`room_*.tscn`)
 - `scenes/landmarks/<world>/` — landmark set-pieces; `scenes/life/<world>/` — harmless life
 - `scripts/` — `.gd` scripts
 - `worlds/` — one `WorldConfig` resource (`.tres`) per world
 - `worlds/<world>/` — the world's `LevelDefinition`s (`level_<stage>_<level>.tres`)
-- `story/` — story text per world and language (`<world>_end_en.txt`, `<world>_end_ar.txt`;
+- `story/` — story text per language: `intro_en.txt` / `intro_ar.txt` (placeholder, before stage
+  1) and per world (`<world>_end_en.txt`, `<world>_end_ar.txt`;
   one line per line, empty lines skipped). Not a Godot resource: when exporting, add `*.txt`
   to the export preset's "non-resource files" filter.
 - `assets/audio/` — procedural sounds (generated by `tools/generate_sounds.py`): `sfx/`,
@@ -580,6 +644,10 @@ The world is tilted to match the characters, still 2D:
     `godot --headless --path . --fixed-fps 60 res://tools/sim_boss_fight.tscn [-- calm|challenge] [1|2|3] [runs N] [log]`
   - `angler_preview.tscn`: look preview of the Angler's states (F6; `-- capture <folder>`
     saves screenshots, needs a window)
+  - `ui_capture.tscn`: screenshots of the menu screens (splash, title, main menu, the Journey
+    with the Ocean at stages 1-3 and a locked world, a step animation, skill choice; EN / AR;
+    the save only changed in memory), needs a window:
+    `godot --path . res://tools/ui_capture.tscn -- <folder>`
   - `sound_test.tscn`: listen to every sound and the music crossfades (run it with F6)
   - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it
@@ -618,7 +686,7 @@ them through the `world_listeners` group (`apply_world(world)`), never hard-code
    `Game.world_ids`), 3 `StageDefinition`s with their 3 levels each and their lighting, the
    room pool and sizes (for the builder and the generator), `sentinel_scene`,
    `lockdown_creature_scene`, `lockdown_room_scene`, the audio (low-pass, reverb, ambience
-   bed and one-shots), the palette and area accents, the ambient life, the pressure (name,
+   bed and one-shots, the Journey theme `map_theme`), the palette and area accents, the ambient life, the pressure (name,
    drain, low warning, level refill, colour) and the pulse modifiers (radius, speed, cost).
 4. New creature types: a scene inheriting `scenes/creature.tscn` (or a script extending
    `Creature`), then add it to the levels' `creatures` lists.

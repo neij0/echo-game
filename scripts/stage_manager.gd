@@ -452,7 +452,8 @@ func _on_continue_pressed() -> void:
 	elif Game.finished_world_id != "":
 		Game.go_to_story()
 	else:
-		Game.play_current()
+		# The Journey screen lights the island up one step; its Continue plays on.
+		Game.go_to_journey()
 
 
 ## Runs between two levels (paused): the skill choice.

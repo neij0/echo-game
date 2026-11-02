@@ -1,0 +1,187 @@
+[gd_resource type="Theme" format=3]
+
+[ext_resource type="FontFile" path="res://assets/fonts/tajawal_regular.ttf" id="1_font"]
+
+[sub_resource type="FontVariation" id="FontVariation_bold"]
+base_font = ExtResource("1_font")
+variation_embolden = 0.55
+
+[sub_resource type="FontVariation" id="FontVariation_title"]
+base_font = ExtResource("1_font")
+variation_embolden = 0.8
+spacing_glyph = 18
+
+[sub_resource type="FontVariation" id="FontVariation_title_arabic"]
+base_font = ExtResource("1_font")
+variation_embolden = 0.8
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_button"]
+content_margin_left = 34.0
+content_margin_top = 4.0
+content_margin_right = 34.0
+content_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+content_margin_left = 26.0
+content_margin_top = 20.0
+content_margin_right = 26.0
+content_margin_bottom = 20.0
+bg_color = Color(0.02, 0.035, 0.065, 0.86)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.32, 0.6, 0.75, 0.28)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+shadow_color = Color(0, 0, 0, 0.45)
+shadow_size = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card"]
+content_margin_left = 16.0
+content_margin_top = 12.0
+content_margin_right = 16.0
+content_margin_bottom = 14.0
+bg_color = Color(0.025, 0.045, 0.08, 0.72)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.4, 0.6, 0.75, 0.16)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card_focus"]
+content_margin_left = 16.0
+content_margin_top = 12.0
+content_margin_right = 16.0
+content_margin_bottom = 14.0
+bg_color = Color(0.035, 0.065, 0.105, 0.92)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 0.85)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+shadow_color = Color(1, 1, 1, 0.22)
+shadow_size = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card_picked"]
+content_margin_left = 16.0
+content_margin_top = 12.0
+content_margin_right = 16.0
+content_margin_bottom = 14.0
+bg_color = Color(0.11, 0.09, 0.04, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.82, 0.42, 0.75)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+shadow_color = Color(1, 0.75, 0.3, 0.16)
+shadow_size = 10
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_slider"]
+color = Color(0.32, 0.5, 0.65, 0.45)
+thickness = 2
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_slider_fill"]
+color = Color(0.45, 0.95, 1, 0.85)
+thickness = 2
+
+[sub_resource type="Gradient" id="Gradient_dot"]
+offsets = PackedFloat32Array(0, 0.35, 0.55, 1)
+colors = PackedColorArray(1, 1, 1, 1, 0.75, 1, 1, 1, 0.45, 0.95, 1, 0.3, 0.45, 0.95, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_grabber"]
+gradient = SubResource("Gradient_dot")
+width = 22
+height = 22
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[resource]
+default_font = ExtResource("1_font")
+default_font_size = 22
+Button/colors/font_color = Color(0.6, 0.68, 0.8, 1)
+Button/colors/font_disabled_color = Color(0.3, 0.35, 0.43, 1)
+Button/colors/font_focus_color = Color(0.82, 1.28, 1.45, 1)
+Button/colors/font_hover_color = Color(0.6, 0.68, 0.8, 1)
+Button/colors/font_hover_pressed_color = Color(1.3, 1.75, 1.95, 1)
+Button/colors/font_pressed_color = Color(1.3, 1.75, 1.95, 1)
+Button/font_sizes/font_size = 28
+Button/styles/disabled = SubResource("StyleBoxEmpty_button")
+Button/styles/focus = SubResource("StyleBoxEmpty_button")
+Button/styles/hover = SubResource("StyleBoxEmpty_button")
+Button/styles/hover_pressed = SubResource("StyleBoxEmpty_button")
+Button/styles/normal = SubResource("StyleBoxEmpty_button")
+Button/styles/pressed = SubResource("StyleBoxEmpty_button")
+Card/base_type = &"PanelContainer"
+Card/styles/focus = SubResource("StyleBoxFlat_card_focus")
+Card/styles/panel = SubResource("StyleBoxFlat_card")
+Card/styles/picked = SubResource("StyleBoxFlat_card_picked")
+DangerLabel/base_type = &"Label"
+DangerLabel/colors/font_color = Color(1, 0.34, 0.3, 1)
+DimLabel/base_type = &"Label"
+DimLabel/colors/font_color = Color(0.5, 0.58, 0.7, 1)
+DimLabel/font_sizes/font_size = 18
+EchoLabel/base_type = &"Label"
+EchoLabel/colors/font_color = Color(0.45, 0.95, 1, 1)
+EchoLabel/font_sizes/font_size = 30
+EchoLabel/fonts/font = SubResource("FontVariation_bold")
+GlowButton/colors/glow_color = Color(0.5, 1.15, 1.35, 1)
+GlowButton/colors/ripple_color = Color(0.45, 0.95, 1, 0.75)
+GlowButton/constants/dot_gap = 18
+GlowButton/constants/underline_gap = 2
+GlyphPrompt/colors/glyph_color = Color(0.7, 0.8, 0.92, 1)
+GlyphPrompt/colors/glyph_fill = Color(0.04, 0.07, 0.12, 0.9)
+GlyphPrompt/colors/glyph_text = Color(0.85, 0.92, 1, 1)
+GlyphPrompt/font_sizes/font_size = 15
+GlyphPrompt/fonts/font = SubResource("FontVariation_bold")
+GuardianLabel/base_type = &"Label"
+GuardianLabel/colors/font_color = Color(0.88, 0.7, 0.38, 1)
+GuardianLabel/font_sizes/font_size = 30
+GuardianLabel/fonts/font = SubResource("FontVariation_bold")
+HSlider/icons/grabber = SubResource("GradientTexture2D_grabber")
+HSlider/icons/grabber_disabled = SubResource("GradientTexture2D_grabber")
+HSlider/icons/grabber_highlight = SubResource("GradientTexture2D_grabber")
+HSlider/styles/grabber_area = SubResource("StyleBoxLine_slider_fill")
+HSlider/styles/grabber_area_highlight = SubResource("StyleBoxLine_slider_fill")
+HSlider/styles/slider = SubResource("StyleBoxLine_slider")
+HeaderLabel/base_type = &"Label"
+HeaderLabel/colors/font_color = Color(0.95, 0.88, 0.68, 1)
+HeaderLabel/font_sizes/font_size = 34
+HeaderLabel/fonts/font = SubResource("FontVariation_bold")
+Label/colors/font_color = Color(0.74, 0.81, 0.9, 1)
+PanelContainer/styles/panel = SubResource("StyleBoxFlat_panel")
+Panel/styles/panel = SubResource("StyleBoxFlat_panel")
+PromptLabel/base_type = &"Label"
+PromptLabel/colors/font_color = Color(0.55, 0.63, 0.75, 1)
+PromptLabel/font_sizes/font_size = 17
+SubtitleLabel/base_type = &"Label"
+SubtitleLabel/colors/font_color = Color(0.4, 0.75, 0.85, 0.85)
+SubtitleLabel/font_sizes/font_size = 34
+SubtitleLabel/fonts/font = SubResource("FontVariation_title_arabic")
+SubtitleLatinLabel/base_type = &"Label"
+SubtitleLatinLabel/colors/font_color = Color(0.4, 0.75, 0.85, 0.85)
+SubtitleLatinLabel/font_sizes/font_size = 30
+SubtitleLatinLabel/fonts/font = SubResource("FontVariation_title")
+TitleArabicLabel/base_type = &"Label"
+TitleArabicLabel/colors/font_color = Color(0.45, 1.02, 1.22, 1)
+TitleArabicLabel/font_sizes/font_size = 110
+TitleArabicLabel/fonts/font = SubResource("FontVariation_title_arabic")
+TitleLabel/base_type = &"Label"
+TitleLabel/colors/font_color = Color(0.45, 1.02, 1.22, 1)
+TitleLabel/font_sizes/font_size = 96
+TitleLabel/fonts/font = SubResource("FontVariation_title")

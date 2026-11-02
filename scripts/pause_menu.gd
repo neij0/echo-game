@@ -178,7 +178,7 @@ func _ask(action: Confirm) -> void:
 			_confirm_label.text = Game.text("pause_confirm_restart_stage" if _is_challenge() else "pause_confirm_restart")
 			_return_focus = _restart_button
 		Confirm.WORLD_MAP:
-			_confirm_label.text = Game.text("pause_confirm_world_map")
+			_confirm_label.text = Game.text("pause_confirm_journey")
 			_return_focus = _world_map_button
 		Confirm.MAIN_MENU:
 			_confirm_label.text = Game.text("pause_confirm_main_menu")
@@ -202,7 +202,7 @@ func _on_confirmed() -> void:
 			else:
 				get_tree().paused = false
 		Confirm.WORLD_MAP:
-			Game.go_to_world_map()
+			Game.go_to_journey()
 		Confirm.MAIN_MENU:
 			Game.go_to_main_menu()
 	closed.emit()
@@ -214,7 +214,7 @@ func _refresh_text() -> void:
 	_resume_button.text = Game.text("pause_resume")
 	_options_button.text = Game.text("options")
 	_restart_button.text = Game.text("pause_restart_stage" if _is_challenge() else "pause_restart")
-	_world_map_button.text = Game.text("pause_world_map")
+	_world_map_button.text = Game.text("pause_journey")
 	_main_menu_button.text = Game.text("pause_main_menu")
 	_yes_button.text = Game.text("yes")
 	_no_button.text = Game.text("no")

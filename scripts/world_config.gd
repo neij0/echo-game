@@ -137,6 +137,9 @@ extends Resource
 ## of the AudioDirector's catalog (variants _1, _2... are picked at random).
 @export var ambience_bed: AudioStream
 @export var ambience_bed_volume_db: float = -6.0
+## This world's theme on the Journey screen (JourneyMusic). Empty = the file
+## assets/audio/music/music_map_<world id>.wav if it exists (found by name).
+@export var map_theme: AudioStream
 @export var ambience_small_one_shot: String = "amb_bubbles"
 @export var ambience_small_interval_min: float = 2.0
 @export var ambience_small_interval_max: float = 6.0

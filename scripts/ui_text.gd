@@ -8,7 +8,9 @@ const LANGUAGES: PackedStringArray = ["en", "ar"]
 
 const STRINGS: Dictionary = {
 	# Main menu
-	"game_title": {"en": "ECHO", "ar": "إيكو"},
+	"game_title": {"en": "ECHO", "ar": "صدى"},
+	# The title in the other language, shown small under the big one.
+	"game_title_other": {"en": "صدى", "ar": "ECHO"},
 	"continue": {"en": "Continue", "ar": "متابعة"},
 	"new_game": {"en": "New Game", "ar": "لعبة جديدة"},
 	"mode": {"en": "Mode: %s", "ar": "الوضع: %s"},
@@ -24,6 +26,10 @@ const STRINGS: Dictionary = {
 	},
 	"language": {"en": "Language: English", "ar": "اللغة: العربية"},
 	"quit": {"en": "Quit", "ar": "خروج"},
+	# Button prompts (drawn keys / gamepad buttons in front of each)
+	"prompt_navigate": {"en": "move", "ar": "تنقّل"},
+	"prompt_select": {"en": "select", "ar": "اختيار"},
+	"prompt_back": {"en": "back", "ar": "رجوع"},
 	"options": {"en": "Options", "ar": "الإعدادات"},
 	"brightness": {"en": "Brightness: %d%%", "ar": "السطوع: %d%%"},
 	"brightness_desc": {
@@ -93,14 +99,8 @@ const STRINGS: Dictionary = {
 	"skill_passive": {"en": "Passive", "ar": "دائمة"},
 	"skill_shared": {"en": "Shared", "ar": "مشتركة"},
 	"skill_fallback": {"en": "Nothing new left", "ar": "لم يبقَ شيء جديد"},
-	"skill_hint_echo": {
-		"en": "W / S: choose    Space: pick    (gamepad 1: stick + A)",
-		"ar": "W / S: تنقّل    Space: اختيار    (يد التحكم 1: العصا + A)",
-	},
-	"skill_hint_guardian": {
-		"en": "Up / Down arrows: choose    Enter: pick    (gamepad 2: stick + A)",
-		"ar": "السهمان أعلى / أسفل: تنقّل    Enter: اختيار    (يد التحكم 2: العصا + A)",
-	},
+	"prompt_choose": {"en": "choose", "ar": "تنقّل"},
+	"prompt_pick": {"en": "pick", "ar": "اختيار"},
 	"skill_waiting": {"en": "Ready! Waiting for your partner...", "ar": "جاهز! بانتظار شريكك..."},
 	"skill_summary_title": {"en": "Your new skills", "ar": "مهاراتكما الجديدة"},
 	"skill_key_echo": {"en": "L-Shift / X", "ar": "L-Shift / X"},
@@ -111,7 +111,7 @@ const STRINGS: Dictionary = {
 	"pause_title": {"en": "Paused", "ar": "إيقاف مؤقت"},
 	"pause_resume": {"en": "Resume", "ar": "متابعة اللعب"},
 	"pause_restart": {"en": "Restart level", "ar": "إعادة المستوى"},
-	"pause_world_map": {"en": "Quit to World Map", "ar": "الخروج إلى خريطة العوالم"},
+	"pause_journey": {"en": "Quit to the Journey", "ar": "الخروج إلى الرحلة"},
 	"pause_main_menu": {"en": "Quit to Main Menu", "ar": "الخروج إلى القائمة الرئيسية"},
 	"pause_confirm_restart": {"en": "Restart this level?", "ar": "إعادة هذا المستوى؟"},
 	# Challenge mode: the restart goes back to level 1 of the stage.
@@ -124,7 +124,7 @@ const STRINGS: Dictionary = {
 		"en": "Like when both of you are down: the stage starts again from level 1 with full oxygen and health, and only the skills you had when the stage began.",
 		"ar": "كما لو سقطتما معاً: تبدأ المرحلة من جديد من المستوى 1 بأكسجين وصحة كاملين، وبالمهارات التي كانت معكما عند بداية المرحلة فقط.",
 	},
-	"pause_confirm_world_map": {"en": "Quit to the World Map?", "ar": "الخروج إلى خريطة العوالم؟"},
+	"pause_confirm_journey": {"en": "Quit to the Journey?", "ar": "الخروج إلى الرحلة؟"},
 	"pause_confirm_main_menu": {"en": "Quit to the main menu?", "ar": "الخروج إلى القائمة الرئيسية؟"},
 	"pause_restart_warning": {
 		"en": "Your progress in this level is lost (you start it again with what you had when it began).",
@@ -136,12 +136,19 @@ const STRINGS: Dictionary = {
 	},
 	"pause_no_skills": {"en": "No skills yet", "ar": "لا مهارات بعد"},
 
-	# World map
-	"world_map": {"en": "World Map", "ar": "خريطة العوالم"},
+	# Splash / title screen
+	"press_any_button": {"en": "Press any button", "ar": "اضغط أي زر"},
+
+	# Journey screen (the worlds as floating islands)
+	"journey_title": {"en": "The Journey", "ar": "الرحلة"},
+	"journey_stage": {"en": "Stage %d", "ar": "المرحلة %d"},
+	"journey_restored": {"en": "Restored", "ar": "استُعيد نوره"},
+	"journey_locked": {"en": "Locked", "ar": "مقفل"},
+	"journey_finished": {"en": "Every world is restored", "ar": "استُعيد نور العوالم كلها"},
+	"prompt_worlds": {"en": "look at the worlds", "ar": "تصفّح العوالم"},
+	"prompt_skip": {"en": "skip", "ar": "تخطٍّ"},
 	"main_menu": {"en": "Main Menu", "ar": "القائمة الرئيسية"},
 	"coming_soon": {"en": "%s: coming soon", "ar": "%s: قريباً"},
-	"completed": {"en": "Completed", "ar": "مكتمل"},
-	"next_world": {"en": "Next", "ar": "التالي"},
 	"world_ocean": {"en": "Ocean", "ar": "المحيط"},
 	"world_caves": {"en": "Caves", "ar": "الكهوف"},
 	"world_forest": {"en": "Forest", "ar": "الغابة"},

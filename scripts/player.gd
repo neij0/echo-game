@@ -73,6 +73,11 @@ var _knockback_left: float = 0.0
 func _ready() -> void:
 	add_to_group("players")
 	joypad_device = _find_joypad_device()
+	# Player 1 starts on the device that pressed on the title screen. Looked up
+	# by path, so tools without autoloads can still load this script.
+	var game := get_node_or_null("/root/Game") as GameState
+	if game:
+		uses_gamepad = bool(game.player_on_gamepad.get(player_number, false))
 
 
 ## Switches between keyboard and gamepad aiming on this player's own input only

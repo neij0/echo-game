@@ -2,30 +2,35 @@ class_name GameState
 extends Node
 ## Autoload "Game" (scenes/game_state.tscn): the progress (SaveData), the
 ## settings (language, preferred mode, brightness, the volume of each audio
-## bus) and the moves between screens:
-## main menu -> stage (game.tscn) -> ... -> story screen -> World Map.
+## bus), which gamepad each player uses, and the moves between screens:
+## splash -> title ("press any button": that device becomes Player 1's) ->
+## main menu -> New Game: intro story -> stage 1 / Continue: Journey -> stage
+## (game.tscn) -> stage summary -> Journey (the island lights up one step) ->
+## next stage; after the last stage of a world: its story -> Journey.
 ## Structure: World (5) -> Stage (3 per world) -> Level (3 per stage).
 
 signal language_changed
 
-## Every world in play order (save file, World Map, story file names).
+## Every world in play order (save file, Journey, story file names).
 @export var world_ids: PackedStringArray = PackedStringArray(["ocean", "caves", "forest", "desert", "snow"])
 ## The WorldConfig of each world that exists so far. A world id without a
-## config shows "coming soon" on the World Map.
+## config shows "coming soon" on the Journey screen.
 @export var worlds: Array[WorldConfig] = []
 ## Every skill of the game (offered between levels, see SkillOffer).
 @export var skill_catalog: SkillCatalog
 
 @export_group("Scenes")
+@export_file("*.tscn") var title_scene: String = "res://scenes/title_screen.tscn"
 @export_file("*.tscn") var main_menu_scene: String = "res://scenes/main_menu.tscn"
 @export_file("*.tscn") var game_scene: String = "res://scenes/game.tscn"
 @export_file("*.tscn") var story_scene: String = "res://scenes/story_screen.tscn"
-@export_file("*.tscn") var world_map_scene: String = "res://scenes/world_map.tscn"
+@export_file("*.tscn") var journey_scene: String = "res://scenes/journey_screen.tscn"
 
 @export_group("Files")
 @export var save_path: String = "user://save.json"
 @export var settings_path: String = "user://settings.json"
-## Story text files: <story_folder>/<world id>_end_<language>.txt
+## Story text files: <story_folder>/<story id>_<language>.txt ("intro" before
+## the first stage, "<world id>_end" after a world).
 @export var story_folder: String = "res://story"
 
 @export_group("Defaults")
@@ -47,6 +52,10 @@ signal language_changed
 @export var volume_buses: PackedStringArray = PackedStringArray(["Master", "Music", "SFX", "Ambience", "UI"])
 @export_range(0.0, 1.0) var default_volume: float = 0.8
 
+@export_group("UI")
+## The shared look of the screens (fonts, glowing buttons, panels, prompts).
+@export var ui_theme: Theme = preload("res://assets/ui/echo_theme.tres")
+
 ## Current progress. Always set; has_save() tells if it is on disk.
 var save: SaveData
 var language: String = "en"
@@ -62,10 +71,29 @@ var preferred_mode: SaveData.Mode = SaveData.Mode.CALM
 var started_from_menu: bool = false
 ## World whose story screen should show (set when a world is finished).
 var finished_world_id: String = ""
+## The story the story screen shows next: "intro" or "<world id>_end".
+var story_id: String = "intro"
+## Set by complete_stage: the progress before it (world index, stage index), so
+## the Journey screen can play the island lighting up one step. Cleared there.
+var journey_step_from: Vector2i = Vector2i(-1, -1)
+## The gamepad of each player (InputMap device) and whether they started on it
+## (the press on the title screen).
+var player_gamepads: Dictionary = {1: 0, 2: 1}
+var player_on_gamepad: Dictionary = {1: false, 2: false}
+## Screens fade through black (see _change_scene).
+var fader: ScreenFader
+## The menus' focus / press sounds.
+var ui_audio: UiAudio
+var _changing_scene: bool = false
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	fader = ScreenFader.new()
+	add_child(fader)
+	ui_audio = UiAudio.new()
+	add_child(ui_audio)
+	_fade_in_new_scene.call_deferred()
 	language = default_language
 	preferred_mode = default_mode
 	brightness = default_brightness
@@ -165,27 +193,46 @@ func write_save() -> void:
 		push_error("Game: could not write the save (%s)" % error_string(error))
 
 
+## A fresh save, then the intro story, then the first stage.
 func new_game() -> void:
 	save = _fresh_save()
 	write_save()
-	play_current()
+	journey_step_from = Vector2i(-1, -1)
+	story_id = "intro"
+	go_to_story()
 
 
+## The saved progress on the Journey screen (its Continue plays it).
 func continue_game() -> void:
 	var loaded: SaveData = SaveData.read(save_path)
 	if loaded:
 		save = loaded
-	play_current()
+	journey_step_from = Vector2i(-1, -1)
+	go_to_journey()
 
 
-## Starts the saved stage, or opens the World Map if that world has no
+## True if the saved stage can be played (its world has content).
+func can_play_current() -> bool:
+	var world: WorldConfig = get_current_world()
+	return world != null and save.stage_index < world.get_stage_count()
+
+
+## Starts the saved stage, or opens the Journey screen if that world has no
 ## content yet (or the whole game is finished).
 func play_current() -> void:
-	var world: WorldConfig = get_current_world()
-	if world and save.stage_index < world.get_stage_count():
+	if can_play_current():
 		go_to_game()
 	else:
-		go_to_world_map()
+		go_to_journey()
+
+
+## The story screen's Continue: the intro leads into the first stage, the
+## ending of a world to the Journey.
+func after_story() -> void:
+	if story_id == "intro":
+		play_current()
+	else:
+		go_to_journey()
 
 
 ## Called by the StageManager when a stage's boss is beaten. Moves the save to
@@ -195,12 +242,14 @@ func play_current() -> void:
 func complete_stage(skills: SkillLoadout = null) -> bool:
 	var world: WorldConfig = get_current_world()
 	finished_world_id = ""
+	journey_step_from = Vector2i(get_world_index(save.world_id), save.stage_index)
 	if skills:
 		save.skills = skills.copy()
 	save.stage_index += 1
 	var world_finished: bool = world == null or save.stage_index >= world.get_stage_count()
 	if world_finished:
 		finished_world_id = save.world_id
+		story_id = save.world_id + "_end"
 		var next: int = world_ids.find(save.world_id) + 1
 		if next < world_ids.size():
 			save.world_id = world_ids[next]
@@ -255,14 +304,20 @@ func get_completed_world_count() -> int:
 
 
 ## The story file for a world in the current language (English if missing).
-func get_story_path(world_id: String) -> String:
-	var path: String = "%s/%s_end_%s.txt" % [story_folder, world_id, language]
+## The story file for a story id in the current language (else English).
+func get_story_path_for(id: String) -> String:
+	var path: String = "%s/%s_%s.txt" % [story_folder, id, language]
 	if not FileAccess.file_exists(path):
-		path = "%s/%s_end_en.txt" % [story_folder, world_id]
+		path = "%s/%s_en.txt" % [story_folder, id]
 	return path
 
 
+
 # --- Screens ----------------------------------------------------------------
+
+func go_to_title() -> void:
+	_change_scene(title_scene)
+
 
 func go_to_main_menu() -> void:
 	_change_scene(main_menu_scene)
@@ -277,15 +332,73 @@ func go_to_story() -> void:
 	_change_scene(story_scene)
 
 
-func go_to_world_map() -> void:
-	_change_scene(world_map_scene)
+func go_to_journey() -> void:
+	_change_scene(journey_scene)
 
 
+# --- Players' devices ---------------------------------------------------------
+
+## The device that pressed on the title screen becomes Player 1's (the Echo):
+## gamepad_device = that gamepad, or -1 for the keyboard (Player 1 keeps the
+## WASD keys and the first gamepad goes to Player 2). The gamepad events of
+## each player's actions are moved to their device; the keys never change.
+func assign_player_one(gamepad_device: int) -> void:
+	var pads: Array[int] = Input.get_connected_joypads()
+	var first: int
+	var second: int
+	if gamepad_device >= 0:
+		first = gamepad_device
+		second = _other_pad(pads, first)
+	else:
+		second = pads[0] if not pads.is_empty() else 0
+		first = _other_pad(pads, second)
+	player_gamepads = {1: first, 2: second}
+	player_on_gamepad = {1: gamepad_device >= 0, 2: false}
+	_bind_gamepad("p1_", first)
+	_bind_gamepad("p2_", second)
+
+
+func _other_pad(pads: Array[int], taken: int) -> int:
+	for pad: int in pads:
+		if pad != taken:
+			return pad
+	return 1 if taken == 0 else 0
+
+
+func _bind_gamepad(prefix: String, device: int) -> void:
+	for action: StringName in InputMap.get_actions():
+		if not String(action).begins_with(prefix):
+			continue
+		for event: InputEvent in InputMap.action_get_events(action):
+			if (event is InputEventJoypadButton or event is InputEventJoypadMotion) and event.device != device:
+				var moved: InputEvent = event.duplicate()
+				moved.device = device
+				InputMap.action_erase_event(action, event)
+				InputMap.action_add_event(action, moved)
+
+
+## Fades the screen to black (the old scene stays paused if it was), swaps the
+## scene behind the black, then fades the new one in. A second request while
+## one is under way is ignored (a double press).
 func _change_scene(path: String) -> void:
+	if _changing_scene:
+		return
+	_changing_scene = true
+	await fader.fade_out()
 	get_tree().paused = false
 	# In case a hit-stop (SwordAbility) was still running.
 	Engine.time_scale = 1.0
-	get_tree().change_scene_to_file.call_deferred(path)
+	get_tree().change_scene_to_file(path)
+	_changing_scene = false
+	_fade_in_new_scene()
+
+
+## Waits until the new scene has drawn a couple of frames (its build hidden
+## behind the black), then fades it in.
+func _fade_in_new_scene() -> void:
+	for i: int in 2:
+		await get_tree().process_frame
+	await fader.fade_in()
 
 
 # --- Settings file ----------------------------------------------------------

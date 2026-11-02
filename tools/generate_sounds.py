@@ -1359,6 +1359,200 @@ def make_rock_fall(rng):
     return _norm(_trim_tail(_reverb(out, 1.2, 0.25, rng)), PEAK_SFX * 0.8)
 
 
+# --- Menus: UI sounds and the main menu theme ---------------------------------
+# The UI sounds are tiny sonar pings (the game's own voice): soft, round, a
+# quiet echo behind them. The menu theme is a calm ocean ambient loop: a slow
+# pad through four chords (D minor colour), a deep drone, the current's noise,
+# and a sparse glassy melody whose notes echo like sonar pings. Everything is
+# placed circularly (wrap) and reverbed circularly, so the loop is seamless.
+MENU_LOOP = 48.0             # seconds
+MENU_CHORDS = [               # Hz, one chord per quarter of the loop
+    [146.83, 174.61, 220.0, 261.63, 329.63],   # Dm9
+    [116.54, 146.83, 174.61, 220.0, 293.66],   # Bbmaj7
+    [174.61, 220.0, 261.63, 329.63, 392.0],    # Fmaj7
+    [130.81, 196.0, 220.0, 293.66, 329.63],    # C6/9
+]
+MENU_PAD_CUTOFF = 1100.0     # Hz
+MENU_DRONE = 36.71           # Hz (D1)
+MENU_BELL_NOTES = [587.33, 698.46, 783.99, 880.0, 1046.5, 1174.66]  # D minor pentatonic
+MENU_ECHO_DELAY = 0.42       # seconds between a bell note and its echoes
+MENU_ECHO_FEEDBACK = 0.42
+
+
+def _menu_pad_voice(note, seconds, rng):
+    partials = tuple((k, 1.0 / k ** 1.6) for k in range(1, 7))
+    t = _t(seconds)
+    vibrato = 1.0 + 0.0025 * np.sin(2 * np.pi * rng.uniform(0.1, 0.25) * t + rng.uniform(0, 6.0))
+    return (_osc(note * vibrato, partials=partials) + _osc(note * 1.004 * vibrato, partials=partials)) * 0.5
+
+
+def make_menu_theme(rng):
+    length = MENU_LOOP
+    n = int(length * SAMPLE_RATE)
+    pad = np.zeros(n)
+    section = length / len(MENU_CHORDS)
+    # Each chord swells in and out over 1.6 sections, overlapping its neighbours.
+    for i, chord in enumerate(MENU_CHORDS):
+        seconds = section * 1.6
+        t = _t(seconds)
+        window = np.sin(np.pi * t / seconds) ** 2
+        for k, note in enumerate(chord):
+            voice = _menu_pad_voice(note, seconds, rng) * window * (1.0 if k else 0.8)
+            _place(pad, voice, i * section - section * 0.3, 1.0, wrap=True)
+    pad = _circular_band(pad, 70.0, MENU_PAD_CUTOFF, 0.5)
+    drone = _loop_tone(MENU_DRONE, length, ((1.0, 1.0), (2.0, 0.5), (3.0, 0.15)))
+    drone *= _loop_lfo(3, length, 0.35)
+    current = _circular_band(_noise(length, rng), 40.0, 420.0, 0.5) * _loop_lfo(4, length, 0.6, 1.3)
+    # The melody: glassy bell notes at uneven times, each echoed like a ping.
+    bells = np.zeros(n)
+    at = 1.5
+    while at < length - 0.5:
+        note = MENU_BELL_NOTES[int(rng.integers(len(MENU_BELL_NOTES)))]
+        t = _t(3.5)
+        bell = _osc(note, 3.5, ((1.0, 1.0), (2.76, 0.12), (5.4, 0.03))) * _env(t, 0.006, 0.9)
+        gain = rng.uniform(0.5, 1.0)
+        for echo in range(4):
+            _place(bells, _filter(bell, "lowpass", 3200.0 / (1.0 + echo)), at + echo * MENU_ECHO_DELAY,
+                   gain * MENU_ECHO_FEEDBACK ** echo, wrap=True)
+        at += rng.uniform(2.6, 5.5)
+    bubbles = np.zeros(n)
+    for start in rng.uniform(0.0, length, 5):
+        _bubbles(rng, bubbles, 6, start, start + 0.6, 300.0, 750.0, 0.25)
+    bubbles = _circular_band(bubbles, 100.0, 2500.0)
+    mix = pad / np.max(np.abs(pad)) * 0.6         + drone / np.max(np.abs(drone)) * 0.4         + current / np.max(np.abs(current)) * 0.18         + bells / np.max(np.abs(bells)) * 0.32         + bubbles / (np.max(np.abs(bubbles)) + 1e-9) * 0.06
+    mix = _reverb(mix, 5.0, 0.45, rng, circular=True)
+    return _norm(mix, PEAK_MUSIC * 0.85)
+
+
+def _ui_ping(note, seconds: float, decay: float):
+    t = _t(seconds)
+    return _osc(note, seconds, ((1.0, 1.0), (2.0, 0.08), (2.76, 0.04))) * _env(t, 0.004, decay)
+
+
+def make_ui_focus(rng):
+    # A small, soft sonar ping with one quiet echo.
+    out = np.zeros(int(0.7 * SAMPLE_RATE))
+    ping = _ui_ping(1046.5, 0.5, 0.07)
+    _place(out, ping, 0.0)
+    _place(out, _filter(ping, "lowpass", 2000.0), 0.11, 0.22)
+    out = _filter(out, "lowpass", 3800.0)
+    return _norm(_trim_tail(_reverb(out, 0.6, 0.22, rng)), PEAK_SOFT * 0.55)
+
+
+def make_ui_press(rng):
+    # Brighter: two rising pings and a soft bubble under them.
+    out = np.zeros(int(0.9 * SAMPLE_RATE))
+    _place(out, _ui_ping(1046.5, 0.5, 0.08), 0.0, 0.8)
+    _place(out, _ui_ping(1568.0, 0.6, 0.12), 0.06, 1.0)
+    _place(out, _filter(_ui_ping(1568.0, 0.6, 0.12), "lowpass", 2200.0), 0.2, 0.25)
+    _place(out, _bubble(rng, 260.0, 380.0, 0.08), 0.0, 0.5)
+    out = _filter(out, "lowpass", 4500.0)
+    return _norm(_trim_tail(_reverb(out, 0.8, 0.25, rng)), PEAK_SOFT * 0.8)
+
+
+# --- Journey screen: one theme per world -----------------------------------------
+# Built like the menu theme (pads through four chords, a drone, a melody whose
+# notes echo, a texture of the world), each in its own colour. Ocean is the
+# calm ambient one; the other four are placeholders until those worlds exist.
+MAP_LOOP = 32.0              # seconds
+MAP_THEMES = {
+    "ocean": {
+        "chords": [[174.61, 220.0, 261.63, 329.63], [146.83, 174.61, 220.0, 261.63],
+                   [116.54, 174.61, 220.0, 293.66], [130.81, 196.0, 261.63, 293.66]],
+        "drone": 43.65, "pad_cutoff": 1000.0,
+        "motif": [880.0, 1046.5, 698.46, 783.99], "bell_gap": (3.0, 5.0),
+        "bell_partials": ((1.0, 1.0), (2.76, 0.12), (5.4, 0.03)), "bell_decay": 0.9,
+        "noise": (40.0, 420.0, 0.18), "bubbles": 5,
+    },
+    "caves": {
+        "chords": [[110.0, 130.81, 164.81, 220.0], [87.31, 130.81, 174.61, 220.0],
+                   [73.42, 110.0, 146.83, 174.61], [82.41, 123.47, 164.81, 207.65]],
+        "drone": 55.0, "pad_cutoff": 700.0,
+        "motif": [659.26, 698.46, 587.33, 523.25], "bell_gap": (4.0, 6.5),
+        "bell_partials": ((1.0, 1.0), (3.01, 0.2), (6.2, 0.06)), "bell_decay": 1.4,
+        "noise": (30.0, 250.0, 0.22), "drips": 14,
+    },
+    "forest": {
+        "chords": [[130.81, 164.81, 196.0, 261.63], [110.0, 164.81, 220.0, 261.63],
+                   [87.31, 130.81, 174.61, 220.0], [98.0, 146.83, 196.0, 246.94]],
+        "drone": 0.0, "pad_cutoff": 1300.0,
+        "motif": [523.25, 659.26, 783.99, 659.26], "bell_gap": (1.8, 3.2),
+        "bell_partials": ((1.0, 1.0), (2.0, 0.25), (4.0, 0.05)), "bell_decay": 0.35,
+        "noise": (300.0, 1200.0, 0.05), "chirps": 22,
+    },
+    "desert": {
+        "chords": [[73.42, 110.0, 146.83, 220.0], [73.42, 110.0, 155.56, 220.0],
+                   [65.41, 98.0, 146.83, 196.0], [73.42, 110.0, 146.83, 185.0]],
+        "drone": 36.71, "pad_cutoff": 800.0,
+        "motif": [587.33, 622.25, 739.99, 783.99, 880.0], "bell_gap": (2.2, 4.0),
+        "bell_partials": ((1.0, 1.0), (2.0, 0.45), (3.0, 0.2), (4.0, 0.08)), "bell_decay": 0.45,
+        "noise": (500.0, 2200.0, 0.12), "wind": True,
+    },
+    "snow": {
+        "chords": [[164.81, 246.94, 293.66, 369.99], [130.81, 196.0, 246.94, 329.63],
+                   [196.0, 246.94, 293.66, 392.0], [146.83, 220.0, 293.66, 369.99]],
+        "drone": 41.2, "pad_cutoff": 1600.0,
+        "motif": [1318.5, 1174.66, 987.77, 1479.98], "bell_gap": (3.5, 6.0),
+        "bell_partials": ((1.0, 1.0), (2.76, 0.18), (5.4, 0.06)), "bell_decay": 1.6,
+        "noise": (1500.0, 5000.0, 0.06), "wind": True,
+    },
+}
+
+
+def make_map_theme(rng, world_id: str):
+    spec = MAP_THEMES[world_id]
+    length = MAP_LOOP
+    n = int(length * SAMPLE_RATE)
+    section = length / len(spec["chords"])
+    pad = np.zeros(n)
+    for i, chord in enumerate(spec["chords"]):
+        seconds = section * 1.6
+        t = _t(seconds)
+        window = np.sin(np.pi * t / seconds) ** 2
+        for note in chord:
+            _place(pad, _menu_pad_voice(note, seconds, rng) * window, i * section - section * 0.3, 1.0, wrap=True)
+    pad = _circular_band(pad, 60.0, spec["pad_cutoff"], 0.5)
+    mix = pad / np.max(np.abs(pad)) * 0.6
+    if spec["drone"] > 0.0:
+        drone = _loop_tone(spec["drone"], length, ((1.0, 1.0), (2.0, 0.45), (3.0, 0.12))) * _loop_lfo(2, length, 0.35)
+        mix += drone / np.max(np.abs(drone)) * 0.35
+    low, high, gain = spec["noise"]
+    texture = _circular_band(_noise(length, rng), low, high, 0.5) * _loop_lfo(3, length, 0.6, 0.7)
+    if spec.get("wind"):
+        texture *= _loop_lfo(2, length, 0.85, 2.1)
+    mix += texture / np.max(np.abs(texture)) * gain
+    # The melody: the world's motif, note by note, each echoed like a ping.
+    bells = np.zeros(n)
+    at = 1.0
+    k = 0
+    motif = spec["motif"]
+    while at < length - 0.5:
+        note = motif[k % len(motif)]
+        t = _t(3.5)
+        bell = _osc(note, 3.5, spec["bell_partials"]) * _env(t, 0.006, spec["bell_decay"])
+        for echo in range(3):
+            _place(bells, _filter(bell, "lowpass", 3000.0 / (1.0 + echo)), at + echo * MENU_ECHO_DELAY,
+                   rng.uniform(0.6, 1.0) * MENU_ECHO_FEEDBACK ** echo, wrap=True)
+        at += rng.uniform(*spec["bell_gap"])
+        k += 1
+    mix += bells / np.max(np.abs(bells)) * 0.3
+    extra = np.zeros(n)
+    for start in rng.uniform(0.0, length, spec.get("bubbles", 0)):
+        _bubbles(rng, extra, 6, start, start + 0.6, 300.0, 750.0, 0.25)
+    for start in rng.uniform(0.0, length, spec.get("drips", 0)):
+        t = _t(0.25)
+        drip = np.sin(2 * np.pi * np.cumsum(rng.uniform(900.0, 1500.0) * (1.0 + 0.8 * t / 0.25)) / SAMPLE_RATE) * _env(t, 0.002, 0.03)
+        _place(extra, drip, start, rng.uniform(0.3, 1.0), wrap=True)
+    for start in rng.uniform(0.0, length, spec.get("chirps", 0)):
+        t = _t(0.12)
+        chirp = np.sin(2 * np.pi * rng.uniform(3200.0, 4200.0) * t) * np.sin(np.pi * t / 0.12) * (0.5 + 0.5 * np.sin(2 * np.pi * 60.0 * t))
+        _place(extra, chirp, start, rng.uniform(0.2, 0.6), wrap=True)
+    if np.max(np.abs(extra)) > 0.0:
+        mix += _circular_band(extra, 100.0, 4500.0) / np.max(np.abs(extra)) * 0.08
+    mix = _reverb(mix, 4.5, 0.42, rng, circular=True)
+    return _norm(mix, PEAK_MUSIC * 0.8)
+
+
 # --- The preview list ---------------------------------------------------------
 
 def _preview_list():
@@ -1439,6 +1633,13 @@ def _preview_list():
     ]
     for i in range(3):
         sounds.append((f"world_rock_fall_{i + 1}", make_rock_fall, False))
+    sounds += [
+        ("ui_focus", make_ui_focus, False),
+        ("ui_press", make_ui_press, False),
+        ("music_menu", make_menu_theme, True),
+    ]
+    for world_id in MAP_THEMES:
+        sounds.append((f"music_map_{world_id}", lambda rng, w=world_id: make_map_theme(rng, w), True))
     return sounds
 
 

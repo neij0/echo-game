@@ -1,8 +1,10 @@
 class_name StoryScreen
 extends Control
-## Shown after a world's last stage: a black screen where short lines of text
-## fade in one by one, then a Continue button to the World Map. The text comes
-## from story/<world id>_end_<language>.txt (one line of story per line; empty
+## The story between parts of the game (Game.story_id): "intro" after New Game
+## (Continue starts the first stage), "<world id>_end" after a world's last
+## stage (Continue opens the Journey). A black screen where short lines of
+## text fade in one by one, then a Continue button (Game.after_story). The text
+## comes from story/<story id>_<language>.txt (one line of story per line; empty
 ## lines are skipped). Arabic is laid out right-to-left. Pressing Continue
 ## while lines are still appearing shows them all at once.
 
@@ -22,8 +24,8 @@ extends Control
 @export var line_interval: float = 2.2
 ## Seconds after the last line before the Continue button appears.
 @export var button_delay: float = 1.0
-## Used when no world was just finished (e.g. the scene is run on its own).
-@export var fallback_world_id: String = "ocean"
+## Used when no story was asked for (e.g. the scene is run on its own).
+@export var fallback_story_id: String = "intro"
 
 var _lines: Array[Label] = []
 var _button: Button
@@ -45,8 +47,8 @@ func _ready() -> void:
 	column.add_theme_constant_override("separation", line_spacing)
 	center.add_child(column)
 
-	var world_id: String = Game.finished_world_id if Game.finished_world_id != "" else fallback_world_id
-	for line: String in _read_lines(Game.get_story_path(world_id)):
+	var story: String = Game.story_id if Game.story_id != "" else fallback_story_id
+	for line: String in _read_lines(Game.get_story_path_for(story)):
 		var label := Label.new()
 		label.text = line
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -67,7 +69,7 @@ func _ready() -> void:
 	_button.modulate.a = 0.0
 	# Disabled (and unfocused) until it shows, so an early press only skips.
 	_button.disabled = true
-	_button.pressed.connect(Game.go_to_world_map)
+	_button.pressed.connect(Game.after_story)
 	column.add_child(_button)
 
 	_tween = create_tween().set_parallel(true)

@@ -1,38 +1,35 @@
 class_name SkillChoiceScreen
 extends CanvasLayer
-## The skill choice between levels (StageManager._offer_skills): the screen is
-## split, Echo on the left and Guardian on the right (where the players sit, so
-## it is not mirrored in Arabic; the text inside each half is). Each player
-## moves through their own cards with their own controls (move up / down,
-## action = pick / unpick) and is ready once they picked enough. When both are
-## ready, both choices are shown with their co-op tips for summary_time
-## seconds, then choose() returns. Works while the game is paused. Builds its
-## UI in code (functional styling only for now).
+## The skill choice between levels (StageManager._offer_skills), in the
+## "silhouette + glow" style (Game.ui_theme). The screen is split, Echo on the
+## left and Guardian on the right (where the players sit, so it is not
+## mirrored in Arabic; the text inside each half is). Each half is uncovered
+## by a pulse wipe (PulseReveal); each player moves through their own cards
+## (SkillCard: a glowing edge in their colour, a sonar ripple and a soft ping
+## when the cursor arrives) with their own controls (move up / down, action =
+## pick / unpick; drawn prompts for the device they use, InputPrompt) and is
+## ready once they picked enough. When both are ready, both choices are shown
+## with their co-op tips for summary_time seconds, then choose() returns.
+## Works while the game is paused. Builds its UI in code.
 
 signal finished
 
-@export var backdrop_color: Color = Color(0.0, 0.01, 0.03, 0.88)
-@export var title_color: Color = Color(1.0, 0.9, 0.6)
-@export var text_color: Color = Color(0.85, 0.9, 1.0)
-@export var dim_text_color: Color = Color(0.6, 0.66, 0.78)
+@export var backdrop_color: Color = Color(0.0, 0.008, 0.02, 0.985)
 @export var echo_color: Color = Color(0.45, 0.95, 1.0)
-@export var guardian_color: Color = Color(1.0, 0.8, 0.35)
-@export var card_color: Color = Color(0.06, 0.08, 0.13, 0.95)
-@export var card_border_color: Color = Color(0.2, 0.25, 0.35)
-@export var picked_color: Color = Color(0.2, 0.17, 0.08, 0.95)
-@export var picked_border_color: Color = Color(1.0, 0.85, 0.45)
-@export var title_font_size: int = 36
-@export var header_font_size: int = 28
-@export var name_font_size: int = 22
+@export var guardian_color: Color = Color(0.95, 0.75, 0.4)
+@export var name_font_size: int = 23
 @export var text_font_size: int = 17
 @export var icon_size: float = 52.0
 @export var card_width: float = 520.0
 @export var spacing: int = 12
+@export var screen_margin: int = 36
 ## Seconds after opening before any input counts (so a held button from the
 ## level does not pick right away).
 @export var input_delay: float = 0.5
 ## Seconds both choices stay on screen with their tips.
 @export var summary_time: float = 2.0
+@export var focus_sound: StringName = &"ui_focus"
+@export var pick_sound: StringName = &"ui_press"
 
 
 ## One player's half of the screen.
@@ -44,19 +41,21 @@ class ChoiceSide:
 	var picked: Array[int] = []
 	var done: bool = false
 	var color: Color
+	var reveal: PulseReveal
 	var root: VBoxContainer
 	var header: Label
 	var subheader: Label
-	var cards: Array[PanelContainer] = []
+	var cards: Array[SkillCard] = []
 	var cards_box: VBoxContainer
-	var hint: Label
+	var prompt: InputPrompt
 	var status: Label
 
 
 var is_open: bool = false
 var _sides: Array[ChoiceSide] = []
-var _root: ColorRect
+var _root: Control
 var _title: Label
+var _title_rule: WaveRule
 var _columns: HBoxContainer
 var _world: WorldConfig
 var _delay_left: float = 0.0
@@ -65,20 +64,30 @@ var _summary: bool = false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_root = ColorRect.new()
-	_root.color = backdrop_color
+	_root = Control.new()
+	_root.theme = Game.ui_theme
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_root)
+	var backdrop := ColorRect.new()
+	backdrop.color = backdrop_color
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_root.add_child(backdrop)
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 28)
+		margin.add_theme_constant_override("margin_" + side, screen_margin)
 	_root.add_child(margin)
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", spacing * 2)
+	column.add_theme_constant_override("separation", spacing)
 	margin.add_child(column)
-	_title = _label(title_font_size, title_color)
+	_title = Label.new()
+	_title.theme_type_variation = &"HeaderLabel"
+	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(_title)
+	_title_rule = WaveRule.new()
+	_title_rule.custom_minimum_size = Vector2(260.0, 10.0)
+	_title_rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	column.add_child(_title_rule)
 	_columns = HBoxContainer.new()
 	# Echo always left, Guardian always right (not mirrored in Arabic).
 	_columns.layout_direction = Control.LAYOUT_DIRECTION_LTR
@@ -92,12 +101,14 @@ func _ready() -> void:
 ## Player -> Array[SkillDefinition] / int. Returns Player -> Array[SkillDefinition].
 func choose(players: Array[Player], offers: Dictionary, pick_counts: Dictionary, world: WorldConfig) -> Dictionary:
 	_world = world
+	Game.apply_direction(_root)
 	_build_sides(players, offers, pick_counts)
 	_summary = false
 	_delay_left = input_delay
 	_title.text = Game.text("skill_choice_title")
 	_root.visible = true
 	is_open = true
+	_reveal_sides()
 	if _all_done():
 		await get_tree().process_frame
 	else:
@@ -126,6 +137,7 @@ func move_cursor(player: Player, step: int) -> void:
 	if side == null or side.done or side.offer.is_empty():
 		return
 	side.cursor = posmod(side.cursor + step, side.offer.size())
+	UiAudio.play_in(get_tree(), focus_sound)
 	_refresh_side(side)
 
 
@@ -140,6 +152,7 @@ func press_pick(player: Player) -> void:
 		side.picked.append(side.cursor)
 	if side.picked.size() >= side.need:
 		side.done = true
+	UiAudio.play_in(get_tree(), pick_sound)
 	_refresh_side(side)
 	if _all_done():
 		finished.emit()
@@ -175,8 +188,15 @@ func _side_of(player: Player) -> ChoiceSide:
 	return null
 
 
+## Each half is uncovered by a pulse from the top of its column.
+func _reveal_sides() -> void:
+	for side: ChoiceSide in _sides:
+		side.reveal.reveal(Vector2(0.5, 0.0))
+
+
 func _build_sides(players: Array[Player], offers: Dictionary, pick_counts: Dictionary) -> void:
 	for child: Node in _columns.get_children():
+		_columns.remove_child(child)
 		child.queue_free()
 	_sides.clear()
 	for player: Player in players:
@@ -185,62 +205,41 @@ func _build_sides(players: Array[Player], offers: Dictionary, pick_counts: Dicti
 		side.offer.assign(offers.get(player, []))
 		side.need = int(pick_counts.get(player, 1))
 		side.done = side.need <= 0 or side.offer.is_empty()
-		side.color = echo_color if player.skill_owner == SkillDefinition.Owner.ECHO else guardian_color
+		var is_echo: bool = player.skill_owner == SkillDefinition.Owner.ECHO
+		side.color = echo_color if is_echo else guardian_color
+		side.reveal = PulseReveal.new()
+		side.reveal.ring_color = Color(side.color * 1.3, 0.9)
+		side.reveal.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_columns.add_child(side.reveal)
 		side.root = VBoxContainer.new()
-		side.root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		side.root.add_theme_constant_override("separation", spacing)
 		Game.apply_direction(side.root)
-		_columns.add_child(side.root)
-		side.header = _label(header_font_size, side.color)
-		side.root.add_child(side.header)
-		side.subheader = _label(text_font_size, dim_text_color)
-		side.root.add_child(side.subheader)
+		side.reveal.add_child(side.root)
+		side.header = _label(side.root, &"EchoLabel" if is_echo else &"GuardianLabel")
+		side.subheader = _label(side.root, &"DimLabel")
 		side.cards_box = VBoxContainer.new()
 		side.cards_box.add_theme_constant_override("separation", spacing)
 		side.root.add_child(side.cards_box)
 		for definition: SkillDefinition in side.offer:
-			var card: PanelContainer = _make_card(definition, player)
-			side.cards.append(card)
+			var owned: int = player.skills.get_rank(definition.id)
+			var card := SkillCard.new()
+			card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			side.cards_box.add_child(card)
-		side.hint = _label(text_font_size, dim_text_color)
-		side.root.add_child(side.hint)
-		side.status = _label(name_font_size, title_color)
-		side.root.add_child(side.status)
+			card.setup(definition, owned, definition.display_name(Game.language, _world), _kind_text(definition, owned),
+				definition.description(Game.language, _world), side.color, card_width, icon_size, name_font_size, text_font_size, spacing)
+			side.cards.append(card)
+		side.prompt = InputPrompt.new()
+		side.prompt.alignment = BoxContainer.ALIGNMENT_CENTER
+		side.root.add_child(side.prompt)
+		side.prompt.setup([
+			{"actions": [StringName(player.input_prefix + "move_up"), StringName(player.input_prefix + "move_down")],
+				"text": Game.text("prompt_choose")},
+			{"actions": [StringName(player.input_prefix + "action")], "text": Game.text("prompt_pick")},
+		], InputGlyph.Device.GAMEPAD if player.uses_gamepad else InputGlyph.Device.KEYBOARD)
+		side.status = _label(side.root, &"EchoLabel" if is_echo else &"GuardianLabel")
+		side.status.add_theme_font_size_override("font_size", name_font_size)
 		_sides.append(side)
 		_refresh_side(side)
-
-
-func _make_card(definition: SkillDefinition, player: Player) -> PanelContainer:
-	var card := PanelContainer.new()
-	card.custom_minimum_size.x = card_width
-	card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", spacing)
-	card.add_child(row)
-	var icon := SkillIcon.new()
-	var owned: int = player.skills.get_rank(definition.id)
-	icon.setup(definition, owned, icon_size)
-	icon.preview_rank = owned + 1
-	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(icon)
-	var texts := VBoxContainer.new()
-	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(texts)
-	var title := _label(name_font_size, text_color)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title.text = definition.display_name(Game.language, _world)
-	texts.add_child(title)
-	var kind_label := _label(text_font_size - 2, definition.icon_color)
-	kind_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	kind_label.text = _kind_text(definition, owned)
-	texts.add_child(kind_label)
-	var body := _label(text_font_size, dim_text_color)
-	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.custom_minimum_size.x = card_width - icon_size - spacing * 3
-	body.text = definition.description(Game.language, _world)
-	texts.add_child(body)
-	return card
 
 
 ## "New - Active (skill button) - Shared", "Rank 2"...
@@ -263,19 +262,10 @@ func _refresh_side(side: ChoiceSide) -> void:
 	var is_echo: bool = side.player.skill_owner == SkillDefinition.Owner.ECHO
 	side.header.text = Game.text("char_echo" if is_echo else "char_guardian")
 	side.subheader.text = Game.text("skill_pick") % [side.need, side.offer.size()]
-	side.hint.text = Game.text("skill_hint_echo" if is_echo else "skill_hint_guardian")
-	side.hint.visible = not side.done
+	side.prompt.visible = not side.done
 	side.status.text = Game.text("skill_waiting") if side.done else ""
 	for i: int in side.cards.size():
-		var style := StyleBoxFlat.new()
-		var is_picked: bool = i in side.picked
-		style.bg_color = picked_color if is_picked else card_color
-		var focused: bool = i == side.cursor and not side.done
-		style.border_color = side.color if focused else (picked_border_color if is_picked else card_border_color)
-		style.set_border_width_all(3 if focused or is_picked else 1)
-		style.set_corner_radius_all(6)
-		style.set_content_margin_all(10)
-		side.cards[i].add_theme_stylebox_override("panel", style)
+		side.cards[i].set_state(i == side.cursor and not side.done, i in side.picked)
 
 
 ## Both choices with their co-op tips, then a short wait.
@@ -283,32 +273,31 @@ func _show_summary() -> void:
 	_summary = true
 	_title.text = Game.text("skill_summary_title")
 	for side: ChoiceSide in _sides:
-		for card: PanelContainer in side.cards:
+		for card: SkillCard in side.cards:
 			card.queue_free()
 		side.cards.clear()
-		side.hint.visible = false
+		side.prompt.visible = false
 		side.status.text = ""
 		side.subheader.text = ""
 		for index: int in side.picked:
 			var definition: SkillDefinition = side.offer[index]
-			var name_label := _label(name_font_size, definition.icon_color)
 			var rank: int = side.player.skills.get_rank(definition.id) + 1
-			name_label.text = definition.display_name(Game.language, _world)
-			if definition.max_rank > 1:
-				name_label.text += "  " + Game.text("skill_rank") % [rank, definition.max_rank]
-			side.cards_box.add_child(name_label)
-			var tip_label := _label(text_font_size, text_color)
-			tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			tip_label.custom_minimum_size.x = card_width
-			tip_label.text = definition.tip(Game.language, _world)
-			side.cards_box.add_child(tip_label)
+			var card := SkillCard.new()
+			card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			side.cards_box.add_child(card)
+			var rank_text: String = Game.text("skill_rank") % [rank, definition.max_rank] if definition.max_rank > 1 else ""
+			card.setup(definition, rank - 1, definition.display_name(Game.language, _world), rank_text,
+				definition.tip(Game.language, _world), side.color, card_width, icon_size, name_font_size, text_font_size, spacing)
+			card.set_state(false, true)
+			side.cards.append(card)
+		side.reveal.reveal(Vector2(0.5, 0.0))
 	await get_tree().create_timer(summary_time, true).timeout
 	_summary = false
 
 
-func _label(font_size: int, color: Color) -> Label:
+func _label(parent: Control, variation: StringName) -> Label:
 	var label := Label.new()
+	label.theme_type_variation = variation
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", color)
+	parent.add_child(label)
 	return label

@@ -81,6 +81,7 @@ func _test_world_progress() -> void:
 	skills.set_rank("guardian", "dash", 1)
 	_expect(not game.complete_stage(skills), "stage 1 done: the world goes on")
 	_expect(game.save.world_id == "ocean" and game.save.stage_index == 1, "saved at Ocean stage 2")
+	_expect(game.journey_step_from == Vector2i(0, 0), "the Journey will light the Ocean up from stage 1")
 	_expect(game.save.skills.get_rank("echo", "far_echo") == 1 and game.save.skills.get_rank("guardian", "dash") == 1, "the stage's skills are saved")
 	skills.set_rank("echo", "far_echo", 2)
 	_expect(game.save.skills.get_rank("echo", "far_echo") == 1, "the save keeps its own copy of the skills")
@@ -90,10 +91,13 @@ func _test_world_progress() -> void:
 	_expect(game.complete_stage(skills), "stage 3 done: the world is finished")
 	_expect(game.save.skills.is_empty() and game.save.skills.world_id == "caves", "a new world starts without skills")
 	_expect(game.finished_world_id == "ocean", "story screen will be the Ocean's")
+	_expect(game.story_id == "ocean_end" and game.journey_step_from == Vector2i(0, 2), "its ending story, then the Journey steps on from Ocean stage 3")
+	_expect(game.get_story_path_for("intro").ends_with("intro_en.txt") and FileAccess.file_exists(game.get_story_path_for("intro")),
+		"the intro story exists")
 	_expect(game.save.world_id == "caves" and game.save.stage_index == 0, "moved to Caves stage 1")
 	_expect(game.is_world_unlocked("caves") and not game.is_world_unlocked("forest"), "Caves unlocked, Forest still locked")
 	_expect(game.is_world_completed("ocean") and not game.is_world_completed("caves"), "Ocean completed, Caves not")
-	_expect(game.get_completed_world_count() == 1, "one star on the World Map")
+	_expect(game.get_completed_world_count() == 1, "one world restored on the Journey")
 
 	var loaded: SaveData = SaveData.read(TEST_SAVE)
 	_expect(loaded != null and loaded.world_id == "caves" and "caves" in loaded.unlocked_worlds, "the progress was written to disk")
