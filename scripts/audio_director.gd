@@ -64,6 +64,7 @@ const NO_POSITION: Vector2 = Vector2.INF
 	"creature_death": {"volume_db": -4.0},
 	"sentinel_death": {"volume_db": -3.0},
 	"boss_death": {"volume_db": 0.0, "max_distance": 3000.0},
+	"boss_angler_orb_hum": {"volume_db": -9.0, "max_distance": 1100.0},
 	"player_move": {"volume_db": -20.0, "pitch_variation": 0.12, "max_distance": 900.0},
 	"player_hurt": {"volume_db": -3.0},
 	"player_downed": {"volume_db": -2.0},

@@ -1106,15 +1106,6 @@ def make_angler_bite(rng):
     return _norm(_trim_tail(_reverb(out, 1.0, 0.25, rng)), PEAK_SFX)
 
 
-def _fm(carrier, ratio: float, index, t):
-    """A frequency-modulated tone (carrier: a number or an array): metallic /
-    electric colours without any noise."""
-    carrier = np.broadcast_to(np.asarray(carrier, dtype=float), t.shape)
-    phase_c = 2.0 * np.pi * np.cumsum(carrier) / SAMPLE_RATE
-    phase_m = 2.0 * np.pi * np.cumsum(carrier * ratio) / SAMPLE_RATE
-    return np.sin(phase_c + np.asarray(index) * np.sin(phase_m))
-
-
 def make_angler_sweep_wind(rng):
     seconds = 0.9
     t = _t(seconds)
@@ -1141,65 +1132,10 @@ def make_angler_sweep(rng):
     return _norm(_trim_tail(_reverb(np.tanh(1.2 * out), 1.2, 0.3, rng)), PEAK_SFX)
 
 
-def make_angler_orb_charge(rng):
-    seconds = 1.0
-    t = _t(seconds)
-    k = np.clip(t / seconds, 0, 1)
-    # The lure gathers charge: an electric hum rising, brighter and brighter.
-    hum = _fm(180.0 + 260.0 * k ** 1.4, 1.5, 0.8 + 3.5 * k, t)
-    # Brighter as it rises: the filtered tone fades into the full one.
-    dull = _filter(hum, "lowpass", 900.0)
-    out = (dull * (1.0 - k) + _filter(hum, "lowpass", 3800.0) * k) * (0.15 + 0.85 * k ** 1.6)
-    return _norm(_trim_tail(_reverb(out, 0.8, 0.25, rng)), PEAK_SFX * 0.6)
-
-
-def make_angler_orb_fire(rng):
-    seconds = 0.45
-    t = _t(seconds)
-    # A zap: a bright FM chirp falling away.
-    zap = _fm(1400.0 * np.exp(-t / 0.08) + 220.0, 2.01, 4.0 * np.exp(-t / 0.12), t) * _env(t, 0.003, 0.11)
-    body = _osc(160.0 * np.exp(-t / 0.2) + 90.0, partials=((1.0, 1.0), (2.0, 0.4))) * _env(t, 0.005, 0.15) * 0.5
-    return _norm(_trim_tail(_reverb(zap + body, 0.7, 0.22, rng)), PEAK_SFX * 0.7)
-
-
-def make_angler_orb_crackle(rng):
-    seconds = 0.3
-    out = np.zeros(int(seconds * SAMPLE_RATE))
-    # A few tiny electric blips (short FM grains at uneven times).
-    for i in range(5):
-        tg = _t(0.025)
-        f = rng.uniform(1800.0, 3600.0)
-        grain = _fm(f, rng.uniform(1.3, 2.7), 3.0, tg) * _env(tg, 0.001, 0.006)
-        _place(out, grain, rng.uniform(0.0, 0.25), rng.uniform(0.4, 1.0))
-    return _norm(_trim_tail(out), PEAK_SFX * 0.35)
-
-
-def make_angler_orb_pop(rng):
-    seconds = 0.6
-    out = np.zeros(int(seconds * SAMPLE_RATE))
-    # The orb bursts: a fat bubble pop and a glassy ring.
-    _place(out, _bubble(rng, 300.0, 700.0, 0.09) * 1.2, 0.0)
-    t = _t(0.5)
-    ring = _osc(1250.0 * (1.0 + 0.02 * np.sin(2 * np.pi * 7.0 * t)), partials=((1.0, 1.0), (2.76, 0.35), (5.4, 0.12))) * _env(t, 0.002, 0.14)
-    _place(out, ring * 0.5, 0.01)
-    _bubbles(rng, out, 6, 0.02, 0.3, 400.0, 900.0, 0.25)
-    return _norm(_trim_tail(_reverb(out, 0.8, 0.25, rng)), PEAK_SFX * 0.7)
-
-
-def make_angler_orb_deflect(rng):
-    seconds = 0.6
-    t = _t(seconds)
-    # Struck back: a bright metallic ping that bends upwards, with a zap.
-    ping = _osc(900.0 * (1.0 + 0.5 * np.clip(t / 0.25, 0, 1)), partials=((1.0, 1.0), (2.4, 0.4), (4.1, 0.15))) * _env(t, 0.002, 0.18)
-    zap = _fm(2400.0, 1.5, 2.5 * np.exp(-t / 0.05), t) * _env(t, 0.001, 0.04) * 0.5
-    return _norm(_trim_tail(_reverb(ping + zap, 0.9, 0.25, rng)), PEAK_SFX * 0.8)
-
-
-# --- Orbs, second pass: softer, underwater, muffled ------------------------------
+# --- Orbs: soft, underwater, muffled -------------------------------------------
 # A warm hum (sine partials only, no buzz) under a slow wobble, small soft
 # crackles (lowpassed clicks) and bubble pops, all through a low lowpass and a
-# wet reverb. Previewed under the same names (assets/audio/preview/); the old
-# makers above stay until these are approved.
+# wet reverb. The hum is a loop that plays under every moving orb.
 ORB_HUM_PARTIALS = ((1.0, 1.0), (2.0, 0.32), (3.0, 0.1))
 ORB_MUFFLE = 1300.0         # Hz, lowpass over the hum
 ORB_CRACKLE_LOW = 700.0     # Hz, the crackles' band...
@@ -1487,7 +1423,6 @@ def _preview_list():
         ("boss_angler_death", make_angler_death, False),
         ("boss_angler_sweep_wind", make_angler_sweep_wind, False),
         ("boss_angler_sweep", make_angler_sweep, False),
-        # The orbs' second pass (soft, muffled); the game still uses the old files.
         ("boss_angler_orb_charge", make_orb_soft_charge, False),
         ("boss_angler_orb_fire", make_orb_soft_fire, False),
         ("boss_angler_orb_crackle", make_orb_soft_crackle, False),

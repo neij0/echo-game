@@ -13,6 +13,8 @@ extends Node2D
 ##   blocked hit) knocks it back: it flies home to the Angler fast and stuns it
 ##   when it arrives (AnglerBoss.on_orb_return). A deflected orb hurts nobody.
 ## - Rock pops it. Set up by the AnglerBoss (setup) before entering the tree.
+## - A soft hum loop (hum_sound) plays under it while it moves (homing or
+##   flying home) and fades out with it.
 
 enum Phase { HOMING, DEFLECTED, GONE }
 
@@ -47,6 +49,8 @@ enum Phase { HOMING, DEFLECTED, GONE }
 @export var trail_points: int = 10
 
 @export_group("Sound")
+## Looping, positional; each orb starts it at a random point of the loop.
+@export var hum_sound: String = "boss_angler_orb_hum"
 @export var crackle_sound: String = "boss_angler_orb_crackle"
 @export var crackle_interval: float = 0.7
 @export var pop_sound: String = "boss_angler_orb_pop"
@@ -71,6 +75,8 @@ var _arcs: Array[PackedVector2Array] = []
 var _trail: PackedVector2Array = PackedVector2Array()
 var _glow: Node2D
 var _light: PointLight2D
+var _hum: AudioStreamPlayer2D
+var _hum_db: float = 0.0
 
 
 func setup(from_boss: AnglerBoss, prey: Player, start_direction: Vector2, orb_speed: float, orb_turn_rate: float,
@@ -104,6 +110,27 @@ func _ready() -> void:
 	_glow.draw.connect(_draw_glow)
 	layer.add_child(_glow)
 	_crackle_left = randf() * crackle_interval
+	_start_hum.call_deferred()
+
+
+func _start_hum() -> void:
+	var audio: AudioDirector = AudioDirector.find(get_tree())
+	if audio == null or hum_sound == "" or phase == Phase.GONE:
+		return
+	_hum = audio.make_loop_player(hum_sound, self) as AudioStreamPlayer2D
+	if _hum:
+		_hum_db = _hum.volume_db
+		_hum.play(randf() * _hum.stream.get_length())
+
+
+func _exit_tree() -> void:
+	if _hum:
+		_hum.stop()
+
+
+## True while its hum loop plays (it moves).
+func is_humming() -> bool:
+	return _hum != null and _hum.playing and phase != Phase.GONE
 
 
 func _physics_process(delta: float) -> void:
@@ -241,6 +268,8 @@ func _update_look(delta: float) -> void:
 	var fade: float = 1.0 - clampf(_gone_age / fade_time, 0.0, 1.0) if phase == Phase.GONE else 1.0
 	_light.color = deflected_color if phase == Phase.DEFLECTED else _base_color()
 	_light.energy = light_energy * fade * (0.8 + 0.2 * sin(_age * 31.0))
+	if _hum:
+		_hum.volume_db = _hum_db + linear_to_db(maxf(fade, 0.001))
 	_glow.global_position = global_position
 	_glow.queue_redraw()
 

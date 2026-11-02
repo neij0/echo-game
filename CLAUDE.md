@@ -106,7 +106,8 @@ After the 3rd stage of a world: a story text screen, then the World Map.
   (`mine_blast_radius` 110, one hit each); charging over one blows it up on the Angler:
   `mine_damage_ratio` of its health + `mine_stun_time`, so a Lure bait can lead it there).
   Its orbs and mines fizzle when it dies. Every attack: per-mode values, one hit per player,
-  the normal invulnerability (no chained knockback), procedural sounds (`boss_angler_*`).
+  the normal invulnerability (no chained knockback), procedural sounds (`boss_angler_*`; every
+  moving orb carries the soft `boss_angler_orb_hum` loop, faded out when it bursts).
   The visual is always a side profile (flips left/right, tilts at most 30°). The boss arena
   room has 4 pillars (diamond round the Boss marker) and 2 `Vent*` markers.
 - **Bubble vents** (`BubbleVent`, `WorldConfig.bubble_vent_scene`, spawned by the
@@ -302,8 +303,7 @@ numbered variant) replaces one without code changes.
 **New sounds wait for approval**: `python tools/generate_sounds.py preview <name>` writes them to
 `assets/audio/preview/` (same names as the files they would replace; the game never reads
 that folder); the Sound Test lists them first, each beside the current version. Once approved
-they are copied over the files in `sfx/` (pending: the soft orb set `boss_angler_orb_*`, plus
-an `orb_hum` loop not wired in yet).
+they are copied over the files in `sfx/` (and deleted from `preview/`).
 - **Buses** (`default_bus_layout.tres`): Master, Music (a "Duck" amplify), SFX and Ambience
   (a "Gate" amplify + the world's underwater low-pass + reverb), UI. Volumes: `Game.volumes`
   (Options sliders, saved).

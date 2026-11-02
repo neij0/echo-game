@@ -7,8 +7,8 @@ extends Node
 ## finisher's hit-stop silence and music ducking, the music states (Calm ->
 ## Tension -> Chase -> hysteresis -> Calm, Intense in a lockdown and the
 ## collapse, Boss) and their stingers, each creature type's voice, the
-## players' sounds, the mending hum, the shard hum, the collapse sounds and
-## the ambience one-shots.
+## players' sounds, the mending hum, the shard hum, the Angler orb's hum loop,
+## the collapse sounds and the ambience one-shots.
 
 const PHYSICS_FPS: float = 60.0
 const REQUIRED_SOUNDS: Array[String] = [
@@ -21,6 +21,8 @@ const REQUIRED_SOUNDS: Array[String] = [
 	"world_shard_hum", "world_shard_pickup", "world_barrier_close", "world_barrier_open", "world_collapse_rumble", "world_rock_fall",
 	"sting_spotted", "sting_shard", "sting_lockdown", "sting_doors_open", "sting_level_complete", "sting_downed",
 	"amb_bubbles", "amb_whale", "amb_ocean_bed",
+	"boss_angler_orb_charge", "boss_angler_orb_fire", "boss_angler_orb_crackle", "boss_angler_orb_pop", "boss_angler_orb_deflect",
+	"boss_angler_orb_hum",
 ]
 
 var _game: Node2D
@@ -310,6 +312,22 @@ func _test_world() -> void:
 	_check(_heard.has("world_rock_fall"), "and rocks fall around the camera")
 	escape.stop()
 	_check(not escape._rumble.playing, "the rumble stops with the collapse")
+	await _test_orb_hum()
+
+
+func _test_orb_hum() -> void:
+	# A still orb on open floor away from the players (speed 0, long life).
+	var orb := AnglerOrb.new()
+	orb.setup(null, _echo, Vector2.RIGHT, 0.0, 0.0, 30.0, 1.0, 0.0)
+	orb.position = _builder.to_local(_open_spot(_echo.global_position, 220.0))
+	_builder._level.add_child(orb)
+	await _frames(3)
+	_check(orb.is_humming() and orb._hum.stream.resource_path.ends_with("sfx/boss_angler_orb_hum.wav"), "an Angler orb hums while it moves (loop)")
+	_heard.clear()
+	orb.pop()
+	_check("boss_angler_orb_pop" in _heard and not orb.is_humming(), "it pops: the soft pop plays, the hum fades out")
+	await _frames(int(orb.fade_time * PHYSICS_FPS) + 3)
+	_check(not is_instance_valid(orb), "and the orb is gone with its hum")
 
 
 func _test_ambience() -> void:
