@@ -17,6 +17,11 @@ var _fireflies: Array[Dictionary] = []
 var _lanterns: Array[Vector2] = []
 
 
+func _init() -> void:
+	# The great tree's crown.
+	crown_height = 106.0
+
+
 func _build_kind(rng: RandomNumberGenerator) -> void:
 	for i: int in 16:
 		var x_share: float = rng.randf_range(-0.85, 0.85)

@@ -3,7 +3,8 @@ extends Node
 ##   godot --path . res://tools/ui_capture.tscn -- <folder>
 ## Saves: the splash, the title screen (EN / AR), the main menu (EN / AR, with
 ## Continue focused and with Mode focused: its help line), the Journey screen
-## with the Ocean at stage 1, 2 and 3 (EN / AR), the camera on a locked world,
+## with the Ocean at stage 1, 2 and 3 (EN / AR), the camera on a locked world
+## (the Caves, then the Snow at the top),
 ## the island halfway through lighting up one step, and the skill choice (EN /
 ## AR). The save and the language are only changed in memory (never written).
 
@@ -59,6 +60,9 @@ func _run() -> void:
 				(journey as JourneyScreen)._select(1, true)
 				await _wait(1.6)
 				await _shot("journey_locked_caves_en")
+				(journey as JourneyScreen)._select(4, true)
+				await _wait(2.4)
+				await _shot("journey_locked_snow_en")
 			await _close(journey)
 
 	# The island lighting up one step (Ocean stage 1 -> 2).

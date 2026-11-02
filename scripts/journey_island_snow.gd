@@ -20,6 +20,11 @@ var _glints: Array[Dictionary] = []
 var _flakes: Array[Dictionary] = []
 
 
+func _init() -> void:
+	# The highest peak and the star above it.
+	crown_height = 162.0 + star_height + 12.0
+
+
 func _build_kind(rng: RandomNumberGenerator) -> void:
 	for p: Array in [[-0.5, -0.15, 0.42, 92.0], [0.48, -0.2, 0.4, 78.0], [0.0, -0.3, 0.55, 150.0]]:
 		var base: Vector2 = on_top(p[0], p[1])

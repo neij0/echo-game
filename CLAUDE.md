@@ -312,8 +312,8 @@ numbered variant) replaces one without code changes.
 `assets/audio/preview/` (same names as the files they would replace; the game never reads
 that folder); the Sound Test lists them first, each beside the current version. Once approved
 they are copied over the files in `sfx/` (`music/` for music) and deleted from `preview/`
-(pending: the Journey themes `music_map_ocean` / `_caves` / `_forest` / `_desert` / `_snow`; the
-Journey already asks for them by name and stays silent until the files exist).
+(nothing is pending now). The Journey themes `music_map_<world id>` are in `music/` (the
+Ocean's own theme and placeholders for the other four worlds).
 - **Buses** (`default_bus_layout.tres`): Master, Music (a "Duck" amplify), SFX and Ambience
   (a "Gate" amplify + the world's underwater low-pass + reverb), UI. Volumes: `Game.volumes`
   (Options sliders, saved).
@@ -393,6 +393,22 @@ Journey already asks for them by name and stays silent until the files exist).
   lit up to the current world). Up / down moves the camera to a world and its theme plays
   (`JourneyMusic`: `WorldConfig.map_theme` else `music_map_<id>.wav`, 1.5 s crossfades, a locked
   world muffled by a low-pass on its own bus); Continue plays the save or says "coming soon".
+  **Framing**: the camera centres the selected island's whole drawn area
+  (`JourneyIsland.get_visual_rect`: each kind sets its `crown_height`) in the free area below
+  the title, above the bottom bar (prompts + buttons) and beside the timeline; one scale for all
+  islands (`tower_scale`, smaller only if the biggest island does not fit). The tower fades out
+  over `fade_height` before the title and the bottom bar (`FADE_SHADER` on its holder, shared
+  through `use_parent_material`), so no island is ever drawn over them.
+  **Island art direction (in progress, after the part 2a review)**: no outlines or line art.
+  Each island = one solid dark silhouette (its top closed by the jagged rock under it) with a
+  vertical gradient, a soft rim light (a strip that fades, never a line), soft glows, particles,
+  and two wider / lighter jagged rock layers behind it, all fading into the dark (`IslandArt`:
+  `build_island_rock`, `draw_rock_layers`, `draw_rock_body`, `rim`, `soft_glow`, `beam`...).
+  Recognizable by silhouette: Ocean reef / water with kelp, Caves rock with hanging stalactites
+  (never a face), Forest tree crowns, Desert dunes + a ruin, Snow sharp peaks + a star; locked =
+  near-black with a faint rim only. Three Ocean proposals wait for a pick
+  (`tools/island_styles/`: A Reef Dome, B Sea Globe, C Lagoon Falls; `island_style_preview.tscn`);
+  the islands in the game still use the old line look until then.
 
 ## Lighting (layers)
 The pulse is the main way to read the layout from a distance; nothing else may make far
@@ -645,9 +661,13 @@ The world is tilted to match the characters, still 2D:
   - `angler_preview.tscn`: look preview of the Angler's states (F6; `-- capture <folder>`
     saves screenshots, needs a window)
   - `ui_capture.tscn`: screenshots of the menu screens (splash, title, main menu, the Journey
-    with the Ocean at stages 1-3 and a locked world, a step animation, skill choice; EN / AR;
-    the save only changed in memory), needs a window:
+    with the Ocean at stages 1-3 and locked worlds (Caves, Snow), a step animation, skill choice;
+    EN / AR; the save only changed in memory), needs a window:
     `godot --path . res://tools/ui_capture.tscn -- <folder>`
+  - `island_style_preview.tscn`: the Ocean island in the proposed art styles
+    (`tools/island_styles/`), side by side (F6; up / down = light 0-3); with a folder it saves
+    one image (stage 3 and stage 1 rows; other lights as a list, 0 = locked), needs a window:
+    `godot --path . res://tools/island_style_preview.tscn -- <folder> [3,1,0]`
   - `sound_test.tscn`: listen to every sound and the music crossfades (run it with F6)
   - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it

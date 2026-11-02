@@ -20,6 +20,11 @@ var _windows: Array[Dictionary] = []
 var _streaks: Array[Dictionary] = []
 
 
+func _init() -> void:
+	# The obelisk and its burning capstone.
+	crown_height = 100.0
+
+
 func _build_kind(rng: RandomNumberGenerator) -> void:
 	for d: Array in [[-0.55, -0.35, 0.5, 18.0], [0.35, -0.5, 0.55, 22.0], [-0.1, 0.35, 0.6, 14.0]]:
 		var center: Vector2 = on_top(d[0], d[1])

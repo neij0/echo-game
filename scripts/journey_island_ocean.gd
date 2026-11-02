@@ -23,6 +23,11 @@ var _bubbles: Array[Dictionary] = []
 var _spots: Array[Dictionary] = []
 
 
+func _init() -> void:
+	# The spire and the brighter half of its beam.
+	crown_height = spire_height + beam_height * 0.5
+
+
 func _build_kind(rng: RandomNumberGenerator) -> void:
 	var corals: Array = [
 		[Vector2(-0.68, -0.1), 1, 0.0], [Vector2(0.6, 0.25), 1, 0.5], [Vector2(-0.25, 0.45), 2, 0.0],

@@ -9,15 +9,41 @@ extends Control
 ## coming soon; Back / Main Menu returns. After a cleared stage
 ## (Game.journey_step_from) the island lights up one step first (any button
 ## skips it). Arabic mirrors the layout (the timeline on the left).
+## Framing: the selected island (its whole drawn area) sits in the middle of
+## the free area, below the title, above the bottom bar (prompts and buttons)
+## and beside the timeline; the tower fades out softly before it reaches the
+## title or the bottom bar, so no island is ever drawn over them.
+
+## Fades the tower (a material on its holder, shared with use_parent_material)
+## between screen rows: gone above top_clear, whole from top_full down to
+## bottom_full, gone below bottom_clear.
+const FADE_SHADER: String = """
+shader_type canvas_item;
+
+uniform float top_clear = -2.0;
+uniform float top_full = -1.0;
+uniform float bottom_full = 100000.0;
+uniform float bottom_clear = 100001.0;
+
+void fragment() {
+	float y = FRAGCOORD.y;
+	COLOR.a *= smoothstep(top_clear, top_full, y) * (1.0 - smoothstep(bottom_full, bottom_clear, y));
+}
+"""
 
 @export_group("Layout")
-## Where the selected island sits on screen (share of the size; mirrored in Arabic).
-@export var island_anchor: Vector2 = Vector2(0.37, 0.5)
+## The biggest the tower is drawn (1 = full size); smaller only when the
+## biggest island would not fit the free area.
 @export var tower_scale: float = 1.0
 ## How fast the camera glides to the selected island (per second).
 @export var camera_speed: float = 3.5
 @export var screen_margin: Vector2 = Vector2(64.0, 44.0)
 @export var timeline_width: float = 290.0
+## Room kept between the island and the timeline (x) / the title and the
+## bottom bar (y).
+@export var frame_padding: Vector2 = Vector2(28.0, 14.0)
+## Height over which the tower fades out above the bottom bar and under the title.
+@export var fade_height: float = 60.0
 
 @export_group("Step Animation")
 ## Seconds after opening before the island lights up (the screen fades in first).
@@ -31,6 +57,9 @@ var _holder: Node2D
 var _tower: JourneyTower
 var _music: JourneyMusic
 var _ui: Control
+var _header: Control
+var _bottom_bar: Control
+var _fade: ShaderMaterial
 var _timeline: JourneyTimeline
 var _continue_button: GlowButton
 var _menu_button: GlowButton
@@ -53,6 +82,14 @@ func _ready() -> void:
 	_tower = JourneyTower.new()
 	_holder.add_child(_tower)
 	_tower.step_finished.connect(_on_step_finished)
+	var shader := Shader.new()
+	shader.code = FADE_SHADER
+	_fade = ShaderMaterial.new()
+	_fade.shader = shader
+	_holder.material = _fade
+	_tower.use_parent_material = true
+	for island: JourneyIsland in _tower.islands:
+		island.use_parent_material = true
 	var glow := GlowEnvironment.new()
 	add_child(glow)
 	_music = JourneyMusic.new()
@@ -77,9 +114,13 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	var free: Rect2 = _free_rect()
+	var view_scale: float = _fit_scale(free)
 	_camera = _camera.lerp(_camera_target(), clampf(camera_speed * delta, 0.0, 1.0))
-	_holder.position = _anchor() - _camera * tower_scale
+	_holder.scale = Vector2(view_scale, view_scale)
+	_holder.position = free.get_center() - _camera * view_scale
 	_sky.scroll = _camera
+	_update_fade()
 
 
 ## Up / down look at the worlds; any press skips the step animation.
@@ -99,13 +140,50 @@ func _input(event: InputEvent) -> void:
 		Game.go_to_main_menu()
 
 
-func _anchor() -> Vector2:
-	var share: Vector2 = island_anchor
-	if Game.is_rtl():
-		share.x = 1.0 - share.x
-	return size * share
+## Where the islands may be drawn (this screen's pixels): below the title,
+## above the bottom bar and beside the timeline (right of it in Arabic).
+func _free_rect() -> Rect2:
+	var header: Rect2 = _local_rect(_header)
+	var bar: Rect2 = _local_rect(_bottom_bar)
+	var timeline: Rect2 = _local_rect(_timeline)
+	var top: float = header.end.y + frame_padding.y
+	var bottom: float = bar.position.y - frame_padding.y
+	var left: float = screen_margin.x
+	var right: float = size.x - screen_margin.x
+	if timeline.get_center().x > size.x * 0.5:
+		right = timeline.position.x - frame_padding.x
+	else:
+		left = timeline.end.x + frame_padding.x
+	return Rect2(left, top, maxf(right - left, 1.0), maxf(bottom - top, 1.0))
 
 
+func _local_rect(control: Control) -> Rect2:
+	return get_global_transform().affine_inverse() * control.get_global_rect()
+
+
+## tower_scale, or smaller so that even the biggest island fits the free area
+## (one scale for all, so moving between islands never zooms).
+func _fit_scale(free: Rect2) -> float:
+	var need := Vector2.ONE
+	for island: JourneyIsland in _tower.islands:
+		var island_size: Vector2 = island.get_visual_rect().size
+		need = Vector2(maxf(need.x, island_size.x), maxf(need.y, island_size.y))
+	return minf(tower_scale, minf(free.size.x / need.x, free.size.y / need.y))
+
+
+## The tower fades out over fade_height before the bottom bar (gone at its
+## top edge) and under the title.
+func _update_fade() -> void:
+	var to_screen: Transform2D = get_global_transform_with_canvas()
+	var title_bottom: float = (to_screen * _local_rect(_header).end).y
+	var bar_top: float = (to_screen * _local_rect(_bottom_bar).position).y
+	_fade.set_shader_parameter("top_clear", title_bottom - fade_height)
+	_fade.set_shader_parameter("top_full", title_bottom)
+	_fade.set_shader_parameter("bottom_full", bar_top - fade_height)
+	_fade.set_shader_parameter("bottom_clear", bar_top)
+
+
+## The middle of the selected island's drawn area (tower space).
 func _camera_target() -> Vector2:
 	return _tower.get_focus_point(_selected)
 
@@ -163,6 +241,7 @@ func _build_ui() -> void:
 	var header := VBoxContainer.new()
 	header.add_theme_constant_override("separation", 2)
 	rows.add_child(header)
+	_header = header
 	var title := Label.new()
 	title.name = "Title"
 	title.theme_type_variation = &"HeaderLabel"
@@ -188,6 +267,7 @@ func _build_ui() -> void:
 	bottom.alignment = BoxContainer.ALIGNMENT_END
 	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rows.add_child(bottom)
+	_bottom_bar = bottom
 	var bottom_text := VBoxContainer.new()
 	bottom_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom_text.alignment = BoxContainer.ALIGNMENT_END

@@ -19,6 +19,11 @@ var _stalactites: Array[Dictionary] = []
 var _boulders: Array[Dictionary] = []
 
 
+func _init() -> void:
+	# The great crystal on top.
+	crown_height = 66.0
+
+
 func _build_kind(rng: RandomNumberGenerator) -> void:
 	for i: int in 21:
 		var angle: float = PI + PI * float(i) / 20.0

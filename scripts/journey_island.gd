@@ -27,6 +27,11 @@ extends Node2D
 @export var glow_energy: float = 2.6
 @export var path_color: Color = Color(1.0, 0.86, 0.55)
 @export var seed_value: int = 1
+## How far its shapes rise above the middle of the top surface (each kind sets
+## it); with it get_visual_rect knows the whole island.
+@export var crown_height: float = 60.0
+## Room kept round the island when the Journey screen frames it.
+@export var frame_margin: float = 14.0
 
 ## 0 = locked, 1-3 = lit steps (fractions while it lights up).
 var light: float = 0.0
@@ -58,9 +63,18 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
-## Where the camera looks at this island (local to its parent).
+## The island's drawn area (local): what stands on it, the top surface and the
+## rock hanging under it. The Journey screen centres the selected island on it.
+func get_visual_rect() -> Rect2:
+	var top: float = -maxf(top_depth, crown_height) - frame_margin
+	var bottom: float = hang_depth + frame_margin
+	return Rect2(-half_width - frame_margin, top, (half_width + frame_margin) * 2.0, bottom - top)
+
+
+## Where the camera looks at this island (local to its parent): the middle of
+## its drawn area.
 func get_focus_point() -> Vector2:
-	return position + Vector2(0.0, hang_depth * 0.2)
+	return position + get_visual_rect().get_center()
 
 
 ## 0-1: how far a light of this step (1-3) is on; order (0-1) is its place in

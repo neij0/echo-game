@@ -8,7 +8,7 @@ extends Node
 ## Tension -> Chase -> hysteresis -> Calm, Intense in a lockdown and the
 ## collapse, Boss) and their stingers, each creature type's voice, the
 ## players' sounds, the mending hum, the shard hum, the Angler orb's hum loop,
-## the collapse sounds and the ambience one-shots.
+## the collapse sounds, the ambience one-shots and every world's Journey theme.
 
 const PHYSICS_FPS: float = 60.0
 const REQUIRED_SOUNDS: Array[String] = [
@@ -59,6 +59,7 @@ func _run() -> void:
 
 	_test_buses_and_settings()
 	_test_catalog()
+	_test_journey_themes()
 	await _test_hit_stop_and_duck()
 	await _test_music_states()
 	await _test_creature_voices()
@@ -127,6 +128,23 @@ func _test_catalog() -> void:
 	_check(pitches.max() - pitches.min() > 0.02, "repeats get a random pitch (%.2f - %.2f)" % [pitches.min(), pitches.max()])
 	_check(_audio.play("player_move") is AudioStreamPlayer and _audio.play("player_move", Vector2(10, 10)) is AudioStreamPlayer2D,
 		"with a position the sound is positional")
+
+
+func _test_journey_themes() -> void:
+	print("== Journey themes ==")
+	# Not added to the tree: find_theme needs no buses.
+	var journey_music := JourneyMusic.new()
+	var missing := PackedStringArray()
+	var not_looping := PackedStringArray()
+	for world_id: String in Game.world_ids:
+		var theme := journey_music.find_theme(world_id) as AudioStreamWAV
+		if theme == null:
+			missing.append(world_id)
+		elif theme.loop_mode == AudioStreamWAV.LOOP_DISABLED:
+			not_looping.append(world_id)
+	journey_music.free()
+	_check(missing.is_empty(), "every world has its Journey theme%s" % ("" if missing.is_empty() else " (missing: %s)" % ", ".join(missing)))
+	_check(not_looping.is_empty(), "and every theme loops%s" % ("" if not_looping.is_empty() else " (not: %s)" % ", ".join(not_looping)))
 
 
 func _test_hit_stop_and_duck() -> void:
