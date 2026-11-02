@@ -1,25 +1,19 @@
 extends Control
-## The Ocean island in the proposed art styles (tools/island_styles/: A Reef
-## Dome, B Sea Globe, C Lagoon Falls), to pick the one every Journey island
-## will follow. Run it (F6) to see them side by side; Up / Down lights them one
-## step up / down (0 = locked .. 3). With a folder it saves one image of all of
-## them, lit at stage 3 (top row) and at stage 1 (bottom row), and quits (needs
-## a window); other rows: a list of lights after the folder (0 = locked):
-##   godot --path . res://tools/island_style_preview.tscn -- <folder> [3,1,0]
+## The five Journey islands (JourneyTower.ISLAND_SCRIPTS) side by side, to
+## look at their art away from the Journey screen. Run it (F6); Up / Down
+## lights them one step up / down (0 = locked .. 3). With a folder it saves one
+## image of all of them, one row per light (default: locked, stage 1, 2, 3),
+## and quits (needs a window); other rows: a list of lights after the folder:
+##   godot --path . res://tools/island_preview.tscn -- <folder> [0,1,2,3]
 
-const STYLES: Array[Script] = [
-	preload("res://tools/island_styles/ocean_reef_dome.gd"), preload("res://tools/island_styles/ocean_sea_globe.gd"),
-	preload("res://tools/island_styles/ocean_lagoon_falls.gd"),
-]
-const NAMES: PackedStringArray = ["A  Reef Dome", "B  Sea Globe", "C  Lagoon Falls"]
+const STYLES: Array[Script] = JourneyTower.ISLAND_SCRIPTS
+const NAMES: PackedStringArray = ["Ocean", "Caves", "Forest", "Desert", "Snow"]
 
 ## One picture per style and light in the saved image (crop of the screen).
-@export var cell_size: Vector2i = Vector2i(560, 700)
-## The lights of the saved image's rows (stage 3, then stage 1).
-@export var capture_lights: PackedFloat32Array = PackedFloat32Array([3.0, 1.0])
-@export var view_scale: float = 0.72
-@export var accent: Color = Color(0.45, 0.95, 1.0)
-@export var top_color: Color = Color(0.02, 0.06, 0.09)
+@export var cell_size: Vector2i = Vector2i(500, 660)
+## The lights of the saved image's rows.
+@export var capture_lights: PackedFloat32Array = PackedFloat32Array([0.0, 1.0, 2.0, 3.0])
+@export var view_scale: float = 0.5
 @export var step_time: float = 1.2
 
 var _holder: Node2D
@@ -37,9 +31,7 @@ func _ready() -> void:
 	add_child(_holder)
 	for i: int in STYLES.size():
 		var island := STYLES[i].new() as JourneyIsland
-		island.seed_value = 11
-		island.accent = accent
-		island.top_color = top_color
+		island.seed_value = 11 + i * 7
 		island.light = _light
 		_holder.add_child(island)
 		_islands.append(island)
@@ -108,7 +100,7 @@ func _capture(folder: String) -> void:
 			var cell: Image = _to_srgb(shot.get_region(Rect2i(corner, cell_size)))
 			sheet.blit_rect(cell, Rect2i(Vector2i.ZERO, cell_size), Vector2i(cell_size.x * i, cell_size.y * row))
 			print("rendered ", NAMES[i], " light ", capture_lights[row])
-	var path: String = folder.path_join("ocean_island_styles.png")
+	var path: String = folder.path_join("journey_islands.png")
 	sheet.save_png(path)
 	print("saved ", path)
 	get_tree().quit()

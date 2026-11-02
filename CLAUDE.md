@@ -382,14 +382,24 @@ Ocean's own theme and placeholders for the other four worlds).
   bottom. Arabic: the column moves right, the tower left. Music: `music_menu`, fading with the
   screen.
 - **Journey** (`JourneyScreen`, replaces the World Map): `JourneyTower` = the five worlds as
-  floating islands (`JourneyIsland` + one script per kind: Ocean water slab, corals, crystals,
-  bubbles; Caves stalactites and crystals in a cave mouth; Forest trees and fireflies; Desert
-  dunes and ruins; Snow peaks and a star), Ocean at the bottom, joined by a glowing path
-  climbing up (lit up to the current world, a spark running along it). Each island's `light`
-  (0 locked: near-black, faint rim; 1 / 2 / 3 = the stage reached: a few lights, more, all
-  with its marker) fades its lights in one by one (`lit(step, order)`); finished worlds stay at
-  3. `play_step` animates the last step (or the path climbing to the next world), any press
-  skips. Beside it `JourneyTimeline` (names, "Stage 2" / restored / locked + padlock, the line
+  floating islands (`JourneyIsland` + one script per kind), Ocean at the bottom, joined by a
+  path of soft light motes from one island's shoulder to the next (`get_path_anchor`; behind the
+  islands, never across their tops; lit up to the current world, a wave of light climbing it).
+  **Art direction**: no outlines or line art. Each island = one dark silhouette (its top edge,
+  `_build_top`, closed by the jagged rock hanging under it) with a vertical gradient, a soft rim
+  light (a strip that fades, never a line), a glow behind it, particles, and two lighter jagged
+  rock layers behind it, all fading into the dark (`IslandArt`: `build_island_rock`,
+  `draw_rock_layers`, `draw_rock_body`, `rim`, `soft_glow`, `shaded_disc`, `beam`...). Every
+  world holds a **vessel of the Ancient Light** that wakes as its stages are cleared: Ocean a
+  sphere of sea water gripped by stone fingers on a rocky cradle (reef, kelp, fish inside), Caves
+  a broken geode bowl with a crystal cluster (stalactites and glow-worms below; never a face),
+  Forest a giant tree whose heart hollow holds the sap, Desert a stone-framed hourglass in the
+  dunes (a broken pillar, drifting sand), Snow an ice star on the summit of sharp peaks. `light`:
+  0 locked = near-black silhouette, faint rim only; stage 1 = the vessel dark, a few small lights
+  of life (`lit(step, order)`); stage 2 = the vessel glows softly (`soft_level`); stage 3 = its
+  core awakens with rays (`core_level`). Finished worlds stay at 3. `play_step` animates the last
+  step (or the path climbing to the next world), any press skips. Beside it `JourneyTimeline`
+  (names, "Stage 2" / restored / locked + padlock, the line
   lit up to the current world). Up / down moves the camera to a world and its theme plays
   (`JourneyMusic`: `WorldConfig.map_theme` else `music_map_<id>.wav`, 1.5 s crossfades, a locked
   world muffled by a low-pass on its own bus); Continue plays the save or says "coming soon".
@@ -399,16 +409,6 @@ Ocean's own theme and placeholders for the other four worlds).
   islands (`tower_scale`, smaller only if the biggest island does not fit). The tower fades out
   over `fade_height` before the title and the bottom bar (`FADE_SHADER` on its holder, shared
   through `use_parent_material`), so no island is ever drawn over them.
-  **Island art direction (in progress, after the part 2a review)**: no outlines or line art.
-  Each island = one solid dark silhouette (its top closed by the jagged rock under it) with a
-  vertical gradient, a soft rim light (a strip that fades, never a line), soft glows, particles,
-  and two wider / lighter jagged rock layers behind it, all fading into the dark (`IslandArt`:
-  `build_island_rock`, `draw_rock_layers`, `draw_rock_body`, `rim`, `soft_glow`, `beam`...).
-  Recognizable by silhouette: Ocean reef / water with kelp, Caves rock with hanging stalactites
-  (never a face), Forest tree crowns, Desert dunes + a ruin, Snow sharp peaks + a star; locked =
-  near-black with a faint rim only. Three Ocean proposals wait for a pick
-  (`tools/island_styles/`: A Reef Dome, B Sea Globe, C Lagoon Falls; `island_style_preview.tscn`);
-  the islands in the game still use the old line look until then.
 
 ## Lighting (layers)
 The pulse is the main way to read the layout from a distance; nothing else may make far
@@ -664,10 +664,9 @@ The world is tilted to match the characters, still 2D:
     with the Ocean at stages 1-3 and locked worlds (Caves, Snow), a step animation, skill choice;
     EN / AR; the save only changed in memory), needs a window:
     `godot --path . res://tools/ui_capture.tscn -- <folder>`
-  - `island_style_preview.tscn`: the Ocean island in the proposed art styles
-    (`tools/island_styles/`), side by side (F6; up / down = light 0-3); with a folder it saves
-    one image (stage 3 and stage 1 rows; other lights as a list, 0 = locked), needs a window:
-    `godot --path . res://tools/island_style_preview.tscn -- <folder> [3,1,0]`
+  - `island_preview.tscn`: the five Journey islands side by side (F6; up / down = light 0-3);
+    with a folder it saves one image, a row per light (locked, stage 1, 2, 3, or a list),
+    needs a window: `godot --path . res://tools/island_preview.tscn -- <folder> [0,1,2,3]`
   - `sound_test.tscn`: listen to every sound and the music crossfades (run it with F6)
   - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it

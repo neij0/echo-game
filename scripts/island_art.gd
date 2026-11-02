@@ -311,11 +311,13 @@ static func _hang_shape(x: float, half_width: float, tip_x: float) -> float:
 ## two layers hanging behind it, wider and deeper (far: the whole depth).
 ## top_edge runs left to right from (-half_width, top_y) to (half_width,
 ## top_y); crown_y is its highest point; tip_share moves the longest teeth
-## sideways. Draw with draw_rock_layers, then draw_rock_body.
+## sideways; tooth_width = the body's teeth (min / max px; narrow = long
+## thin stalactites). Draw with draw_rock_layers, then draw_rock_body.
 static func build_island_rock(rng: RandomNumberGenerator, top_edge: PackedVector2Array, half_width: float, top_y: float,
-		crown_y: float, depth: float, tip_share: float, front_share: float = 0.62) -> Dictionary:
+		crown_y: float, depth: float, tip_share: float, front_share: float = 0.62,
+		tooth_width: Vector2 = Vector2(14.0, 28.0)) -> Dictionary:
 	var front_depth: float = depth * front_share
-	var rock: PackedVector2Array = hanging_rock(rng, half_width, top_y, front_depth, tip_share * half_width, Vector2(14.0, 28.0))
+	var rock: PackedVector2Array = hanging_rock(rng, half_width, top_y, front_depth, tip_share * half_width, tooth_width)
 	var cuts := PackedFloat32Array([crown_y])
 	cuts.append_array(hang_cuts(top_y, front_depth))
 	var result: Dictionary = {"body": cut_bands(body_polygon(top_edge, rock), cuts)}

@@ -28,7 +28,7 @@ extends Control
 @export_group("Background")
 ## Where the tower stands (share of the screen; mirrored in Arabic) and its size.
 @export var tower_anchor: Vector2 = Vector2(0.7, 0.43)
-@export var tower_scale: float = 0.32
+@export var tower_scale: float = 0.25
 ## The tower is far away: its brightness (0-1).
 @export var tower_dim: float = 0.42
 ## It drifts slowly round its spot: pixels and cycles per second.
