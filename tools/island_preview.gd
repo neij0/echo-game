@@ -3,8 +3,9 @@ extends Control
 ## look at their art away from the Journey screen. Run it (F6); Up / Down
 ## lights them one step up / down (0 = locked .. 3). With a folder it saves one
 ## image of all of them, one row per light (default: locked, stage 1, 2, 3),
-## and quits (needs a window); other rows: a list of lights after the folder:
-##   godot --path . res://tools/island_preview.tscn -- <folder> [0,1,2,3]
+## and quits (needs a window); other rows: a list of lights after the folder,
+## only some islands: a list of names after that (e.g. Forest):
+##   godot --path . res://tools/island_preview.tscn -- <folder> [0,1,2,3] [Forest,Snow]
 
 const STYLES: Array[Script] = JourneyTower.ISLAND_SCRIPTS
 const NAMES: PackedStringArray = ["Ocean", "Caves", "Forest", "Desert", "Snow"]
@@ -21,6 +22,8 @@ var _islands: Array[JourneyIsland] = []
 var _labels: Array[Label] = []
 var _light: float = 3.0
 var _tween: Tween
+## Indices of the islands the saved image shows (all by default).
+var _shown: Array[int] = [0, 1, 2, 3, 4]
 
 
 func _ready() -> void:
@@ -46,6 +49,12 @@ func _ready() -> void:
 		capture_lights = PackedFloat32Array()
 		for value: String in args[1].split(","):
 			capture_lights.append(clampf(value.to_float(), 0.0, 3.0))
+	if args.size() > 2:
+		_shown.clear()
+		for name: String in args[2].split(","):
+			var index: int = NAMES.find(name.strip_edges().capitalize())
+			if index >= 0:
+				_shown.append(index)
 	if args.size() > 0:
 		_capture.call_deferred(args[0])
 	else:
@@ -77,10 +86,11 @@ func _layout_side_by_side() -> void:
 
 func _capture(folder: String) -> void:
 	DirAccess.make_dir_recursive_absolute(folder)
-	var sheet := Image.create_empty(cell_size.x * _islands.size(), cell_size.y * capture_lights.size(), false, Image.FORMAT_RGBA8)
+	var sheet := Image.create_empty(cell_size.x * _shown.size(), cell_size.y * capture_lights.size(), false, Image.FORMAT_RGBA8)
 	# The window's very first frames read back black.
 	await _wait(1.0)
-	for i: int in _islands.size():
+	for column: int in _shown.size():
+		var i: int = _shown[column]
 		for row: int in capture_lights.size():
 			for k: int in _islands.size():
 				_islands[k].visible = k == i
@@ -98,9 +108,11 @@ func _capture(folder: String) -> void:
 			await RenderingServer.frame_post_draw
 			var shot: Image = get_viewport().get_texture().get_image()
 			var cell: Image = _to_srgb(shot.get_region(Rect2i(corner, cell_size)))
-			sheet.blit_rect(cell, Rect2i(Vector2i.ZERO, cell_size), Vector2i(cell_size.x * i, cell_size.y * row))
+			sheet.blit_rect(cell, Rect2i(Vector2i.ZERO, cell_size), Vector2i(cell_size.x * column, cell_size.y * row))
 			print("rendered ", NAMES[i], " light ", capture_lights[row])
-	var path: String = folder.path_join("journey_islands.png")
+	var file_name: String = "journey_islands.png" if _shown.size() == NAMES.size() else "journey_islands_%s.png" % "_".join(PackedStringArray(
+		_shown.map(func(index: int) -> String: return NAMES[index].to_lower())))
+	var path: String = folder.path_join(file_name)
 	sheet.save_png(path)
 	print("saved ", path)
 	get_tree().quit()

@@ -47,8 +47,9 @@ After the 3rd stage of a world: a story text screen, then the Journey screen.
   telegraph or an attack.
 - **Bosses** (`Boss` extends `Creature`, reusable): DORMANT until a standing player is within
   `wake_radius` in sight (the arena's pillars do not hide, the closed door does) -> INTRO
-  (cannot be hurt) -> the fight: name card (`BossTitle`) + health bar at the top
-  (`BossHealthBar`, AR/EN, a tick per phase; never over the HUD: `Hud.get_occupied_rects`,
+  (cannot be hurt) -> the fight: name card (`BossTitle`: spaced title font, wave line,
+  subtitle; below the bar) + health bar at the top (`BossHealthBar`, AR/EN, a thin glowing
+  line, a diamond per phase threshold; never over the HUD: `Hud.get_occupied_rects`,
   centred at the top, else just below, else beside the HUD parts). Attacks are `BossAttack` resources (id, phase,
   weight, range, telegraph / recovery / damage per mode, active time, cooldown, knockback):
   TELEGRAPH -> ACTIVE -> RECOVERY (`recovery_damage_scale`, the opening). **No contact
@@ -167,7 +168,7 @@ After the 3rd stage of a world: a story text screen, then the Journey screen.
   (`PartnerMending`: both within 150 px, nobody downed, no creature chasing either; one
   segment per 6 s Calm / 10 s Challenge, with a glowing link between them), an **Echo Shard**
   (+1 segment to every player not downed) or a revive (1 segment). Health carries over
-  between the levels of a stage. HUD: `HealthSegments` per player; at 1 segment or less a
+  between the levels of a stage. HUD: `HealthSegments` (glowing pips) per player; at 1 segment or less a
   heartbeat + red edge pulse (`HurtVignette`). At zero the player is downed.
 - **Downed**: creatures ignore a downed player (no spotting, chase ends, no damage). A caught
   player can be revived by the partner; interrupted revive progress pauses
@@ -204,15 +205,37 @@ After the 3rd stage of a world: a story text screen, then the Journey screen.
   hurtboxes blue, attack hitboxes red (bright while they can hit), plus each player's body
   circle: creatures (circle + contact hitbox), the Angler (hurtbox, bite, charge, sweep), the
   sword's last swing, orbs, mines (touch + blast ring).
-- **Debug HUD lines** (`Hud`, F1 = `debug_toggle_key`): stage / seed / creature states;
-  hidden in normal play, shown when running from the editor (`OS.has_feature("editor")`).
+- **HUD** (`Hud`, "silhouette + glow", readable and minimal): a `PlayerStatus` per player on
+  its own screen edge (the Echo top left, the Guardian top right, mirrored towards the edge,
+  not swapped in Arabic; texts follow the language): name in the character's colour (red +
+  "Down" while downed) and depth, `HealthSegments`, the pressure meter (`HudMeter`: a thin
+  glowing line, breathing red + "Low oxygen" when low), the pulse / active skill icons with the
+  player's own drawn button (`InputPrompt`) and the passives; the distress hint while the Echo
+  is down. Centred at the top: Depth Awareness (`HudMeter`, calm blue -> red, breathing near
+  full), the Echo Shards (`ShardPips`: diamonds, gold when all are in; the "exit open" line
+  fades after `done_text_time`), then the escape timer.
+- **Debug HUD lines** (`Hud`, F1 = `debug_toggle_key`, bottom left): stage / seed / creature
+  states; hidden in normal play, shown when running from the editor (`OS.has_feature("editor")`).
+- **Level changes fade** (`StageManager`, `level_fade_*`): next level (Level cleared card ->
+  black -> the skill choice opens while the black lifts -> black -> the level is built behind
+  it -> fade in), the defeat retry (`_retry_faded`) and the pause menu's Restart
+  (`restart_level_faded`) all go through a short black (`Game.fader`, 0.3 s out / 0.45 s in),
+  so the build time (~0.5-1.2 s) never shows; `transition_finished` / `is_transitioning()`.
+  `restart_level` / `_retry` stay instant (tests).
+- **In-game screens** (`EndScreen`): the Level cleared card, the defeat screen (each player's
+  cause in their colour, a glowing countdown line to the automatic retry) and the stage summary
+  (stats in two columns, the pressure left per player, "Progress saved"), each uncovered by a
+  pulse wipe over a dark veil, `GlowButton` + prompt. It stays up until the screen is black.
 - **Pause menu** (`PauseMenu`, `pause` action: Esc / Start on any gamepad, only while a level is
   played: `StageManager.can_pause`): pauses the whole tree (players, creatures, oxygen, the
-  escape timer, stage time). Resume, Options (`OptionsPanel`, shared with the main menu),
+  escape timer, stage time). The frozen level stays dimly visible behind a veil darkest on the
+  column's side; title + wave line + `GlowButton`s (pulse wipe), prompts at the bottom.
+  Resume, Options (`OptionsPanel`, shared with the main menu),
   Restart level (`StageManager.restart_level`; Calm: the level again with the meters, health
   and skills of its start; Challenge: shown as "Restart stage", the whole stage from level 1
   like both downed, with its own confirmation text),
-  Quit to the Journey, Quit to Main Menu (the last three with a confirmation; quitting loses the
+  Quit to the Journey, Quit to Main Menu (the last three with a confirmation, `ConfirmPanel`
+  in the column's place, No focused first; quitting loses the
   stage's progress since the last save). Shows the mode and both players' skills (read-only).
   Navigated with the `ui_*` actions (keyboard + every gamepad).
 - **Testing one stage**: run `game.tscn` on its own (F6). The `StageManager` then uses its
@@ -350,8 +373,15 @@ Ocean's own theme and placeholders for the other four worlds).
   `TitleLabel` / `TitleArabicLabel`, `SubtitleLabel` / `SubtitleLatinLabel`, `HeaderLabel`,
   `EchoLabel`, `GuardianLabel`, `DimLabel`, `DangerLabel`, `PromptLabel`; panels: `Card` (styles
   `panel` / `focus` / `picked`, tinted in code); custom items for `GlowButton` and `GlyphPrompt`.
-  Restyled so far: splash, title, main menu, Journey, skill choice (each sets the theme on its
-  root); the other screens still use the old look.
+  Also `StatValueLabel` (bold values) and `WarningLabel` (amber: progress will be lost).
+  Every screen uses it (each sets the theme on its root; the boss bar / title preload it, the
+  `-s` tools load them without the autoload). Arabic checked on every screen (`ui_capture`).
+- **`ConfirmPanel`**: a yes / no question (+ optional warning) shown in place of a menu's column
+  (main menu New Game over a save, pause menu); No first, `ui_cancel` = No. No native dialogs.
+- **`OptionsPanel`** (main menu + pause): a row per setting (name + value over a thin glowing
+  slider; the focused row lights up with a dot and the ping), Back = `GlowButton`.
+- **Story screen** (`StoryScreen`): the night sky, dimmer; lines fade in one by one, rising a
+  little and glowing (they bloom) before settling; then a wave line, Continue and prompts.
 - **`GlowButton`**: glowing text; keyboard, gamepad and mouse share one focus (hover focuses;
   the theme's hover colour is the normal one and losing the focus clears the underline at once,
   so only one button is ever lit). `help_text` is sent with `help_shown` on focus (the main
@@ -393,7 +423,10 @@ Ocean's own theme and placeholders for the other four worlds).
   world holds a **vessel of the Ancient Light** that wakes as its stages are cleared: Ocean a
   sphere of sea water gripped by stone fingers on a rocky cradle (reef, kelp, fish inside), Caves
   a broken geode bowl with a crystal cluster (stalactites and glow-worms below; never a face),
-  Forest a giant tree whose heart hollow holds the sap, Desert a stone-framed hourglass in the
+  Forest an ancient giant tree (short, thick, twisted trunk flaring into buttress roots, wide
+  gnarled limbs spreading almost flat, a crown of flat foliage tiers with gaps, a darker tier
+  layer behind) whose heart hollow holds the sap (stage 2: sap rises up the trunk and out
+  along the limbs; stage 3: the tiers glow from inside), Desert a stone-framed hourglass in the
   dunes (a broken pillar, drifting sand), Snow an ice star on the summit of sharp peaks. `light`:
   0 locked = near-black silhouette, faint rim only; stage 1 = the vessel dark, a few small lights
   of life (`lit(step, order)`); stage 2 = the vessel glows softly (`soft_level`); stage 3 = its
@@ -660,13 +693,16 @@ The world is tilted to match the characters, still 2D:
     `godot --headless --path . --fixed-fps 60 res://tools/sim_boss_fight.tscn [-- calm|challenge] [1|2|3] [runs N] [log]`
   - `angler_preview.tscn`: look preview of the Angler's states (F6; `-- capture <folder>`
     saves screenshots, needs a window)
-  - `ui_capture.tscn`: screenshots of the menu screens (splash, title, main menu, the Journey
-    with the Ocean at stages 1-3 and locked worlds (Caves, Snow), a step animation, skill choice;
+  - `ui_capture.tscn`: screenshots of every screen (splash, title, main menu, the Journey
+    with the Ocean at stages 1-3 and locked worlds (Caves, Snow), a step animation, skill choice,
+    Options, the New Game confirmation, the story, the HUD calm and under alert, the pause menu
+    (list, Options, confirmation), Level cleared, defeat, stage summary, the boss title + bar;
     EN / AR; the save only changed in memory), needs a window:
     `godot --path . res://tools/ui_capture.tscn -- <folder>`
   - `island_preview.tscn`: the five Journey islands side by side (F6; up / down = light 0-3);
-    with a folder it saves one image, a row per light (locked, stage 1, 2, 3, or a list),
-    needs a window: `godot --path . res://tools/island_preview.tscn -- <folder> [0,1,2,3]`
+    with a folder it saves one image, a row per light (locked, stage 1, 2, 3, or a list), and
+    only the islands named after it if any, needs a window:
+    `godot --path . res://tools/island_preview.tscn -- <folder> [0,1,2,3] [Forest,Snow]`
   - `sound_test.tscn`: listen to every sound and the music crossfades (run it with F6)
   - `propose_level.gd`: **editor tool** (open it in the Script editor, File > Run) that
     proposes a new random room-grid `LevelDefinition` from the world's room pool, validates it

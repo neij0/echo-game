@@ -7,8 +7,8 @@ extends Control
 ## clearest thing on screen: the title "ECHO" / "صدى" and a column of glowing
 ## buttons (GlowButton, one lit at a time): Continue (only with a save: the
 ## Journey), New Game (the intro story, then stage 1; a confirmation if a save
-## exists), Mode (Calm / Challenge), Language, Options (OptionsPanel, same
-## place), Quit. The help line at the bottom explains the focused button (the
+## exists: a ConfirmPanel in the column's place), Mode (Calm / Challenge),
+## Language, Options (OptionsPanel, same place), Quit. The help line at the bottom explains the focused button (the
 ## save for Continue, the mode for Mode); drawn button prompts under it follow
 ## the device in use. The column is uncovered by a pulse wipe (PulseReveal).
 ## Arabic lays it out right-to-left: the column moves right, the tower left.
@@ -66,7 +66,7 @@ var _indented: Array[MarginContainer] = []
 var _help: Label
 var _prompt: InputPrompt
 var _options: OptionsPanel
-var _confirm: ConfirmationDialog
+var _confirm: ConfirmPanel
 var _music: AudioStreamPlayer
 var _music_time: float = 0.0
 var _time: float = 0.0
@@ -181,10 +181,7 @@ func _build_ui() -> void:
 	_options_button = _make_button(_show_options.bind(true))
 	_quit_button = _make_button(get_tree().quit)
 	_build_options(page)
-
-	_confirm = ConfirmationDialog.new()
-	_confirm.confirmed.connect(Game.new_game)
-	_ui.add_child(_confirm)
+	_build_confirm(page)
 
 
 func _refresh() -> void:
@@ -209,9 +206,9 @@ func _refresh() -> void:
 	_options_button.text = Game.text("options")
 	_quit_button.text = Game.text("quit")
 	_options.refresh()
-	_confirm.dialog_text = Game.text("confirm_new_game")
-	_confirm.ok_button_text = Game.text("yes")
-	_confirm.cancel_button_text = Game.text("no")
+	_confirm.refresh()
+	if _confirm.visible:
+		_confirm.question_label.text = Game.text("confirm_new_game")
 	_help.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_show_help_of_focus()
 	_refresh_prompt()
@@ -232,7 +229,7 @@ func _refresh_prompt() -> void:
 		{"actions": [&"ui_up", &"ui_down"], "text": Game.text("prompt_navigate")},
 		{"actions": [&"ui_accept"], "text": Game.text("prompt_select")},
 	]
-	if _options.visible:
+	if _options.visible or _confirm.visible:
 		entries.append({"actions": [&"ui_cancel"], "text": Game.text("prompt_back")})
 	_prompt.setup(entries, InputPrompt.menu_device, true)
 
@@ -258,8 +255,31 @@ func _build_options(parent: Control) -> void:
 	parent.add_child(_options)
 
 
+## The New Game question replaces the main buttons too (No focused first).
+func _build_confirm(parent: Control) -> void:
+	_confirm = ConfirmPanel.new()
+	_confirm.width = column_width - text_indent * 2
+	_confirm.visible = false
+	_confirm.confirmed.connect(Game.new_game)
+	_confirm.cancelled.connect(_show_confirm.bind(false))
+	parent.add_child(_confirm)
+
+
+func _show_confirm(open: bool) -> void:
+	_column.visible = not open
+	_confirm.visible = open
+	_reveal.reveal(Vector2(0.0 if Game.is_rtl() else 1.0, 0.5))
+	_refresh_prompt()
+	if open:
+		_show_help("")
+		_confirm.ask(Game.text("confirm_new_game"))
+	else:
+		_new_game_button.focus_quietly()
+
+
 func _show_options(open: bool) -> void:
 	_column.visible = not open
+	_confirm.visible = false
 	_options.visible = open
 	_reveal.reveal(Vector2(0.0 if Game.is_rtl() else 1.0, 0.5))
 	_refresh_prompt()
@@ -272,7 +292,7 @@ func _show_options(open: bool) -> void:
 
 func _on_new_game_pressed() -> void:
 	if Game.has_save():
-		_confirm.popup_centered()
+		_show_confirm(true)
 	else:
 		Game.new_game()
 

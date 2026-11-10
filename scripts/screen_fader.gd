@@ -25,14 +25,15 @@ func _ready() -> void:
 	add_child(_rect)
 
 
-## Covers the screen; await it.
-func fade_out() -> void:
-	await _fade_to(1.0, fade_out_time)
+## Covers the screen; await it. seconds < 0 = fade_out_time (the level
+## changes use a shorter fade).
+func fade_out(seconds: float = -1.0) -> void:
+	await _fade_to(1.0, fade_out_time if seconds < 0.0 else seconds)
 
 
-## Uncovers the screen; await it (or not).
-func fade_in() -> void:
-	await _fade_to(0.0, fade_in_time)
+## Uncovers the screen; await it (or not). seconds < 0 = fade_in_time.
+func fade_in(seconds: float = -1.0) -> void:
+	await _fade_to(0.0, fade_in_time if seconds < 0.0 else seconds)
 
 
 func is_covered() -> bool:

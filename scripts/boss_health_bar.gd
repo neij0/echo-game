@@ -1,23 +1,31 @@
 class_name BossHealthBar
 extends CanvasLayer
 ## The boss's name and health at the top of the screen while it fights (AR /
-## EN from UiText, right-to-left in Arabic): a thin bar with a tick at every
-## phase threshold, a pale "recent damage" trail that catches up, and a fade
-## in / out. Driven by its Boss (show_bar, set_ratio, hide_bar).
+## EN from UiText, right-to-left in Arabic), in the "silhouette + glow" style
+## (the UI theme): the name in the spaced title font, a thin glowing bar (a
+## soft halo under a bright core, a brighter tip) over a faint track, a small
+## diamond at every phase threshold (lit while that phase is still ahead), a
+## pale "recent damage" trail that catches up, and a fade in / out. Driven by
+## its Boss (show_bar, set_ratio, hide_bar).
 ## It never covers the HUD (Hud.get_occupied_rects, "hud" group): centred at
 ## the top when that is free, else just below the HUD parts in the way (down
 ## to max_top), else beside them (at least min_width wide), else below them.
 
-@export var bar_size: Vector2 = Vector2(520.0, 10.0)
+const THEME: Theme = preload("res://assets/ui/echo_theme.tres")
+
+@export var bar_size: Vector2 = Vector2(520.0, 12.0)
+## The fill's core thickness (the halo is wider).
+@export var line_thickness: float = 4.0
 ## Distance from the top of the screen (pixels).
 @export var top: float = 26.0
-@export var name_font_size: int = 22
-@export var name_color: Color = Color(0.85, 1.0, 0.95)
-@export var back_color: Color = Color(0.02, 0.04, 0.06, 0.75)
-@export var fill_color: Color = Color(0.3, 0.95, 0.85)
-@export var trail_color: Color = Color(1.0, 0.95, 0.8, 0.8)
-@export var tick_color: Color = Color(0.9, 0.95, 1.0, 0.7)
-@export var frame_color: Color = Color(0.5, 0.8, 0.8, 0.5)
+@export var name_font_size: int = 20
+@export var name_color: Color = Color(0.85, 1.05, 1.0)
+@export var back_color: Color = Color(0.45, 0.65, 0.75, 0.18)
+@export var fill_color: Color = Color(0.35, 1.0, 0.88)
+@export var trail_color: Color = Color(1.0, 0.92, 0.75, 0.55)
+@export var tick_color: Color = Color(0.9, 0.95, 1.0, 0.8)
+## A threshold already passed (its phase has begun).
+@export var tick_passed_color: Color = Color(0.5, 0.6, 0.7, 0.35)
 ## The trail waits this long after a hit, then catches up at trail_speed (share / s).
 @export var trail_delay: float = 0.45
 @export var trail_speed: float = 0.6
@@ -47,8 +55,10 @@ func _ready() -> void:
 	_box = VBoxContainer.new()
 	_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_box.theme = THEME
 	add_child(_box)
 	_label = Label.new()
+	_label.theme_type_variation = &"SubtitleLatinLabel"
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.add_theme_font_size_override("font_size", name_font_size)
 	_label.add_theme_color_override("font_color", name_color)
@@ -71,6 +81,11 @@ func show_bar(name_key: String, start_ratio: float, thresholds: PackedFloat32Arr
 	_label.text = String(game.call("text", name_key)) if game and name_key != "" else name_key
 	if game:
 		game.call("apply_direction", _box)
+	# No letter spacing in Arabic (it would break the joined letters).
+	var rtl: bool = game != null and bool(game.call("is_rtl"))
+	_label.theme_type_variation = &"SubtitleLabel" if rtl else &"SubtitleLatinLabel"
+	_label.add_theme_font_size_override("font_size", name_font_size)
+	_label.add_theme_color_override("font_color", name_color)
 	_thresholds = thresholds
 	ratio = start_ratio
 	_trail = start_ratio
@@ -166,17 +181,25 @@ static func _overlapping(area: Rect2, rects: Array[Rect2]) -> Array[Rect2]:
 
 
 func _draw_bar() -> void:
-	var size := Vector2(_width, bar_size.y)
-	var rect := Rect2(Vector2.ZERO, size)
-	_bar.draw_rect(rect.grow(2.0), back_color)
+	var y: float = bar_size.y * 0.5
 	# Right-to-left in Arabic: the bar empties towards the start of the line.
 	var rtl: bool = _box.layout_direction == Control.LAYOUT_DIRECTION_RTL
-	_bar.draw_rect(_part(_trail, rtl), trail_color)
-	_bar.draw_rect(_part(ratio, rtl), fill_color)
+	_bar.draw_line(Vector2(0.0, y), Vector2(_width, y), back_color, line_thickness)
+	var trail: Rect2 = _part(_trail, rtl)
+	if trail.size.x > 0.5:
+		_bar.draw_line(Vector2(trail.position.x, y), Vector2(trail.end.x, y), trail_color, line_thickness)
+	var fill: Rect2 = _part(ratio, rtl)
+	if fill.size.x > 0.5:
+		var from := Vector2(fill.position.x, y)
+		var to := Vector2(fill.end.x, y)
+		_bar.draw_line(from, to, Color(fill_color, 0.2), line_thickness * 3.2)
+		_bar.draw_line(from, to, fill_color, line_thickness)
+		_bar.draw_circle(from if rtl else to, line_thickness * 0.9, fill_color.lightened(0.4))
 	for threshold: float in _thresholds:
-		var x: float = size.x * (1.0 - threshold if rtl else threshold)
-		_bar.draw_line(Vector2(x, -3.0), Vector2(x, size.y + 3.0), tick_color, 2.0)
-	_bar.draw_rect(rect.grow(2.0), frame_color, false, 1.0)
+		var x: float = _width * (1.0 - threshold if rtl else threshold)
+		var half := Vector2(3.5, 5.5)
+		var diamond := PackedVector2Array([Vector2(x, y - half.y), Vector2(x + half.x, y), Vector2(x, y + half.y), Vector2(x - half.x, y)])
+		_bar.draw_colored_polygon(diamond, tick_color if ratio > threshold else tick_passed_color)
 
 
 func _part(share: float, rtl: bool) -> Rect2:

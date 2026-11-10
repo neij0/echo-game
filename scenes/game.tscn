@@ -141,24 +141,20 @@ script = ExtResource("14_vignette")
 stage_manager = NodePath("../../StageManager")
 heartbeat_stream = ExtResource("21_heartbeat")
 
-[node name="AwarenessBar" type="ProgressBar" parent="Hud" unique_id=1166059728]
-offset_left = 20.0
-offset_top = 20.0
-offset_right = 320.0
-offset_bottom = 44.0
-show_percentage = false
-
 [node name="DebugLabel" type="Label" parent="Hud" unique_id=1349969437]
 offset_left = 20.0
 offset_top = 52.0
 offset_right = 620.0
 offset_bottom = 240.0
 
-[node name="PlayerStatuses" type="VBoxContainer" parent="Hud" unique_id=889088265]
-offset_left = 20.0
-offset_top = 250.0
-offset_right = 420.0
-offset_bottom = 370.0
+[node name="PlayerStatuses" type="Control" parent="Hud" unique_id=889088265]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 
 [node name="AudioDirector" type="Node" parent="." unique_id=826433191]
 script = ExtResource("25_audio")

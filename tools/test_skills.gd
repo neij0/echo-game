@@ -67,6 +67,7 @@ func _run() -> void:
 	await _test_choice_flow()
 	await _test_retry_keeps_level_start_skills()
 	await _test_pause()
+	await _test_level_transition()
 
 	print("RESULT: %s" % ("ALL SKILL CHECKS PASSED" if _failures == 0 else "%d CHECK(S) FAILED" % _failures))
 	_game.queue_free()
@@ -816,7 +817,7 @@ func _test_pause() -> void:
 	_pause.open()
 	_pause._ask(PauseMenu.Confirm.RESTART)
 	_pause._on_confirmed()
-	await _frames(5)
+	await _until_transition_done()
 	_check(not get_tree().paused and not _pause.is_open, "Restart level resumes the game")
 	_check(_echo.pressure.get_ratio() > 0.9, "Restart level restores the oxygen of the level start")
 	_check(_echo.skills.get_rank("far_echo") == 2 and _echo.skills.get_rank("calm_lungs") == 0, "and the skills of the level start")
@@ -841,7 +842,7 @@ func _test_pause() -> void:
 	_check(_pause._confirm_label.text == Game.text("pause_confirm_restart_stage")
 		and _pause._confirm_warning.text == Game.text("pause_restart_stage_warning"), "the confirmation says the whole stage restarts")
 	_pause._on_confirmed()
-	await _frames(5)
+	await _until_transition_done()
 	_check(not get_tree().paused and not _pause.is_open, "it resumes the game")
 	_check(_stage.level_index == 0, "back to level 1 of the stage (level %d)" % (_stage.level_index + 1))
 	# A few frames of drain since the restart.
@@ -854,7 +855,58 @@ func _test_pause() -> void:
 	_protect_players()
 
 
+## The ancient light woken: Level cleared card, black, the skill choice, black,
+## the next level built behind it, then the fade in.
+func _test_level_transition() -> void:
+	print("== Level change: a fade through black hides the build ==")
+	var end := _game.get_node("EndScreen") as EndScreen
+	_stage.stage_index = 0
+	await _build(0, 0)
+	_stage.loadout = SkillLoadout.new("ocean")
+	_stage._apply_loadout()
+	var delays: Array[float] = [_stage.victory_delay, _stage.level_cleared_time]
+	_stage.victory_delay = 0.1
+	_stage.level_cleared_time = 0.3
+	_stage._on_ancient_light_activated()
+	var saw_card: bool = false
+	var black_before_choice: bool = false
+	for i: int in 240:
+		saw_card = saw_card or end.is_showing()
+		black_before_choice = black_before_choice or (Game.fader.get_cover() >= 1.0 and not end.is_showing())
+		if _screen.is_open:
+			break
+		await get_tree().process_frame
+	_check(saw_card, "the Level cleared card shows first")
+	_check(_screen.is_open and black_before_choice, "the screen goes black before the skill choice opens")
+	_check(not end.is_showing(), "the card is gone once the choice opens")
+	_check(not _stage.can_pause(), "no pausing during the change")
+	await _frames(45)
+	for player: Player in [_echo, _guardian]:
+		_screen.press_pick(player)
+	var built_while_black: Array[bool] = [false]
+	var on_start: Callable = func(_index: int) -> void: built_while_black[0] = Game.fader.get_cover() >= 1.0
+	_stage.level_started.connect(on_start)
+	await _stage.transition_finished
+	_stage.level_started.disconnect(on_start)
+	_check(built_while_black[0], "the next level is built while the screen is black")
+	_check(_stage.level_index == 1, "level 2 starts (level %d)" % (_stage.level_index + 1))
+	_check(not get_tree().paused and Game.fader.get_cover() <= 0.0, "the black has lifted and the game runs")
+	await _frames(2)
+	_check(_stage.can_pause(), "the pause works again")
+	_stage.victory_delay = delays[0]
+	_stage.level_cleared_time = delays[1]
+	_protect_players()
+
+
 # --- Helpers ---------------------------------------------------------------
+
+## The pause menu's Restart fades through black (StageManager.restart_level_faded):
+## waits until the game runs again, then a few frames.
+func _until_transition_done() -> void:
+	await _frames(2)
+	_check(_stage.is_transitioning() and Game.fader.get_cover() > 0.0, "Restart fades to black first")
+	await _stage.transition_finished
+	await _frames(5)
 
 ## Gives the player exactly this one skill (empty id = none).
 func _give(player: Player, skill_id: String, rank: int) -> void:

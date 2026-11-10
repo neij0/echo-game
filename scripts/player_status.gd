@@ -1,22 +1,29 @@
 class_name PlayerStatus
 extends VBoxContainer
-## One player's HUD block: depth, the health segments (HealthSegments), the
-## world's pressure meter (Oxygen in the Ocean) and its low warning, and the
-## distress pulse hint while a player who has one (the Echo) is downed, and the
-## abilities (SkillIcon): the Echo's pulse and the active skill with their
-## cooldown and button, then small icons for the passive skills. Created by Hud for every registered player
-## (builds its UI in code). The meter's name and colour come from the WorldConfig.
+## One player's HUD block in the "silhouette + glow" style: the name in the
+## character's colour (the Echo cyan, the Guardian gold) with the depth beside
+## it, the health pips (HealthSegments), the world's pressure meter (HudMeter:
+## Oxygen in the Ocean, the WorldConfig's name and colour) with its value and
+## the blinking low warning, then the abilities (SkillIcon): the Echo's pulse
+## and the active skill, each with the drawn button of the player's own device
+## (InputPrompt), then small icons for the passive skills; and while a player
+## who has one (the Echo) is downed, the distress pulse hint. Created by Hud for
+## every registered player (builds its UI in code). Each block lines up on its
+## own screen edge (the Echo top left, the Guardian top right, mirrored: side);
+## the texts follow the language (right-to-left in Arabic).
 
-@export var bar_size: Vector2 = Vector2(300.0, 18.0)
-@export var low_color: Color = Color(1.0, 0.2, 0.15)
-@export var bar_background_color: Color = Color(0.1, 0.12, 0.18, 0.85)
+enum ScreenSide { LEFT, RIGHT }
+
+@export var bar_size: Vector2 = Vector2(230.0, 10.0)
+@export var low_color: Color = Color(1.0, 0.25, 0.2)
 ## Warning label blinks this many times per second.
 @export var warning_blink_speed: float = 2.0
 @export var distress_ready_color: Color = Color(0.55, 0.95, 1.0)
 @export var distress_cooldown_color: Color = Color(0.5, 0.6, 0.7)
 @export var active_icon_size: float = 34.0
 @export var passive_icon_size: float = 22.0
-@export var skill_key_color: Color = Color(0.6, 0.66, 0.78)
+@export var name_font_size: int = 19
+@export var small_font_size: int = 14
 ## The pulse's HUD icon (the Echo only).
 @export var pulse_icon_shape: SkillIcon.Shape = SkillIcon.Shape.RINGS
 @export var pulse_icon_color: Color = Color(0.45, 0.95, 1.0)
@@ -25,12 +32,13 @@ var player: Player
 var level_builder: LevelBuilder
 var pressure_color: Color = Color(0.35, 0.8, 1.0)
 var world: WorldConfig
+var side: ScreenSide = ScreenSide.LEFT
 
+var _name_label: Label
 var _depth_label: Label
 var _health_segments: HealthSegments
-var _pressure_bar: ProgressBar
-var _fill_style: StyleBoxFlat
-var _warning_label: Label
+var _pressure_bar: HudMeter
+var _pressure_label: Label
 var _distress_label: Label
 var _distress: DistressPulse
 var _skill_row: HBoxContainer
@@ -46,40 +54,34 @@ func setup(target_player: Player, target_level_builder: LevelBuilder, target_wor
 	world = target_world
 	if world:
 		pressure_color = world.pressure_color
+	side = ScreenSide.LEFT if player.skill_owner == SkillDefinition.Owner.ECHO else ScreenSide.RIGHT
 
 
 func _ready() -> void:
-	_depth_label = Label.new()
-	add_child(_depth_label)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_theme_constant_override("separation", 5)
+	# The block mirrors towards its screen edge; the texts keep the language's direction.
+	layout_direction = Control.LAYOUT_DIRECTION_RTL if side == ScreenSide.RIGHT else Control.LAYOUT_DIRECTION_LTR
+	var head := _row(10)
+	_name_label = _label(head, _name_variation(), name_font_size)
+	_depth_label = _label(head, &"DimLabel", small_font_size)
 
 	_health_segments = HealthSegments.new()
 	_health_segments.setup(player.health)
 	add_child(_health_segments)
 
-	_pressure_bar = ProgressBar.new()
+	var meter := _row(10)
+	_pressure_bar = HudMeter.new()
 	_pressure_bar.custom_minimum_size = bar_size
-	_pressure_bar.show_percentage = false
-	_pressure_bar.max_value = 1.0
-	_fill_style = StyleBoxFlat.new()
-	_fill_style.bg_color = pressure_color
-	_pressure_bar.add_theme_stylebox_override("fill", _fill_style)
-	var background := StyleBoxFlat.new()
-	background.bg_color = bar_background_color
-	_pressure_bar.add_theme_stylebox_override("background", background)
-	add_child(_pressure_bar)
-
-	_warning_label = Label.new()
-	_warning_label.add_theme_color_override("font_color", low_color)
-	add_child(_warning_label)
+	_pressure_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	meter.add_child(_pressure_bar)
+	_pressure_label = _label(meter, &"DimLabel", small_font_size)
 
 	_distress = player.get_node_or_null("DistressPulse") as DistressPulse
-	_distress_label = Label.new()
+	_distress_label = _label(self, &"Label", small_font_size)
 	_distress_label.visible = false
-	add_child(_distress_label)
 
-	_skill_row = HBoxContainer.new()
-	_skill_row.add_theme_constant_override("separation", 6)
-	add_child(_skill_row)
+	_skill_row = _row(6)
 	_pulse = player.get_node_or_null("Pulse") as PulseAbility
 	player.skills.changed.connect(_rebuild_skills)
 	_rebuild_skills()
@@ -92,17 +94,43 @@ func _process(delta: float) -> void:
 	var depth: float = level_builder.depth_at(player.global_position.y) if level_builder else 0.0
 	var pressure: PlayerPressure = player.pressure
 	var ratio: float = pressure.get_ratio()
-	var downed: String = "   DOWNED" if player.health.is_downed else ""
-	_depth_label.text = "P%d %s   Depth: %d m   %s: %d%%%s" % [
-		player.player_number, player.display_name, roundi(depth), pressure.pressure_name, roundi(ratio * 100.0), downed,
-	]
-	_pressure_bar.value = ratio
+	var downed: bool = player.health.is_downed
+	_name_label.text = _character_name()
+	if downed:
+		_name_label.text += "  ·  " + Game.text("hud_down")
+	_name_label.theme_type_variation = &"DangerLabel" if downed else _name_variation()
+	_name_label.add_theme_font_size_override("font_size", name_font_size)
+	_depth_label.text = Game.text("hud_depth") % roundi(depth)
+	_pressure_bar.ratio = ratio
 	var low: bool = pressure.is_low()
-	_fill_style.bg_color = low_color if low else pressure_color
-	_warning_label.text = "LOW %s" % pressure.pressure_name.to_upper()
-	_warning_label.visible = low and fmod(_time * warning_blink_speed, 1.0) < 0.5
+	_pressure_bar.color = low_color if low else pressure_color
+	_pressure_bar.pulsing = low
+	var pressure_name: String = _pressure_name()
+	if low:
+		_pressure_label.text = Game.text("hud_low") % pressure_name
+		_pressure_label.theme_type_variation = &"DangerLabel"
+		_pressure_label.modulate.a = 1.0 if fmod(_time * warning_blink_speed, 1.0) < 0.6 else 0.35
+	else:
+		_pressure_label.text = "%s %d%%" % [pressure_name.capitalize() if not Game.is_rtl() else pressure_name, roundi(ratio * 100.0)]
+		_pressure_label.theme_type_variation = &"DimLabel"
+		_pressure_label.modulate.a = 1.0
+	_pressure_label.add_theme_font_size_override("font_size", small_font_size)
 	_update_distress_hint()
 	_update_active_icon()
+
+
+func _name_variation() -> StringName:
+	return &"EchoLabel" if player.skill_owner == SkillDefinition.Owner.ECHO else &"GuardianLabel"
+
+
+func _character_name() -> String:
+	return Game.text("char_echo" if player.skill_owner == SkillDefinition.Owner.ECHO else "char_guardian")
+
+
+func _pressure_name() -> String:
+	var key: String = "pressure_" + player.pressure.pressure_name
+	var translated: String = Game.text(key)
+	return player.pressure.pressure_name.to_lower() if translated == key else translated
 
 
 ## The pulse (Echo) and the active skill (with their buttons), then the passive skills.
@@ -116,7 +144,7 @@ func _rebuild_skills() -> void:
 		_pulse_icon.setup_custom(pulse_icon_shape, pulse_icon_color, active_icon_size)
 		_pulse_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		_skill_row.add_child(_pulse_icon)
-		_add_key_label(Game.text("pulse_key"))
+		_add_key(StringName(player.input_prefix + "action"))
 	for definition: SkillDefinition in player.skills.get_owned():
 		var icon := SkillIcon.new()
 		var rank: int = player.skills.get_rank(definition.id)
@@ -126,16 +154,15 @@ func _rebuild_skills() -> void:
 		_skill_row.add_child(icon)
 		if definition.is_active():
 			_active_icon = icon
-			_add_key_label(Game.text("skill_key_echo" if player.skill_owner == SkillDefinition.Owner.ECHO else "skill_key_guardian"))
+			_add_key(StringName(player.input_prefix + "skill"))
 
 
-func _add_key_label(text: String) -> void:
-	var key := Label.new()
-	key.text = text
-	key.add_theme_color_override("font_color", skill_key_color)
-	key.add_theme_font_size_override("font_size", 14)
-	key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_skill_row.add_child(key)
+## The button of an ability, drawn for the player's own device.
+func _add_key(action: StringName) -> void:
+	var prompt := InputPrompt.new()
+	prompt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_skill_row.add_child(prompt)
+	prompt.setup([{"actions": [action], "text": ""}], InputGlyph.Device.GAMEPAD if player.uses_gamepad else InputGlyph.Device.KEYBOARD)
 
 
 func _update_active_icon() -> void:
@@ -171,3 +198,24 @@ func _update_distress_hint() -> void:
 	else:
 		_distress_label.text = Game.text("distress_cooldown") % _distress.cooldown_left
 		_distress_label.add_theme_color_override("font_color", distress_cooldown_color)
+
+
+func _row(separation: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", separation)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(row)
+	return row
+
+
+func _label(parent: Control, variation: StringName, font_size: int) -> Label:
+	var label := Label.new()
+	label.theme_type_variation = variation
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.75))
+	label.add_theme_constant_override("shadow_offset_y", 1)
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# The language's direction, whatever side the block mirrors to.
+	label.text_direction = Control.TEXT_DIRECTION_RTL if Game.is_rtl() else Control.TEXT_DIRECTION_LTR
+	parent.add_child(label)
+	return label

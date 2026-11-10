@@ -44,6 +44,9 @@ enum TestStart { LEVEL_START, ARENA_DOOR, IN_ARENA }
 signal level_won
 ## Emitted after the skill choice: Player -> Array[SkillDefinition] picked.
 signal skills_chosen(picks: Dictionary)
+## Emitted when a faded level change (next level, retry, Restart) has faded
+## back in and the game runs again.
+signal transition_finished
 
 ## Used when game.tscn runs on its own (F6). Started from the menus, the Game
 ## autoload's current world and stage are used instead.
@@ -76,6 +79,14 @@ signal skills_chosen(picks: Dictionary)
 @export var victory_delay: float = 3.0
 ## Seconds the "Level cleared" screen stays before the next level is built.
 @export var level_cleared_time: float = 2.5
+## The short fade through black round every level change (next level, retry,
+## Restart): the level is built while the screen is black, so its build time
+## (~0.5-1.2 s) never shows as a frozen frame. Seconds out / in; off = cut.
+@export var level_fade_enabled: bool = true
+@export var level_fade_out_time: float = 0.3
+@export var level_fade_in_time: float = 0.45
+## Frames drawn behind the black after a build (the hitch passes) before the fade in.
+@export var level_fade_settle_frames: int = 2
 
 @export_group("Modes")
 ## Calm mode: the pressure meter lasts this many times longer.
@@ -110,6 +121,8 @@ var shards_total: int = 0
 ## Paused on a defeat / stage summary screen.
 var is_over: bool = false
 var _is_changing_level: bool = false
+## True during a faded level change (until transition_finished).
+var _transitioning: bool = false
 ## Each player's meter (0-1) when the current level started (Calm retries).
 var _level_start_pressure: Dictionary = {}
 ## Each player's health (segments) when the current level started (Calm retries).
@@ -134,7 +147,7 @@ func _ready() -> void:
 		level_builder.world = world
 		level_builder.level_built.connect(_on_level_built)
 	if end_screen:
-		end_screen.restart_requested.connect(_retry)
+		end_screen.restart_requested.connect(_retry_faded)
 		end_screen.continue_requested.connect(_on_continue_pressed)
 	# Deferred so every Player and listener in the scene has run _ready.
 	_start_stage.call_deferred()
@@ -355,6 +368,19 @@ func _retry() -> void:
 	get_tree().paused = false
 
 
+## The defeat screen's retry: the level (or stage) is rebuilt behind a fade
+## through black.
+func _retry_faded() -> void:
+	_transitioning = true
+	_is_changing_level = true
+	await _fade_out()
+	if end_screen:
+		end_screen.hide_screen()
+	_retry()
+	await _settle_and_fade_in()
+	_is_changing_level = false
+
+
 ## Rolls the summary counts back (retries: failed attempts do not count).
 func _restore_counts(counts: Array[int]) -> void:
 	pulses_used = counts[0]
@@ -384,9 +410,56 @@ func restart_level() -> void:
 	get_tree().paused = false
 
 
+## restart_level behind a fade through black (the pause menu's Restart):
+## when_covered runs once the screen is black (the menu hides then).
+func restart_level_faded(when_covered: Callable = Callable()) -> void:
+	_transitioning = true
+	_is_changing_level = true
+	await _fade_out()
+	if when_covered.is_valid():
+		when_covered.call()
+	restart_level()
+	_is_changing_level = true
+	await _settle_and_fade_in()
+	_is_changing_level = false
+
+
 ## True while a level is being played (no defeat / summary / level change).
 func can_pause() -> bool:
 	return not is_over and not _is_changing_level and not get_tree().paused
+
+
+## True during a faded level change (tests wait for transition_finished).
+func is_transitioning() -> bool:
+	return _transitioning
+
+
+func _fade_out() -> void:
+	if level_fade_enabled and Game.fader:
+		await Game.fader.fade_out(level_fade_out_time)
+
+
+func _fade_in() -> void:
+	if level_fade_enabled and Game.fader:
+		await Game.fader.fade_in(level_fade_in_time)
+
+
+## After a level was built behind the black: a few frames for the hitch (still
+## paused), then the game runs again while the black lifts.
+func _settle_and_fade_in() -> void:
+	get_tree().paused = true
+	for i: int in level_fade_settle_frames:
+		await get_tree().process_frame
+	get_tree().paused = false
+	await _fade_in()
+	_transitioning = false
+	transition_finished.emit()
+
+
+## True when a skill choice comes after the current level.
+func _has_skill_offer() -> bool:
+	var size: Vector2i = SkillOffer.get_offer_size(world, stage_index, level_index)
+	return Game.skill_catalog != null and skill_choice_screen != null and size.x > 0 and size.y > 0
 
 
 # --- Clearing levels and the stage ------------------------------------------
@@ -406,17 +479,26 @@ func _on_ancient_light_activated() -> void:
 		_complete_stage(false)
 		return
 	get_tree().paused = true
+	_transitioning = true
 	if end_screen:
 		end_screen.show_level_cleared(level_index + 1, get_level_count())
 	await get_tree().create_timer(level_cleared_time, true).timeout
+	await _fade_out()
 	if end_screen:
 		end_screen.hide_screen()
-	await _between_levels(level_index + 1)
+	if _has_skill_offer():
+		# The skill choice opens (pulse wipe) while the black lifts, and the
+		# screen goes black again once both picked.
+		_fade_in()
+		await _between_levels(level_index + 1)
+		await _fade_out()
+	else:
+		await _between_levels(level_index + 1)
 	# The meter carries over between levels, topped up a little each time.
 	for player: Player in players:
 		player.pressure.add_ratio(player.pressure.level_refill_ratio)
 	_start_level(level_index + 1)
-	get_tree().paused = false
+	await _settle_and_fade_in()
 	_is_changing_level = false
 
 
