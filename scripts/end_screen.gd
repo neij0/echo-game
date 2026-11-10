@@ -5,7 +5,10 @@ extends CanvasLayer
 ## after death_restart_delay, a glowing line counting it down), the short
 ## "Level cleared" card between levels, and the stage summary after the boss
 ## (its stats in two columns, Continue moves on). Each is uncovered by a pulse
-## wipe (PulseReveal) over a dark veil; buttons are GlowButtons with drawn
+## wipe (PulseReveal) over a dark scrim (a veil over the whole screen and a
+## darker soft disc behind the text, so the level reads only as a dim
+## background and no character shows through the words); the HUD ("hud"
+## group) is hidden while it is up. Buttons are GlowButtons with drawn
 ## prompts. Works while the game is paused. Arabic is laid out right-to-left.
 ## The StageManager hides it (hide_screen) once the screen has faded to black.
 
@@ -14,9 +17,13 @@ signal continue_requested
 
 ## Seconds the defeat screen stays before the retry starts on its own.
 @export var death_restart_delay: float = 3.0
-@export var cleared_backdrop: Color = Color(0.0, 0.008, 0.02, 0.74)
-@export var defeat_backdrop: Color = Color(0.02, 0.0, 0.01, 0.82)
-@export var summary_backdrop: Color = Color(0.0, 0.008, 0.02, 0.94)
+@export var cleared_backdrop: Color = Color(0.0, 0.008, 0.02, 0.86)
+@export var defeat_backdrop: Color = Color(0.02, 0.0, 0.01, 0.9)
+@export var summary_backdrop: Color = Color(0.0, 0.008, 0.02, 0.95)
+## The soft disc behind the text: its darkness in the middle (alpha) and its
+## size (share of the screen); it fades out towards its edge.
+@export var scrim_center: Color = Color(0.0, 0.004, 0.01, 0.96)
+@export var scrim_size: Vector2 = Vector2(1.0, 1.1)
 @export var title_font_size: int = 50
 @export var subtitle_font_size: int = 22
 @export var spacing: int = 10
@@ -28,6 +35,9 @@ signal continue_requested
 
 var _root: Control
 var _backdrop: ColorRect
+var _scrim: TextureRect
+## The HUD hidden by this screen (shown again by hide_screen).
+var _hidden_hud: CanvasLayer
 var _reveal: PulseReveal
 var _title: Label
 var _subtitle: Label
@@ -53,6 +63,15 @@ func _ready() -> void:
 	_backdrop = ColorRect.new()
 	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.add_child(_backdrop)
+	_scrim = TextureRect.new()
+	_scrim.texture = _scrim_texture()
+	_scrim.stretch_mode = TextureRect.STRETCH_SCALE
+	_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_scrim.anchor_left = 0.5 - scrim_size.x * 0.5
+	_scrim.anchor_right = 0.5 + scrim_size.x * 0.5
+	_scrim.anchor_top = 0.5 - scrim_size.y * 0.5
+	_scrim.anchor_bottom = 0.5 + scrim_size.y * 0.5
+	_root.add_child(_scrim)
 
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -138,6 +157,9 @@ func show_level_cleared(level_number: int, level_count: int) -> void:
 func hide_screen() -> void:
 	_root.visible = false
 	_countdown_left = 0.0
+	if _hidden_hud and is_instance_valid(_hidden_hud):
+		_hidden_hud.visible = true
+	_hidden_hud = null
 
 
 func is_showing() -> bool:
@@ -257,6 +279,7 @@ func _show_button(label: String, emits_continue: bool) -> void:
 func _open(take_focus: bool = true) -> void:
 	Game.apply_direction(_root)
 	_root.visible = true
+	_hide_hud()
 	_reveal.reveal(Vector2(0.5, 0.45))
 	if take_focus:
 		_button.focus_quietly()
@@ -271,6 +294,31 @@ func _make_label(parent: Control, variation: StringName, font_size: int) -> Labe
 	label.add_theme_font_size_override("font_size", font_size)
 	parent.add_child(label)
 	return label
+
+
+## The HUD would show through the scrim: hidden while this screen is up.
+func _hide_hud() -> void:
+	var hud := get_tree().get_first_node_in_group("hud") as CanvasLayer
+	if hud and hud.visible:
+		hud.visible = false
+		_hidden_hud = hud
+
+
+## The soft dark disc behind the text: darkest in the middle, clear at its edge.
+func _scrim_texture() -> GradientTexture2D:
+	var gradient := Gradient.new()
+	gradient.set_color(0, scrim_center)
+	gradient.set_color(1, Color(scrim_center, 0.0))
+	gradient.add_point(0.45, Color(scrim_center, scrim_center.a * 0.8))
+	gradient.add_point(0.75, Color(scrim_center, scrim_center.a * 0.3))
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.5, 0.5)
+	texture.fill_to = Vector2(1.0, 0.5)
+	texture.width = 256
+	texture.height = 256
+	return texture
 
 
 ## The automatic retry: a glowing line that shrinks to its middle.

@@ -213,7 +213,9 @@ After the 3rd stage of a world: a story text screen, then the Journey screen.
   player's own drawn button (`InputPrompt`) and the passives; the distress hint while the Echo
   is down. Centred at the top: Depth Awareness (`HudMeter`, calm blue -> red, breathing near
   full), the Echo Shards (`ShardPips`: diamonds, gold when all are in; the "exit open" line
-  fades after `done_text_time`), then the escape timer.
+  fades after `done_text_time`), then the escape timer. Behind it an opaque dark gradient
+  along the top edge (`top_shade_*`, sized to the lowest HUD block, then fading out): the
+  sonar lines are over-bright, so nothing of the world may cross a HUD text.
 - **Debug HUD lines** (`Hud`, F1 = `debug_toggle_key`, bottom left): stage / seed / creature
   states; hidden in normal play, shown when running from the editor (`OS.has_feature("editor")`).
 - **Level changes fade** (`StageManager`, `level_fade_*`): next level (Level cleared card ->
@@ -225,7 +227,9 @@ After the 3rd stage of a world: a story text screen, then the Journey screen.
 - **In-game screens** (`EndScreen`): the Level cleared card, the defeat screen (each player's
   cause in their colour, a glowing countdown line to the automatic retry) and the stage summary
   (stats in two columns, the pressure left per player, "Progress saved"), each uncovered by a
-  pulse wipe over a dark veil, `GlowButton` + prompt. It stays up until the screen is black.
+  pulse wipe over a dark scrim (a veil + a near-opaque soft disc behind the text, so the
+  level is only a dim background and no character shows through the words); the HUD is
+  hidden while one is up. `GlowButton` + prompt. It stays up until the screen is black.
 - **Pause menu** (`PauseMenu`, `pause` action: Esc / Start on any gamepad, only while a level is
   played: `StageManager.can_pause`): pauses the whole tree (players, creatures, oxygen, the
   escape timer, stage time). The frozen level stays dimly visible behind a veil darkest on the

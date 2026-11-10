@@ -10,8 +10,10 @@ extends CanvasLayer
 ## Never holds a single fixed player. The debug lines (stage, level, mode,
 ## seed, abilities, creatures, chase speeds) sit at the bottom left behind
 ## debug_toggle_key (F1): hidden in normal play, shown when running from the
-## editor. Other screen parts (the boss health bar) ask get_occupied_rects() to
-## stay clear of it.
+## editor. A dark gradient along the top edge sits behind the blocks (top_shade:
+## nearly opaque behind the texts, fading out below them), so no world or sonar
+## line crosses a HUD text. Other screen parts (the boss health bar) ask
+## get_occupied_rects() to stay clear of it.
 
 @export var stage_manager: StageManager
 @export var awareness: DepthAwareness
@@ -21,6 +23,15 @@ extends CanvasLayer
 @export_group("Layout")
 ## Space between the HUD and the screen edges (pixels).
 @export var screen_margin: Vector2 = Vector2(26.0, 20.0)
+
+@export_group("Top Shade")
+## The dark gradient behind the HUD at the top edge: its colour at the top
+## (alpha; opaque: the sonar lines are over-bright, any see-through shows them),
+## the share of its height it stays that dark, and how far it reaches
+## below the lowest HUD block (pixels) while fading out.
+@export var top_shade_color: Color = Color(0.0, 0.004, 0.012, 1.0)
+@export_range(0.0, 1.0) var top_shade_hold: float = 0.55
+@export var top_shade_fade: float = 110.0
 
 @export_group("Debug")
 @export var debug_toggle_key: Key = KEY_F1
@@ -53,6 +64,7 @@ extends CanvasLayer
 @onready var _statuses: Control = $PlayerStatuses
 
 var _center: VBoxContainer
+var _top_shade: TextureRect
 var _awareness_caption: Label
 var _awareness_meter: HudMeter
 var _shard_pips: ShardPips
@@ -73,6 +85,14 @@ func _ready() -> void:
 	_debug_label.add_theme_constant_override("shadow_offset_y", 1)
 	_statuses.theme = Game.ui_theme
 	_statuses.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_top_shade = TextureRect.new()
+	_top_shade.name = "TopShade"
+	_top_shade.texture = _top_shade_texture()
+	_top_shade.stretch_mode = TextureRect.STRETCH_SCALE
+	_top_shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_top_shade)
+	# Behind every HUD part (the hurt vignette stays first, it is a screen edge effect).
+	move_child(_top_shade, 1)
 
 	_center = VBoxContainer.new()
 	_center.name = "SharedStatus"
@@ -182,8 +202,32 @@ func _layout() -> void:
 			status.position = Vector2(screen.x - screen_margin.x - status.size.x, screen_margin.y)
 	_center.size = Vector2(maxf(_center.get_combined_minimum_size().x, 360.0), 0.0)
 	_center.position = Vector2((screen.x - _center.size.x) * 0.5, screen_margin.y - 4.0)
+	var lowest: float = _center.position.y + _center.get_combined_minimum_size().y
+	for child: Node in _statuses.get_children():
+		var block := child as Control
+		if block:
+			lowest = maxf(lowest, block.position.y + block.size.y)
+	var height: float = lowest + top_shade_fade
+	_top_shade.position = Vector2.ZERO
+	_top_shade.size = Vector2(screen.x, height)
 	_debug_label.size = _debug_label.get_combined_minimum_size()
 	_debug_label.position = Vector2(screen_margin.x, screen.y - screen_margin.y - _debug_label.size.y)
+
+
+## Vertical: top_shade_color down to top_shade_hold of the height, then clear.
+func _top_shade_texture() -> GradientTexture2D:
+	var gradient := Gradient.new()
+	gradient.set_color(0, top_shade_color)
+	gradient.set_color(1, Color(top_shade_color, 0.0))
+	gradient.add_point(top_shade_hold, top_shade_color)
+	gradient.add_point(lerpf(top_shade_hold, 1.0, 0.5), Color(top_shade_color, top_shade_color.a * 0.35))
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.fill_from = Vector2(0.0, 0.0)
+	texture.fill_to = Vector2(0.0, 1.0)
+	texture.width = 4
+	texture.height = 128
+	return texture
 
 
 func _update_escape_timer() -> void:
