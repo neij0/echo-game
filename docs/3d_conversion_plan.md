@@ -141,6 +141,12 @@ hole opens only when at least half of the body is covered (`ViewCutaway.min_cove
 below that the see-through outline is enough. Full cover, and so the cut-away, will
 mostly happen at taller rock: the boss arena (up to 1.44 units), landmarks, outer walls.
 
+**Decided after the Phase A play-test:** the short 2D heights stay the default for all
+rock. Tall walls are placed only where they mean something (the boss arena's entrance,
+ancient gates and similar set pieces), on purpose and by hand, never as a general room
+setting; the cut-away handles them. The `T` key of `tools/core_test.tscn` (every rock
+x2.6) stays as the way to check the cut-away at its worst.
+
 ### 5.3 Unrevealed creatures fully hidden behind rocks
 
 Rule: **the camera never hides what the 2D game would show.** Visibility stays a game
@@ -211,6 +217,18 @@ plus or minus half.
 - Every screen checked over the 3D game in English and Arabic (`ui_capture`), pause
   menu, end screens, boss bar and title.
 - 3D positional audio with the listener at the camera focus; `test_audio` passing.
+- **Real recordings replace the procedural sounds** (decided after the Phase A play-test:
+  the generated bells and resonant pings sound generic). Sources: the Sonniss GDC free
+  bundles, Freesound CC0, and your own phone recordings. Each one is processed into
+  something of our own (pitch, filters, layering, the underwater reverb) by a script in
+  `tools/` (Python, run from the command line like `generate_sounds.py`), so the processing
+  can be repeated and changed. **Every sound has its licence file** beside it (source URL
+  or "own recording", author, licence, date, the processing applied), listed in
+  `assets/audio/LICENSES.md`. Still no AI-generated audio. Sounds are found by file name
+  (unchanged), so a recording replaces a generated sound without code changes, and the
+  approval step stays: new sounds go to `assets/audio/preview/` first and are heard in the
+  Sound Test beside the current ones. Order: the sounds heard most first (pulse ping, sonar
+  tick, sword, hurt, creature voices), then the rest.
 - Floor detail, area accents, depth layers, light shafts in stage 1, hit and kill
   effects, F2 / F3 debug views.
 - Options: a graphics setting (fog quality, shadow count) if the benchmark needs it.
@@ -309,6 +327,9 @@ Updated with every step, so a new session knows where the conversion stands.
 - [ ] HUD glow over the 3D world (risk 4).
 - [ ] The core half of `test_creatures` ported; FPS benchmark at 1080p.
 - [ ] Delete `proto3d/`.
+- [x] The editor opens clean: every script not ported yet is in `legacy2d/` (has a
+  `.gdignore`; see its README), and `tools/check_scripts.tscn` lists every script that does
+  not parse (it must stay at zero).
 
 ### Left for Phase B, noted while porting
 - `Darkness`: the darkening with depth through a stage needs the `LevelBuilder`
