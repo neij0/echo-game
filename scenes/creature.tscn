@@ -1,62 +1,58 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/creature.gd" id="1_script"]
-[ext_resource type="Script" path="res://scripts/creature_echo.gd" id="2_echo"]
+[ext_resource type="Script" path="res://scripts/creature_body.gd" id="2_body"]
 [ext_resource type="Script" path="res://scripts/creature_eyes.gd" id="3_eyes"]
 [ext_resource type="Script" path="res://scripts/creature_heartbeat.gd" id="4_heart"]
 [ext_resource type="AudioStream" path="res://assets/audio/creature_heartbeat.wav" id="5_heart_sound"]
 [ext_resource type="Script" path="res://scripts/exposed_mark.gd" id="7_mark"]
 [ext_resource type="Script" path="res://scripts/creature_voice.gd" id="8_voice"]
 [ext_resource type="Script" path="res://scripts/creature_stuck_watch.gd" id="9_stuck"]
-[ext_resource type="Script" path="res://scripts/drop_shadow.gd" id="10_shadow"]
-[ext_resource type="Script" path="res://scripts/echo_mark_outline.gd" id="11_echo_mark"]
 
-[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
-radius = 20.0
+[sub_resource type="SphereShape3D" id="SphereShape3D_body"]
+radius = 0.4
 
-[sub_resource type="CircleShape2D" id="CircleShape2D_hitbox"]
-radius = 22.0
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_hitbox"]
+height = 1.2
+radius = 0.44
 
-[node name="Creature" type="CharacterBody2D"]
+[node name="Creature" type="CharacterBody3D"]
 collision_layer = 4
 collision_mask = 1
 motion_mode = 1
 script = ExtResource("1_script")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-shape = SubResource("CircleShape2D_body")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+shape = SubResource("SphereShape3D_body")
 
-[node name="Hitbox" type="Area2D" parent="."]
+[node name="Hitbox" type="Area3D" parent="."]
 collision_layer = 0
 collision_mask = 2
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox"]
-shape = SubResource("CircleShape2D_hitbox")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Hitbox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+shape = SubResource("CylinderShape3D_hitbox")
 
-[node name="EchoLayer" type="CanvasLayer" parent="."]
-follow_viewport_enabled = true
+[node name="Body" type="Node3D" parent="." node_paths=PackedStringArray("creature")]
+script = ExtResource("2_body")
+creature = NodePath("..")
 
-[node name="Echo" type="Node2D" parent="EchoLayer"]
-script = ExtResource("2_echo")
-
-[node name="Eyes" type="Node2D" parent="EchoLayer" node_paths=PackedStringArray("creature")]
+[node name="Eyes" type="Node3D" parent="." node_paths=PackedStringArray("creature")]
 script = ExtResource("3_eyes")
-creature = NodePath("../..")
+creature = NodePath("..")
 
-[node name="Heartbeat" type="AudioStreamPlayer2D" parent="." node_paths=PackedStringArray("creature")]
+[node name="Heartbeat" type="AudioStreamPlayer3D" parent="." node_paths=PackedStringArray("creature")]
 stream = ExtResource("5_heart_sound")
 max_polyphony = 2
 bus = &"SFX"
 script = ExtResource("4_heart")
 creature = NodePath("..")
 
-[node name="ExposedMark" type="Node2D" parent="EchoLayer" node_paths=PackedStringArray("creature")]
+[node name="ExposedMark" type="MeshInstance3D" parent="." node_paths=PackedStringArray("creature")]
 script = ExtResource("7_mark")
-creature = NodePath("../..")
-
-[node name="EchoMark" type="Node2D" parent="EchoLayer" node_paths=PackedStringArray("creature")]
-script = ExtResource("11_echo_mark")
-creature = NodePath("../..")
+creature = NodePath("..")
+energy = 3.0
 
 [node name="StuckWatch" type="Node" parent="." node_paths=PackedStringArray("creature")]
 script = ExtResource("9_stuck")
@@ -65,9 +61,3 @@ creature = NodePath("..")
 [node name="Voice" type="Node" parent="." node_paths=PackedStringArray("creature")]
 script = ExtResource("8_voice")
 creature = NodePath("..")
-
-[node name="Shadow" type="Node2D" parent="."]
-z_index = -2
-script = ExtResource("10_shadow")
-body_radius_scale = 0.9
-offset = Vector2(0, 16)

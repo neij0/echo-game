@@ -7,13 +7,14 @@ extends Node
 ## visibility rules apply. Fully sensed creatures are hittable with normal
 ## sword damage (melee self-defence); only the Echo's pulse makes them Exposed
 ## for the instant-kill finisher. Values per mode ("mode_listeners" group).
-## Skills: "close_sense_add" (pixels added to the radius).
+## Skills: "close_sense_add" (world units added to the radius).
 
 @export var player: Player
-@export var calm_radius: float = 90.0
-@export var challenge_radius: float = 90.0
-## The sense fades in over this many pixels outside the radius.
-@export var fade_band: float = 30.0
+## World units (the 2D game's 90 px).
+@export var calm_radius: float = 1.8
+@export var challenge_radius: float = 1.8
+## The sense fades in over this many units outside the radius.
+@export var fade_band: float = 0.6
 
 var challenge_mode: bool = false
 
@@ -36,10 +37,11 @@ func get_radius() -> float:
 
 ## 1 inside the radius (measured to the creature's edge), fading to 0 over
 ## fade_band outside it. 0 while this player is downed.
-func get_sense_ratio(creature_position: Vector2, creature_radius: float) -> float:
+func get_sense_ratio(creature_position: Vector3, creature_radius: float) -> float:
 	if player == null or player.health.is_downed:
 		return 0.0
-	var distance: float = player.global_position.distance_to(creature_position) - creature_radius
+	var offset: Vector3 = creature_position - player.global_position
+	var distance: float = Vector2(offset.x, offset.z).length() - creature_radius
 	var radius: float = get_radius()
 	if distance <= radius:
 		return 1.0

@@ -162,6 +162,10 @@ p2_aim_down={
 2d_physics/layer_3="creatures"
 3d_physics/layer_3="creatures"
 
+[physics]
+
+common/physics_interpolation=true
+
 [rendering]
 
 viewport/hdr_2d=true

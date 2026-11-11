@@ -17,8 +17,8 @@ extends Node
 @export_group("Idle")
 @export var idle_interval_min: float = 4.0
 @export var idle_interval_max: float = 10.0
-## Idle clicks only while a player is within this distance (pixels).
-@export var idle_max_distance: float = 1100.0
+## Idle clicks only while a player is within this distance (world units).
+@export var idle_max_distance: float = 22.0
 
 @export_group("Cooldowns")
 ## Seconds before the same kind of sound can come again from this creature.

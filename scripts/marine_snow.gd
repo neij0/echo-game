@@ -37,6 +37,8 @@ var _material: ShaderMaterial
 
 func _ready() -> void:
 	add_to_group("world_listeners")
+	# Moved in _process to follow the camera.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_material = ShaderMaterial.new()
 	_material.shader = SNOW_SHADER
 	var sonar: Sonar = Sonar.find(get_tree())

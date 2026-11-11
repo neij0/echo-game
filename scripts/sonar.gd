@@ -67,6 +67,8 @@ var _hits: Array[PackedFloat32Array] = []
 var _hits_passed: PackedInt32Array = PackedInt32Array()
 var _image: Image
 var _texture: ImageTexture
+## Milliseconds the last pulse's occlusion rays took (benchmark).
+var last_trace_ms: float = 0.0
 
 
 static func find(tree: SceneTree) -> Sonar:
@@ -206,6 +208,7 @@ func _free_slot() -> int:
 
 ## One ray per column: how far the pulse gets in that direction.
 func _trace_occlusion(slot: int, origin: Vector3, max_radius: float) -> void:
+	var started: int = Time.get_ticks_usec()
 	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
 	var start := Vector3(origin.x, ray_height, origin.z)
 	var query := PhysicsRayQueryParameters3D.create(start, start, wall_mask)
@@ -224,6 +227,7 @@ func _trace_occlusion(slot: int, origin: Vector3, max_radius: float) -> void:
 	hits.sort()
 	_hits[slot] = hits
 	_hits_passed[slot] = 0
+	last_trace_ms = float(Time.get_ticks_usec() - started) / 1000.0
 
 
 func _push_pulses(material: ShaderMaterial) -> void:

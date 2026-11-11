@@ -2,31 +2,32 @@ class_name DistressPulse
 extends Node
 ## The downed Echo's weak pulse: while she is downed, the action button sends a
 ## small sonar pulse (no oxygen cost, short radius, its own cooldown) so the
-## Guardian can see and fight the creatures around her. It works like a normal
-## pulse front (SonarOverlay): creatures it reaches are revealed and Exposed.
-## It does not emit pulse_emitted (no oxygen, no Depth Awareness, no spotting),
-## but its noise makes creatures within noise_radius INVESTIGATE (0 = silent).
-## Values per mode; the StageManager sets the mode ("mode_listeners" group).
+## Guardian can see and fight the creatures around her. It is a normal sonar
+## pulse (Sonar.add_pulse, "sonar" group): creatures it reaches are revealed
+## and Exposed. It does not emit pulse_emitted (no oxygen, no Depth Awareness,
+## no spotting), but its noise makes creatures within noise_radius INVESTIGATE
+## (0 = silent). Values per mode ("mode_listeners" group).
+
+## Emitted on every distress pulse (tests, the HUD hint).
+signal emitted
 
 @export var player: Player
-@export var pulse_ring_scene: PackedScene
 
 @export_group("Calm")
-@export var calm_radius: float = 200.0
+## World units (the 2D game's 200 px).
+@export var calm_radius: float = 4.0
 @export var calm_cooldown: float = 4.0
 @export var calm_noise_radius: float = 0.0
 
 @export_group("Challenge")
-@export var challenge_radius: float = 200.0
+@export var challenge_radius: float = 4.0
 @export var challenge_cooldown: float = 4.0
-@export var challenge_noise_radius: float = 200.0
+@export var challenge_noise_radius: float = 4.0
 
 @export_group("Look")
 ## AudioDirector sound name (a weaker, muffled ping).
 @export var sound: String = "pulse_distress"
 @export var expand_time: float = 0.45
-## The ring's own faint light (kept lower than a normal pulse).
-@export var light_energy: float = 0.1
 
 var challenge_mode: bool = false
 var cooldown_left: float = 0.0
@@ -41,7 +42,8 @@ func set_challenge_mode(enabled: bool) -> void:
 	challenge_mode = enabled
 
 
-func _process(delta: float) -> void:
+## In the physics step: starting a pulse casts the sonar's rays.
+func _physics_process(delta: float) -> void:
 	cooldown_left = maxf(cooldown_left - delta, 0.0)
 	if player == null or not player.health.is_downed:
 		return
@@ -63,16 +65,11 @@ func get_cooldown() -> float:
 
 func emit_pulse() -> void:
 	cooldown_left = get_cooldown()
-	if pulse_ring_scene:
-		var ring := pulse_ring_scene.instantiate() as PulseRing
-		ring.max_radius = get_radius()
-		ring.expand_time = expand_time
-		ring.light_energy = light_energy
-		ring.position = player.position
-		player.get_parent().add_child(ring)
+	get_tree().call_group("sonar", "add_pulse", player.global_position, get_radius(), expand_time)
 	var audio: AudioDirector = AudioDirector.find(get_tree())
 	if audio:
 		audio.play(sound, player.global_position)
 	var noise: float = challenge_noise_radius if challenge_mode else calm_noise_radius
 	if noise > 0.0:
 		get_tree().call_group("creatures", "hear_noise", player.global_position, noise)
+	emitted.emit()

@@ -31,6 +31,7 @@ var _material: StandardMaterial3D
 
 func _ready() -> void:
 	top_level = true
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_material = StandardMaterial3D.new()
 	_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -77,7 +78,7 @@ func _process(delta: float) -> void:
 
 func _follow() -> void:
 	if player:
-		global_position = player.global_position + Vector3(0.0, height, 0.0)
+		global_position = player.get_global_transform_interpolated().origin + Vector3(0.0, height, 0.0)
 
 
 func _update_ring() -> void:

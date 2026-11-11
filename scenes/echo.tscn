@@ -1,8 +1,10 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1_base"]
 [ext_resource type="Script" path="res://scripts/pulse_ability.gd" id="2_pulse"]
 [ext_resource type="Script" path="res://scripts/ready_cue.gd" id="8_cue"]
+[ext_resource type="Script" path="res://scripts/distress_pulse.gd" id="6_distress"]
+[ext_resource type="Script" path="res://scripts/goal_echo.gd" id="4_goal"]
 
 [node name="Echo" instance=ExtResource("1_base")]
 player_number = 1
@@ -25,3 +27,12 @@ player = NodePath("..")
 energy = 1.6
 end_radius = 0.72
 sound = ""
+
+[node name="DistressPulse" type="Node" parent="." node_paths=PackedStringArray("player")]
+script = ExtResource("6_distress")
+player = NodePath("..")
+
+[node name="GoalEcho" type="MeshInstance3D" parent="." node_paths=PackedStringArray("player")]
+script = ExtResource("4_goal")
+player = NodePath("..")
+energy = 1.1

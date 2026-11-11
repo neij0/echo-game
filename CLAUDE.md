@@ -18,24 +18,48 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   players and creatures), keys follow the walls (two keys held run along a wall), the stick
   maps to the exact screen direction.
 - **Performance target**: 60 FPS at 1080p on a mid-range GPU from about 2018.
-- **Ported to 3D so far** (Phase A, part 1): `Player` + `scenes/player.tscn` / `echo.tscn` /
+- **Ported to 3D so far** (Phase A): `Player` + `scenes/player.tscn` / `echo.tscn` /
   `guardian.tscn` (placeholder `CapsuleBody` until the models), `PlayerHealth`,
   `PlayerPressure`, `ReviveHelper`, `PlayerSkills`, `ActiveSkill` (base only), `PlayerLight`,
-  `PlayerAudio`, `PulseAbility`, `ReadyCue`, `SharedCamera`, `ViewMotion`, `Sonar` (replaces
-  `SonarOverlay` + `PulseRing`: up to 4 pulses, `add_pulse` through the "sonar" group,
-  `on_sonar_hit` on "sonar_targets"), `SonarAudio`, `Darkness` (a `WorldEnvironment`: ambient,
-  fog, glow), `MarineSnow`, `AudioDirector` (3D positional sounds, the listener at the
-  camera's focus), `RockMesher` (floor-plan polygon -> rock) and `ViewCutaway` (rock between
-  the camera and a character is cut away). Shaders are in `shaders/`.
-- **Not ported yet = broken on this branch**: every other script that touches positions
-  (creatures, sword, skills' actives, level builder, stage manager, bosses, HUD in the level,
-  the scene tests). `scenes/game.tscn` does not run. The `Game` autoload has **no world and no
-  skill catalog** for now (`scenes/game_state.tscn`: they load every unported scene); both
-  come back in Phase B. `tools/test_save.gd` still passes.
+  `PlayerAudio`, `PlayerOverlay` (downed + revive rings), `PulseAbility`, `DistressPulse`,
+  `GoalEcho`, `ReadyCue`, `SwordAbility` (placeholder blade), `CloseSense`, `PartnerMending`,
+  `Creature` + `scenes/creature.tscn` / `creature_unkillable.tscn` (placeholder
+  `CreatureBody`: one shape per `look`), `CreatureEyes`, `CreatureVoice`,
+  `CreatureHeartbeat`, `CreatureStuckWatch`, `ExposedMark`, `SharedCamera`, `ViewMotion`,
+  `Sonar` (replaces `SonarOverlay` + `PulseRing`: up to 4 pulses, `add_pulse` through the
+  "sonar" group, `on_sonar_hit` on "sonar_targets"), `SonarAudio`, `Darkness` (a
+  `WorldEnvironment`: ambient, fog, glow), `MarineSnow`, `AudioDirector` (3D positional
+  sounds, the listener at the camera's focus), `RockMesher` (floor-plan polygon -> rock),
+  `NavigationBaker` (navigation mesh from the floor plans: floor + rock outlines as
+  obstructions; the agent radius must be a whole number of cells: 0.5 = 4 x 0.125),
+  `ViewCutaway` (rock between the camera and a character is cut away) and `GlowLines`
+  (glowing rings / arcs / lines on the floor, drawn over rock: the 3D `draw_arc`).
+  Shaders are in `shaders/`.
+- **3D rules so far**: everything moves on the floor plane (y = 0) and distances are measured
+  there (`Creature._flat_distance`). Physics interpolation is on: a node moved in `_process`
+  (camera, markers, the sword) sets `physics_interpolation_mode` OFF and follows
+  `get_global_transform_interpolated()`; a teleport calls `reset_physics_interpolation()`.
+  Lit corals are read by duck typing ("corals" group: `is_lit`, `safe_radius`,
+  `is_in_safe_zone`) until `Coral` is ported; a boss is recognised by `allows_mending`.
+- **Not ported yet**: every script and tool in **`legacy2d/`** (it has a `.gdignore`, so the
+  editor never parses it; paths mirror the project; `git mv` a file back when its phase
+  comes, see `legacy2d/README.md`): level builder, stage manager, HUD, shards, lockdown,
+  escape, skills' actives, bosses, life, music, the old scene tests. `scenes/game.tscn` and
+  the scenes using those scripts (light hunter, sentinel, bosses) do not run. The `Game`
+  autoload has **no world and no skill catalog** for now (`scenes/game_state.tscn`); both come
+  back in Phase B. **`tools/check_scripts.tscn`** lists every script outside `legacy2d/` that
+  does not parse; it must stay at zero.
+- **Tests on this branch**: `tools/test_core.tscn` (headless: creature senses, chase speeds,
+  lunge, alerting, search, navigation round a wall, sword reveal rules + Exposed kill, close
+  sense, distress pulse, sonar blocked by rock, revive decay, mending, goal arrow):
+  `godot --headless --path . --fixed-fps 60 res://tools/test_core.tscn`; `tools/test_save.gd`;
+  `tools/check_scripts.tscn`.
 - **Play-test stage**: `tools/core_test.tscn` (F6): three real Ocean rooms with the real
-  classes above, plus two stand-ins in `proto3d/` (`ProtoCreature`, `ProtoSword`) until the
-  real `Creature` and `SwordAbility` are ported. Keys: C = cut-away on / off, T = rock height
-  normal / tall, R = back to the start. `-- shots <folder>` saves pictures and prints checks.
+  classes above, four creatures (one unkillable) that come back after being killed, two test
+  shards + a test exit for the goal arrow. Keys: C = cut-away, T = rock height normal / tall,
+  M = Calm / Challenge, I = physics interpolation, R = back to the start. `-- shots <folder>`
+  saves pictures and runs the FPS benchmark (1080p + 720p: average, render CPU / GPU per
+  frame, pulse ray time, frames over 16.7 ms).
 
 ## Core idea
 The two playable characters are deep-sea creatures:

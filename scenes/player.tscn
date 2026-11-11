@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/player_health.gd" id="5_health"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/player_light.gd" id="10_light"]
 [ext_resource type="Script" path="res://scripts/player_audio.gd" id="11_audio"]
 [ext_resource type="Script" path="res://scripts/player_skills.gd" id="13_skills"]
+[ext_resource type="Script" path="res://scripts/player_overlay.gd" id="14_overlay"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.28
@@ -52,4 +53,8 @@ player = NodePath("..")
 
 [node name="Skills" type="Node" parent="." node_paths=PackedStringArray("player")]
 script = ExtResource("13_skills")
+player = NodePath("..")
+
+[node name="Overlay" type="Node3D" parent="." node_paths=PackedStringArray("player")]
+script = ExtResource("14_overlay")
 player = NodePath("..")

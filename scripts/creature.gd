@@ -1,15 +1,16 @@
 class_name Creature
-extends CharacterBody2D
+extends CharacterBody3D
 ## A hostile deep-sea creature: wanders slowly, investigates pulses, sword
 ## noise and other creatures' alerts, and chases the nearest player it spots
 ## (close and in line of sight, or pulsing nearby). It follows the level's
-## navigation mesh (baked by the LevelBuilder), so it goes through doorways and
-## around rocks. A chase never makes it clearly faster than the player: its
-## speed is a share of the chased player's top speed (per mode, a little higher
-## with Depth Awareness). Close in, it lunges after a short telegraphed wind-up
-## (eyes flare + sound), then needs a moment to recover. After losing sight it
-## goes to where the player was heading and SEARCHes there for a few seconds
-## before wandering again. Touching a player hurts them (see PlayerHealth).
+## navigation mesh (NavigationServer3D: baked from the floor plans), so it
+## goes through doorways and around rocks. A chase never makes it clearly
+## faster than the player: its speed is a share of the chased player's top
+## speed (per mode, a little higher with Depth Awareness). Close in, it lunges
+## after a short telegraphed wind-up (eyes flare + sound), then needs a moment
+## to recover. After losing sight it goes to where the player was heading and
+## SEARCHes there for a few seconds before wandering again. Touching a player
+## hurts them (see PlayerHealth).
 ## The Guardian's sword can damage it only while it is revealed (in the Echo's
 ## light, or shortly after a pulse front passed over it). A pulse front also
 ## makes it Exposed for a short time: a Guardian finisher on an Exposed creature
@@ -17,6 +18,9 @@ extends CharacterBody2D
 ## Frenzy (set_frenzy, the collapse escape): it always chases the nearest
 ## standing player and never loses track.
 ## Subclasses (LightHunter, Sentinel) override the targeting hooks below.
+## 3D: it moves on the floor plane (y = 0); lengths are world units (50 px of
+## the 2D game = 1 unit). Its look is the CreatureBody child ($Body); it reads
+## the visibility values below (silhouette_ratio, sense_ratio, is_lit_by_echo...).
 
 enum State { WANDER, INVESTIGATE, CHASE, SEARCH }
 ## Phases of the close-range lunge (only during CHASE).
@@ -30,36 +34,40 @@ signal killed
 signal state_changed(old_state: State, new_state: State)
 ## Emitted when a lunge wind-up starts (the telegraph: CreatureVoice hisses).
 signal lunge_started
+## Emitted when a pulse front reaches it in line of sight (its sonar echo).
+signal pinged
 
 ## Optional: if empty, the first node in the "depth_awareness" group is used.
 @export var awareness: DepthAwareness
 
 @export_group("Movement")
-@export var min_speed: float = 45.0
-@export var max_speed: float = 190.0
+@export var min_speed: float = 0.9
+@export var max_speed: float = 3.8
 @export var steering: float = 4.0
-@export var wander_radius: float = 300.0
+@export var wander_radius: float = 6.0
 @export var wander_pause: float = 1.5
-@export var arrive_distance: float = 24.0
+@export var arrive_distance: float = 0.48
 
 @export_group("Senses")
 ## Pulses further away than this are not heard.
-@export var hearing_range: float = 1800.0
+@export var hearing_range: float = 36.0
 ## How strongly lit coral zones push the creature away.
-@export var safe_zone_push: float = 400.0
+@export var safe_zone_push: float = 8.0
 ## Near a lit coral's zone (this much beyond its edge) the creature steers
 ## around it instead of into it, so the push and the path never fight.
-@export var safe_zone_steer_margin: float = 40.0
+@export var safe_zone_steer_margin: float = 0.8
 ## Sliding around lit zones this long (not chasing, e.g. two zones block the
 ## way) = it gives up on that point and picks another.
 @export var safe_zone_give_up_time: float = 1.0
 ## Spots a player this close if nothing blocks the line of sight.
-@export var spot_distance: float = 220.0
+@export var spot_distance: float = 4.4
 ## Spots a player who pulses this close (no line of sight needed).
-@export var pulse_spot_distance: float = 350.0
+@export var pulse_spot_distance: float = 7.0
 ## Seconds between line-of-sight checks (raycasts).
 @export var spot_check_interval: float = 0.1
-@export_flags_2d_physics var wall_mask: int = 1
+## Height of its line-of-sight rays: rock lower than this does not block them.
+@export var sight_height: float = 0.4
+@export_flags_3d_physics var wall_mask: int = 1
 
 @export_group("Chase")
 ## Chase speed = the chased player's max_speed times a ratio. The ratio goes
@@ -72,9 +80,9 @@ signal lunge_started
 @export_range(0.0, 1.5) var challenge_chase_ratio_max: float = 1.0
 ## Used for the chase speed when there is no chased player (rushing to the
 ## last seen position).
-@export var reference_player_speed: float = 245.0
+@export var reference_player_speed: float = 4.9
 ## The chase keeps going while the player is this close and in line of sight.
-@export var lose_sight_distance: float = 600.0
+@export var lose_sight_distance: float = 12.0
 ## Seconds it keeps following the player's real position after losing sight
 ## (it "feels" where they went around the corner), then it SEARCHes.
 @export var chase_memory: float = 0.5
@@ -89,7 +97,7 @@ signal lunge_started
 ## ...then looks around there for this many seconds before wandering again.
 @export var search_time: float = 4.0
 ## Search points are picked this far around that position.
-@export var search_radius: float = 220.0
+@export var search_radius: float = 4.4
 ## Short stop at each search point.
 @export var search_pause: float = 0.35
 
@@ -97,13 +105,13 @@ signal lunge_started
 @export var lunge_enabled: bool = true
 ## Starts a lunge when the chased player is this close (from the body's edge)
 ## and in line of sight.
-@export var lunge_range: float = 120.0
+@export var lunge_range: float = 2.4
 ## Telegraph: seconds it coils (slows down, eyes flare, sound) before the burst.
 @export var lunge_wind_up: float = 0.3
 ## Movement speed while coiling, as a share of its chase speed.
 @export_range(0.0, 1.0) var lunge_wind_up_speed_ratio: float = 0.15
 ## The burst: speed and duration (distance = speed x time).
-@export var lunge_speed: float = 560.0
+@export var lunge_speed: float = 11.2
 @export var lunge_time: float = 0.2
 ## Seconds after the burst when it drifts slowly (players can get away).
 @export var lunge_recovery: float = 0.6
@@ -117,18 +125,18 @@ signal lunge_started
 ## Follow the level's navigation mesh (doorways, corners). Off = straight line.
 @export var use_navigation: bool = true
 ## A path point counts as reached this close.
-@export var path_point_reach: float = 24.0
+@export var path_point_reach: float = 0.48
 ## Minimum seconds between two path requests.
 @export var path_refresh_time: float = 0.25
 ## A new path is requested when the target moved this far from the last one.
-@export var path_retarget_distance: float = 40.0
+@export var path_retarget_distance: float = 0.8
 ## Stuck recovery (CreatureStuckWatch): how far a nudge pushes it off the wall.
-@export var unstick_nudge_distance: float = 24.0
+@export var unstick_nudge_distance: float = 0.48
 
 @export_group("Alerting")
 ## Entering CHASE alerts the other creatures this close: they INVESTIGATE
 ## towards this creature (the noise).
-@export var alert_radius: float = 700.0
+@export var alert_radius: float = 14.0
 ## Reacts to other creatures' alerts.
 @export var responds_to_alerts: bool = true
 
@@ -140,7 +148,7 @@ signal lunge_started
 ## Total seconds of wall contact before picking a new point near the pulse.
 @export var give_up_time: float = 2.5
 ## New investigation points are picked this far from the original pulse.
-@export var retarget_distance: float = 160.0
+@export var retarget_distance: float = 3.2
 ## After this many new points, stop investigating and wander where it is.
 @export var max_retargets: int = 3
 
@@ -163,42 +171,22 @@ signal lunge_started
 @export var exposed_time: float = 1.5
 ## Seconds of the white flash when hit.
 @export var hit_flash_time: float = 0.12
-@export var hit_flash_color: Color = Color(1.0, 1.0, 1.0)
 
 @export_group("Visual")
+## The placeholder shape (CreatureBody) until the creature models (Phase C).
 @export var look: Look = Look.ROUND
-@export var body_radius: float = 20.0
+@export var body_radius: float = 0.4
+## Height of the body above the floor (the cut-away and the eyes use it).
+@export var body_height: float = 0.8
 @export var body_color: Color = Color(0.85, 0.25, 0.3)
+## The colour that tells the type apart: its glowing outline when revealed and
+## its sonar echo.
+@export var type_color: Color = Color(1.0, 0.15, 0.12)
 @export var eye_color: Color = Color(1.0, 0.85, 0.3)
-## Number of spikes for the SPIKY look.
-@export var spike_count: int = 7
-## Spike length compared to body_radius for the SPIKY look.
-@export var spike_length: float = 0.55
-## SPIKY shell rotation (radians per second).
-@export var spike_spin_speed: float = 0.4
-## When fully revealed: dark body (body_color darkened by this) with a glowing
-## outline in the type colour (the same as its sonar echo).
-@export_range(0.0, 1.0) var fill_darken: float = 0.75
-@export var outline_energy: float = 1.8
-@export var outline_width: float = 1.5
-@export var eye_energy: float = 2.0
-## Tendrils trailing behind (ROUND look; fewer on the others).
-@export var tendril_count: int = 5
-@export var tendril_segments: int = 6
-## Tendril length compared to body_radius.
-@export var tendril_length: float = 1.6
-## Tendril thickness compared to body_radius.
-@export var tendril_width: float = 0.09
-@export var tendril_wave_amount: float = 5.0
-@export var tendril_wave_speed: float = 0.9
-## Opacity of the tendrils / fins outline compared to the body outline.
-@export_range(0.0, 1.0) var tendril_alpha: float = 0.7
-## Fin flaps per second (ARROW look).
-@export var fin_flap_speed: float = 1.6
 
 @export_group("Sonar Visibility")
-## true = invisible except for a red echo when the pulse front passes over it,
-## and its body inside the Echo's light. false = always drawn (for comparison).
+## true = invisible except for its echo when the pulse front passes over it,
+## and its body inside the Echo's light. false = always revealed (comparison).
 @export var hidden_until_pinged: bool = true
 
 @export_group("Silhouette")
@@ -207,18 +195,15 @@ signal lunge_started
 ## outline, not hittable, not Exposed) with faint eyes (CreatureEyes). It fades
 ## in as it gets closer. Hidden when a rock blocks her light.
 @export var silhouette_enabled: bool = true
-@export var silhouette_color: Color = Color(0.01, 0.015, 0.025)
-## Opacity of the silhouette right at the edge of the full reveal.
-@export_range(0.0, 1.0) var silhouette_max_alpha: float = 0.9
 ## Seconds between line-of-sight checks to the Echo (her light casts shadows).
 @export var silhouette_check_interval: float = 0.1
 
 var state: State = State.WANDER
-var target: Vector2
-var _home: Vector2
+var target: Vector3
+var _home: Vector3
 var _pause_left: float = 0.0
-var _pulse_origin: Vector2
-var _detour_dir: Vector2 = Vector2.ZERO
+var _pulse_origin: Vector3
+var _detour_dir: Vector3 = Vector3.ZERO
 var _detour_left: float = 0.0
 var _blocked_time: float = 0.0
 var _retargets: int = 0
@@ -227,20 +212,20 @@ var _chase_left: float = 0.0
 ## Line of sight to the chased player at the last check.
 var _chase_in_sight: bool = false
 var _sight_check_left: float = 0.0
-var _last_seen: Vector2
-var _last_seen_velocity: Vector2 = Vector2.ZERO
+var _last_seen: Vector3
+var _last_seen_velocity: Vector3 = Vector3.ZERO
 ## Set by the StageManager: Challenge mode uses the challenge chase ratios.
 var challenge_mode: bool = false
-var _search_center: Vector2
+var _search_center: Vector3
 var _search_arrived: bool = false
 var _search_left: float = 0.0
 var lunge_phase: Lunge = Lunge.NONE
 var _lunge_left: float = 0.0
 var _lunge_cooldown_left: float = 0.0
-var _lunge_dir: Vector2 = Vector2.RIGHT
-var _path: PackedVector2Array = PackedVector2Array()
+var _lunge_dir: Vector3 = Vector3.RIGHT
+var _path: PackedVector3Array = PackedVector3Array()
 var _path_index: int = 0
-var _path_target: Vector2
+var _path_target: Vector3
 var _path_refresh_left: float = 0.0
 var _respot_left: float = 0.0
 var _spot_timer: float = 0.0
@@ -263,7 +248,6 @@ var silhouette_ratio: float = 0.0
 var sense_ratio: float = 0.0
 var _silhouette_check_left: float = 0.0
 var _silhouette_blocked: bool = false
-var _anim_time: float = 0.0
 ## Frenzy (collapse escape): chases the nearest standing player, never loses track.
 var is_frenzied: bool = false
 ## Debug counters (CreatureStuckWatch): path requests and state changes so far.
@@ -272,31 +256,32 @@ var state_changes: int = 0
 var lunges_started: int = 0
 var _last_state: State = State.WANDER
 var _navigation_map: RID
-var _last_wall_normal: Vector2 = Vector2.ZERO
+var _last_wall_normal: Vector3 = Vector3.ZERO
 ## Which way it slides around a lit coral's zone (+1 / -1); flips on a wall.
 var _zone_side: float = 0.0
 var _steering_around_zone: bool = false
 var _zone_time: float = 0.0
-## Where the creature points (last movement direction).
-var _facing: Vector2 = Vector2.RIGHT
+## Where the creature points (last movement direction, on the floor).
+var facing: Vector3 = Vector3.RIGHT
+var _camera: SharedCamera
 
-@onready var _hitbox: Area2D = $Hitbox
-@onready var _echo: CreatureEcho = $EchoLayer/Echo
+@onready var _hitbox: Area3D = $Hitbox
 
 
 func _ready() -> void:
 	_home = global_position
 	target = global_position
+	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	_hitbox.body_entered.connect(_on_hitbox_body_entered)
 	add_to_group("sonar_targets")
 	add_to_group("creatures")
-	add_to_group(HitShapes.DEBUG_GROUP)
+	add_to_group("cutaway_targets")
 	health = max_health
 
 
 ## Called (via the "creatures" group) by StageManager on every pulse.
-func hear_pulse(origin: Vector2, player: Player) -> void:
-	var distance: float = global_position.distance_to(origin)
+func hear_pulse(origin: Vector3, player: Player) -> void:
+	var distance: float = _flat_distance(global_position, origin)
 	if player and distance <= pulse_spot_distance and _can_chase(player):
 		_spot(player)
 		return
@@ -306,8 +291,8 @@ func hear_pulse(origin: Vector2, player: Player) -> void:
 
 
 ## Called (via the "creatures" group) by the Guardian's sword on every swing.
-func hear_noise(origin: Vector2, radius: float) -> void:
-	if _dying or state == State.CHASE or global_position.distance_to(origin) > radius:
+func hear_noise(origin: Vector3, radius: float) -> void:
+	if _dying or state == State.CHASE or _flat_distance(global_position, origin) > radius:
 		return
 	_investigate(origin)
 
@@ -317,7 +302,7 @@ func hear_noise(origin: Vector2, radius: float) -> void:
 func hear_alert(source: Creature) -> void:
 	if source == self or _dying or not responds_to_alerts or state == State.CHASE:
 		return
-	if global_position.distance_to(source.global_position) > source.alert_radius:
+	if _flat_distance(global_position, source.global_position) > source.alert_radius:
 		return
 	_investigate(source.global_position)
 
@@ -341,27 +326,24 @@ func set_frenzy(enabled: bool) -> void:
 		_update_frenzy()
 
 
-## Where the sword can hurt it (world polygon): a circle of body_radius.
-## Bigger bodies (the bosses) return their drawn shape.
-func get_hurtbox() -> PackedVector2Array:
-	return HitShapes.circle(global_position, body_radius)
-
-
 ## True if a swing from `from` along `direction` (reach, half arc in radians)
-## reaches the hurtbox: within reach + body_radius and the centre inside the arc.
-func is_in_swing(from: Vector2, direction: Vector2, reach: float, half_arc: float) -> bool:
-	var offset: Vector2 = global_position - from
-	return offset.length() <= reach + body_radius and absf(direction.angle_to(offset)) <= half_arc
+## reaches the body: within reach + body_radius and the centre inside the arc
+## (on the floor plane). Bigger bodies (the bosses) measure their own shape.
+func is_in_swing(from: Vector3, direction: Vector3, reach: float, half_arc: float) -> bool:
+	var offset := Vector2(global_position.x - from.x, global_position.z - from.z)
+	var aim := Vector2(direction.x, direction.z)
+	return offset.length() <= reach + body_radius and absf(aim.angle_to(offset)) <= half_arc
 
 
-## F2 debug view (HitboxDebugDraw): the hurtbox and the contact hitbox.
-func get_debug_shapes() -> Array[Dictionary]:
-	var contact := _hitbox.get_node_or_null("CollisionShape2D") as CollisionShape2D
-	var shapes: Array[Dictionary] = [HitShapes.debug_shape(get_hurtbox(), HitShapes.Kind.HURT, true)]
-	if contact and contact.shape is CircleShape2D:
-		shapes.append(HitShapes.debug_shape(HitShapes.circle(contact.global_position, (contact.shape as CircleShape2D).radius),
-			HitShapes.Kind.HIT, _hitbox.monitoring))
-	return shapes
+## ViewCutaway ("cutaway_targets"): rock never hides it while it lunges or is
+## Exposed (a danger, or a chance, the players must see).
+func wants_cutaway() -> bool:
+	return not _dying and (lunge_phase == Lunge.WIND_UP or lunge_phase == Lunge.BURST or is_exposed())
+
+
+## The middle of the body (the cut-away keeps it visible).
+func get_body_center() -> Vector3:
+	return global_position + Vector3(0.0, body_height * 0.5, 0.0)
 
 
 ## True while the Guardian can hurt it: inside a revealing light (the Echo's),
@@ -371,19 +353,25 @@ func is_revealed() -> bool:
 	return _revealed_left > 0.0 or is_exposed() or is_in_echo_light() or sense_ratio >= 1.0
 
 
-## How much of the body is drawn (1 = full, the silhouette share outside the
-## Echo's light, 0 = hidden). Used by its DropShadow.
+## True while it is inside the Echo's full reveal (CreatureBody: full body
+## with its glowing outline).
+func is_lit_by_echo() -> bool:
+	return _was_in_light or not hidden_until_pinged
+
+
+## How much of the body shows (1 = full, the silhouette share outside the
+## Echo's light, 0 = hidden).
 func get_body_visibility() -> float:
-	if not hidden_until_pinged or _was_in_light:
+	if is_lit_by_echo():
 		return 1.0
-	return silhouette_ratio * silhouette_max_alpha
+	return maxf(silhouette_ratio, sense_ratio)
 
 
 func is_in_echo_light() -> bool:
 	for player: Player in Players.all(get_tree()):
 		if player.light_reveal_radius <= 0.0 or player.health.is_downed:
 			continue
-		if player.global_position.distance_to(global_position) <= player.light_reveal_radius + body_radius:
+		if _flat_distance(player.global_position, global_position) <= player.light_reveal_radius + body_radius:
 			return true
 	return false
 
@@ -415,12 +403,17 @@ func get_mark_ratio() -> float:
 	return _marked_left / _marked_total if _marked_total > 0.0 else 0.0
 
 
+## 1 at the start of the white hit flash, 0 when it is over.
+func get_flash_ratio() -> float:
+	return _flash_left / hit_flash_time if hit_flash_time > 0.0 else 0.0
+
+
 ## Pushed back without damage (a blocked touch on the Guardian's Shield).
-func repel(direction: Vector2, speed: float, stagger_time: float) -> void:
+func repel(direction: Vector3, speed: float, stagger_time: float) -> void:
 	if _dying:
 		return
 	_end_lunge()
-	velocity = direction.normalized() * speed
+	velocity = _flat(direction).normalized() * speed
 	_stagger_left = maxf(_stagger_left, stagger_time * stagger_scale)
 
 
@@ -431,10 +424,8 @@ func take_damage(amount: int, attacker: Player, stagger_time: float, knockback: 
 		return false
 	_stagger_left = stagger_time * stagger_scale
 	_end_lunge()
-	velocity = attacker.global_position.direction_to(global_position) * knockback
+	velocity = _flat(global_position - attacker.global_position).normalized() * knockback
 	_flash_left = hit_flash_time
-	_echo.flash(self, body_radius)
-	queue_redraw()
 	_on_damaged(attacker)
 	if unkillable:
 		return false
@@ -472,13 +463,14 @@ func _die() -> void:
 	_hitbox.set_deferred("monitoring", false)
 	remove_from_group("creatures")
 	remove_from_group("sonar_targets")
+	remove_from_group("cutaway_targets")
 	queue_free()
 
 
-func _investigate(origin: Vector2) -> void:
+func _investigate(origin: Vector3) -> void:
 	state = State.INVESTIGATE
-	target = origin
-	_pulse_origin = origin
+	target = _flat(origin)
+	_pulse_origin = target
 	_pause_left = 0.0
 	_retargets = 0
 	_reset_detour()
@@ -492,8 +484,8 @@ func _spot(player: Player) -> void:
 	_chase_left = chase_memory
 	_chase_in_sight = true
 	_sight_check_left = spot_check_interval
-	_last_seen = player.global_position
-	_last_seen_velocity = player.velocity
+	_last_seen = _flat(player.global_position)
+	_last_seen_velocity = _flat(player.velocity)
 	_pause_left = 0.0
 	_reset_detour()
 	_reset_path()
@@ -504,7 +496,7 @@ func _spot(player: Player) -> void:
 
 ## Lost sight: go to where the player was heading and SEARCH there.
 func _lose_track() -> void:
-	var last_known: Vector2 = _last_seen + _last_seen_velocity * search_lead_time
+	var last_known: Vector3 = _last_seen + _last_seen_velocity * search_lead_time
 	_chased = null
 	_chase_in_sight = false
 	if lunge_phase == Lunge.WIND_UP:
@@ -538,7 +530,7 @@ func _update_frenzy() -> void:
 	for player: Player in Players.all(get_tree()):
 		if not _can_chase(player):
 			continue
-		var distance: float = global_position.distance_squared_to(player.global_position)
+		var distance: float = _flat_distance(global_position, player.global_position)
 		if distance < best_distance:
 			best_distance = distance
 			best = player
@@ -557,15 +549,13 @@ func _look_for_players(delta: float) -> void:
 		return
 	_spot_timer = spot_check_interval
 	# Spot the nearest player that is close, in line of sight and not downed.
-	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	var best: Player = null
 	var best_distance: float = spot_distance
 	for player: Player in Players.all(get_tree()):
-		var distance: float = global_position.distance_to(player.global_position)
+		var distance: float = _flat_distance(global_position, player.global_position)
 		if distance > best_distance or not _can_chase(player):
 			continue
-		var query := PhysicsRayQueryParameters2D.create(global_position, player.global_position, wall_mask)
-		if space.intersect_ray(query).is_empty():
+		if _has_line_of_sight(global_position, player.global_position):
 			best = player
 			best_distance = distance
 	if best:
@@ -585,8 +575,8 @@ func _update_chase(delta: float) -> void:
 		_chase_in_sight = _can_see(_chased, lose_sight_distance)
 		if _chase_in_sight:
 			_chase_left = chase_memory
-			_last_seen = _chased.global_position
-			_last_seen_velocity = _chased.velocity
+			_last_seen = _flat(_chased.global_position)
+			_last_seen_velocity = _flat(_chased.velocity)
 	if is_frenzied:
 		# It knows where the player is, even around corners.
 		_chase_left = chase_memory
@@ -594,7 +584,7 @@ func _update_chase(delta: float) -> void:
 	if _chase_left <= 0.0:
 		_lose_track()
 		return
-	target = _chased.global_position
+	target = _flat(_chased.global_position)
 	_pulse_origin = target
 
 
@@ -608,10 +598,16 @@ func _update_search(delta: float) -> void:
 
 ## True if the player is within max_distance and no rock is in between.
 func _can_see(player: Player, max_distance: float) -> bool:
-	if global_position.distance_to(player.global_position) > max_distance:
+	if _flat_distance(global_position, player.global_position) > max_distance:
 		return false
-	var query := PhysicsRayQueryParameters2D.create(global_position, player.global_position, wall_mask)
-	return get_world_2d().direct_space_state.intersect_ray(query).is_empty()
+	return _has_line_of_sight(global_position, player.global_position)
+
+
+## No rock between two floor points (checked at sight_height).
+func _has_line_of_sight(from: Vector3, to: Vector3) -> bool:
+	var lift := Vector3(0.0, sight_height, 0.0)
+	var query := PhysicsRayQueryParameters3D.create(_flat(from) + lift, _flat(to) + lift, wall_mask)
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
 # --- Lunge --------------------------------------------------------------------
@@ -633,21 +629,21 @@ func _update_lunge(delta: float) -> bool:
 				_end_lunge()
 				return false
 			# Coil: nearly stop and keep turning towards the prey.
-			_lunge_dir = global_position.direction_to(_chased.global_position)
-			var coil: Vector2 = _lunge_dir * get_chase_speed() * lunge_wind_up_speed_ratio
+			_lunge_dir = _flat(_chased.global_position - global_position).normalized()
+			var coil: Vector3 = _lunge_dir * get_chase_speed() * lunge_wind_up_speed_ratio * _view_scale(_lunge_dir)
 			velocity = velocity.lerp(coil, 1.0 - exp(-steering * 2.0 * delta))
 			if _lunge_left <= 0.0:
 				lunge_phase = Lunge.BURST
 				_lunge_left = lunge_time
-				velocity = _lunge_dir * lunge_speed
+				velocity = _lunge_dir * lunge_speed * _view_scale(_lunge_dir)
 				_hurt_overlapping_players()
 		Lunge.BURST:
-			velocity = _lunge_dir * lunge_speed
+			velocity = _lunge_dir * lunge_speed * _view_scale(_lunge_dir)
 			if _lunge_left <= 0.0:
 				lunge_phase = Lunge.RECOVER
 				_lunge_left = lunge_recovery
 		Lunge.RECOVER:
-			var drift: Vector2 = _lunge_dir * get_chase_speed() * lunge_recovery_speed_ratio
+			var drift: Vector3 = _lunge_dir * get_chase_speed() * lunge_recovery_speed_ratio * _view_scale(_lunge_dir)
 			velocity = velocity.lerp(drift, 1.0 - exp(-steering * delta))
 			if _lunge_left <= 0.0:
 				_end_lunge()
@@ -659,7 +655,7 @@ func _can_start_lunge() -> bool:
 		return false
 	if not is_instance_valid(_chased) or not _chase_in_sight:
 		return false
-	return global_position.distance_to(_chased.global_position) <= lunge_range + body_radius
+	return _flat_distance(global_position, _chased.global_position) <= lunge_range + body_radius
 
 
 func _end_lunge() -> void:
@@ -687,12 +683,12 @@ func get_lunge_flare() -> float:
 func _hurt_overlapping_players() -> void:
 	if not _hitbox.monitoring:
 		return
-	for body: Node2D in _hitbox.get_overlapping_bodies():
+	for body: Node3D in _hitbox.get_overlapping_bodies():
 		_on_hitbox_body_entered(body)
 
 
-## Called by SonarOverlay when a pulse front reaches this creature in line of sight.
-func on_sonar_hit(_origin: Vector2) -> void:
+## Called by the Sonar when a pulse front reaches this creature in line of sight.
+func on_sonar_hit(_origin: Vector3) -> void:
 	_revealed_left = pulse_reveal_time
 	if not unkillable and exposed_finisher_kills:
 		_exposed_total = exposed_time + PlayerSkills.team_bonus(get_tree(), "exposed_time_add")
@@ -701,8 +697,7 @@ func on_sonar_hit(_origin: Vector2) -> void:
 	if mark_time > 0.0:
 		_marked_total = mark_time
 		_marked_left = mark_time
-	if hidden_until_pinged:
-		_echo.flash(self, body_radius)
+	pinged.emit()
 
 
 ## The player this creature is chasing right now (null when not in CHASE).
@@ -756,8 +751,8 @@ func _physics_process(delta: float) -> void:
 	if _stagger_left > 0.0:
 		# Staggered: no steering, just slide out the knockback.
 		_stagger_left -= delta
-		velocity = velocity.lerp(Vector2.ZERO, 1.0 - exp(-steering * delta))
-		move_and_slide()
+		velocity = velocity.lerp(Vector3.ZERO, 1.0 - exp(-steering * delta))
+		_move()
 		return
 	if is_frenzied:
 		_update_frenzy()
@@ -765,16 +760,17 @@ func _physics_process(delta: float) -> void:
 	_update_chase(delta)
 	_update_search(delta)
 	if _update_lunge(delta):
-		move_and_slide()
+		_move()
 		return
 
-	var desired: Vector2 = Vector2.ZERO
+	var desired: Vector3 = Vector3.ZERO
 	if _pause_left > 0.0:
 		_pause_left -= delta
-	elif state != State.CHASE and (global_position.distance_to(target) <= arrive_distance or _is_path_finished() or _target_behind_safe_zone()):
+	elif state != State.CHASE and (_flat_distance(global_position, target) <= arrive_distance or _is_path_finished() or _target_behind_safe_zone()):
 		_on_target_reached()
 	else:
-		desired = _steer_direction(delta) * get_current_speed()
+		var direction: Vector3 = _steer_direction(delta)
+		desired = direction * get_current_speed() * _view_scale(direction)
 
 	desired = _steer_around_safe_zones(desired) + _safe_zone_push()
 	_zone_time = _zone_time + delta if _steering_around_zone else 0.0
@@ -782,10 +778,10 @@ func _physics_process(delta: float) -> void:
 		_zone_time = 0.0
 		_on_target_reached()
 	velocity = velocity.lerp(desired, 1.0 - exp(-steering * delta))
-	move_and_slide()
+	_move()
 
 	if get_slide_collision_count() > 0:
-		_last_wall_normal = get_slide_collision(0).get_normal()
+		_last_wall_normal = _flat(get_slide_collision(0).get_normal()).normalized()
 		if _steering_around_zone:
 			# This way round the zone runs into rock: try the other side.
 			_zone_side = -_zone_side
@@ -799,26 +795,34 @@ func _physics_process(delta: float) -> void:
 			_on_blocked_while_investigating(delta)
 
 
-func _steer_direction(delta: float) -> Vector2:
+## Moves on the floor plane only.
+func _move() -> void:
+	velocity.y = 0.0
+	move_and_slide()
+	if absf(global_position.y) > 0.001:
+		global_position.y = 0.0
+
+
+func _steer_direction(delta: float) -> Vector3:
 	if _detour_left > 0.0:
 		_detour_left -= delta
 		return _detour_dir
-	return global_position.direction_to(_next_path_point(delta))
+	return _flat(_next_path_point(delta) - global_position).normalized()
 
 
-# --- Pathing (navigation mesh baked by the LevelBuilder) -----------------------
+# --- Pathing (navigation mesh baked from the floor plans) ----------------------
 
 ## The next point to steer to: along the navigation path to target, or target
 ## itself when there is no path (navigation off or not ready yet).
-func _next_path_point(delta: float) -> Vector2:
+func _next_path_point(delta: float) -> Vector3:
 	if not use_navigation:
 		return target
 	_path_refresh_left -= delta
-	if _path_refresh_left <= 0.0 and (_path.is_empty() or _path_target.distance_to(target) > path_retarget_distance):
+	if _path_refresh_left <= 0.0 and (_path.is_empty() or _flat_distance(_path_target, target) > path_retarget_distance):
 		_request_path()
 	if _path.is_empty():
 		return target
-	while _path_index < _path.size() - 1 and global_position.distance_to(_path[_path_index]) <= path_point_reach:
+	while _path_index < _path.size() - 1 and _flat_distance(global_position, _path[_path_index]) <= path_point_reach:
 		_path_index += 1
 	return _path[_path_index]
 
@@ -827,16 +831,24 @@ func _request_path() -> void:
 	path_requests += 1
 	_path_target = target
 	_path_refresh_left = path_refresh_time
-	_path = NavigationServer2D.map_get_path(get_navigation_map(), global_position, target, true)
+	var path: PackedVector3Array = NavigationServer3D.map_get_path(get_navigation_map(), global_position, target, true)
+	# The mesh lies a little above the floor: the path is used on the floor.
+	for i: int in path.size():
+		path[i].y = 0.0
+	_path = path
 	_path_index = 0
 
 
-## The navigation map for its size (the LevelBuilder has a mesh for large
-## creatures), looked up once.
+## The navigation map for its size: a level that bakes one per size answers
+## navigation_map_for(radius) ("level" group); else the world's own map.
+## Looked up once.
 func get_navigation_map() -> RID:
 	if not _navigation_map.is_valid():
-		var level := get_tree().get_first_node_in_group("level") as LevelBuilder
-		_navigation_map = level.navigation_map_for(body_radius) if level else get_world_2d().navigation_map
+		var level: Node = get_tree().get_first_node_in_group("level")
+		if level and level.has_method("navigation_map_for"):
+			_navigation_map = level.call("navigation_map_for", body_radius)
+		else:
+			_navigation_map = get_world_3d().navigation_map
 	return _navigation_map
 
 
@@ -851,12 +863,12 @@ func force_repath() -> void:
 ## Stuck recovery, step 2: move it off the wall (along the last wall normal),
 ## or onto the nearest point of its navigation mesh, then repath.
 func nudge_unstuck() -> void:
-	var on_mesh: Vector2 = NavigationServer2D.map_get_closest_point(get_navigation_map(), global_position)
-	if on_mesh.distance_to(global_position) > 1.0:
+	var on_mesh: Vector3 = _flat(NavigationServer3D.map_get_closest_point(get_navigation_map(), global_position))
+	if _flat_distance(on_mesh, global_position) > 0.02:
 		global_position = on_mesh
-	elif _last_wall_normal != Vector2.ZERO:
+	elif _last_wall_normal != Vector3.ZERO:
 		global_position += _last_wall_normal * unstick_nudge_distance
-	velocity = Vector2.ZERO
+	velocity = Vector3.ZERO
 	force_repath()
 
 
@@ -867,7 +879,7 @@ func is_at_path_end() -> bool:
 
 
 ## The navigation path it follows right now (debug drawing, stuck logs).
-func get_path_points() -> PackedVector2Array:
+func get_path_points() -> PackedVector3Array:
 	return _path
 
 
@@ -876,7 +888,7 @@ func get_path_size() -> int:
 
 
 ## The path point it steers to (its target when there is no path).
-func get_next_path_point() -> Vector2:
+func get_next_path_point() -> Vector3:
 	return _path[_path_index] if _path_index < _path.size() else target
 
 
@@ -892,11 +904,11 @@ func is_staggered() -> bool:
 func _is_path_finished() -> bool:
 	if _path.is_empty() or _path_index < _path.size() - 1:
 		return false
-	return global_position.distance_to(_path[_path.size() - 1]) <= path_point_reach
+	return _flat_distance(global_position, _path[_path.size() - 1]) <= path_point_reach
 
 
 func _reset_path() -> void:
-	_path = PackedVector2Array()
+	_path = PackedVector3Array()
 	_path_index = 0
 	_path_refresh_left = 0.0
 
@@ -923,9 +935,9 @@ func _on_blocked_while_investigating(delta: float) -> void:
 		return
 	# Slide along the wall. Keep the same side as the last detour so it goes
 	# around the rock instead of turning back and forth.
-	var normal: Vector2 = get_slide_collision(0).get_normal()
-	var tangent: Vector2 = normal.orthogonal()
-	var reference: Vector2 = _detour_dir if _detour_dir != Vector2.ZERO else global_position.direction_to(target)
+	var normal: Vector3 = _flat(get_slide_collision(0).get_normal()).normalized()
+	var tangent: Vector3 = normal.cross(Vector3.UP)
+	var reference: Vector3 = _detour_dir if _detour_dir != Vector3.ZERO else _flat(target - global_position).normalized()
 	if tangent.dot(reference) < 0.0:
 		tangent = -tangent
 	_detour_dir = (tangent + normal * detour_wall_push).normalized()
@@ -941,12 +953,12 @@ func _retarget_near_pulse() -> void:
 		state = State.WANDER
 		_pick_wander_target()
 		return
-	target = _pulse_origin + Vector2.from_angle(randf() * TAU) * retarget_distance
+	target = _pulse_origin + _random_direction() * retarget_distance
 	_reset_path()
 
 
 func _reset_detour() -> void:
-	_detour_dir = Vector2.ZERO
+	_detour_dir = Vector3.ZERO
 	_detour_left = 0.0
 	_blocked_time = 0.0
 
@@ -958,7 +970,7 @@ func _on_target_reached() -> void:
 		# Look around the last known position until the search time runs out.
 		_search_arrived = true
 		_pause_left = search_pause
-		target = _search_center + Vector2.from_angle(randf() * TAU) * randf_range(0.3, 1.0) * search_radius
+		target = _search_center + _random_direction() * randf_range(0.3, 1.0) * search_radius
 		return
 	if state == State.INVESTIGATE:
 		# Keep wandering around where the pulse was heard.
@@ -970,34 +982,34 @@ func _on_target_reached() -> void:
 
 ## Hook for subclasses: where it wanders around from now on (a Sentinel keeps
 ## its post).
-func _set_home(at: Vector2) -> void:
-	_home = at
+func _set_home(at: Vector3) -> void:
+	_home = _flat(at)
 
 
 func _pick_wander_target() -> void:
-	var offset: Vector2 = Vector2.from_angle(randf() * TAU) * randf_range(0.3, 1.0) * wander_radius
-	target = _home + offset
+	target = _home + _random_direction() * randf_range(0.3, 1.0) * wander_radius
 
+
+# --- Lit corals (safe zones) ---------------------------------------------------
+# Corals are found through the "corals" group and read by duck typing
+# (is_lit(), safe_radius, is_in_safe_zone(point)) until Coral is ported (Phase B).
 
 ## Removes the part of the steering that points into a lit coral's zone when
 ## it is close to it, so it slides around the zone (no tug-of-war with the push).
-func _steer_around_safe_zones(desired: Vector2) -> Vector2:
+func _steer_around_safe_zones(desired: Vector3) -> Vector3:
 	_steering_around_zone = false
-	for node: Node in get_tree().get_nodes_in_group("corals"):
-		var coral := node as Coral
-		if coral == null or not coral.is_lit():
+	for coral: Node3D in _lit_corals():
+		var offset: Vector3 = _flat(global_position - coral.global_position)
+		if offset.length() > float(coral.get("safe_radius")) + safe_zone_steer_margin or offset == Vector3.ZERO:
 			continue
-		var offset: Vector2 = global_position - coral.global_position
-		if offset.length() > coral.safe_radius + safe_zone_steer_margin or offset == Vector2.ZERO:
-			continue
-		var outward: Vector2 = offset.normalized()
+		var outward: Vector3 = offset.normalized()
 		var inward: float = desired.dot(outward)
 		if inward < 0.0:
 			# Keep the speed: slide along the edge instead of pushing in.
-			var tangent: Vector2 = outward.orthogonal()
+			var tangent: Vector3 = outward.cross(Vector3.UP)
 			if _zone_side == 0.0:
 				_zone_side = 1.0 if desired.dot(tangent) >= 0.0 else -1.0
-			var slid: Vector2 = desired - outward * inward
+			var slid: Vector3 = desired - outward * inward
 			if slid.dot(tangent * _zone_side) <= 0.0:
 				slid = tangent * _zone_side * desired.length()
 			desired = slid.normalized() * desired.length()
@@ -1010,21 +1022,35 @@ func _steer_around_safe_zones(desired: Vector2) -> Vector2:
 ## Its (non-chase) target lies in a lit coral's zone and it is at that zone's
 ## edge: as close as it may get, so it counts as arrived.
 func _target_behind_safe_zone() -> bool:
-	for node: Node in get_tree().get_nodes_in_group("corals"):
-		var coral := node as Coral
-		if coral and coral.is_in_safe_zone(target) \
-				and global_position.distance_to(coral.global_position) <= coral.safe_radius + safe_zone_steer_margin:
+	for coral: Node3D in _lit_corals():
+		if coral.call("is_in_safe_zone", target) \
+				and _flat_distance(global_position, coral.global_position) <= float(coral.get("safe_radius")) + safe_zone_steer_margin:
 			return true
 	return false
 
 
-func _safe_zone_push() -> Vector2:
-	var push: Vector2 = Vector2.ZERO
-	for node: Node in get_tree().get_nodes_in_group("corals"):
-		var coral := node as Coral
-		if coral and coral.is_in_safe_zone(global_position):
-			push += coral.global_position.direction_to(global_position) * safe_zone_push
+func _safe_zone_push() -> Vector3:
+	var push: Vector3 = Vector3.ZERO
+	for coral: Node3D in _lit_corals():
+		if coral.call("is_in_safe_zone", global_position):
+			push += _flat(global_position - coral.global_position).normalized() * safe_zone_push
 	return push
+
+
+func _is_player_safe(player: Player) -> bool:
+	for coral: Node3D in _lit_corals():
+		if coral.call("is_in_safe_zone", player.global_position):
+			return true
+	return false
+
+
+func _lit_corals() -> Array[Node3D]:
+	var result: Array[Node3D] = []
+	for node: Node in get_tree().get_nodes_in_group("corals"):
+		var coral := node as Node3D
+		if coral and coral.has_method("is_lit") and coral.call("is_lit"):
+			result.append(coral)
+	return result
 
 
 ## The player closest to this creature (null if there are none).
@@ -1032,32 +1058,17 @@ func get_nearest_player() -> Player:
 	return Players.nearest(get_tree(), global_position)
 
 
-func _is_player_safe(player: Player) -> bool:
-	for node: Node in get_tree().get_nodes_in_group("corals"):
-		var coral := node as Coral
-		if coral and coral.is_in_safe_zone(player.global_position):
-			return true
-	return false
-
-
 func _update_reveal(delta: float) -> void:
 	_revealed_left = maxf(_revealed_left - delta, 0.0)
 	_exposed_left = maxf(_exposed_left - delta, 0.0)
 	_marked_left = maxf(_marked_left - delta, 0.0)
-	var in_light: bool = is_in_echo_light()
-	if in_light != _was_in_light or _flash_left > 0.0:
-		_was_in_light = in_light
-		_flash_left = maxf(_flash_left - delta, 0.0)
-		queue_redraw()
-	_anim_time += delta
-	if velocity.length() > 1.0:
-		_facing = _facing.lerp(velocity.normalized(), 1.0 - exp(-8.0 * delta)).normalized()
-	var previous_silhouette: float = silhouette_ratio
+	_flash_left = maxf(_flash_left - delta, 0.0)
+	_was_in_light = is_in_echo_light()
+	var moving := Vector3(velocity.x, 0.0, velocity.z)
+	if moving.length() > 0.02:
+		facing = facing.lerp(moving.normalized(), 1.0 - exp(-8.0 * delta)).normalized()
 	sense_ratio = _compute_sense()
-	silhouette_ratio = 0.0 if in_light else maxf(_compute_silhouette(delta), sense_ratio)
-	# Visible shapes move (tendrils, fins), so they redraw every frame.
-	if in_light or silhouette_ratio > 0.0 or previous_silhouette > 0.0 or not hidden_until_pinged:
-		queue_redraw()
+	silhouette_ratio = 0.0 if _was_in_light else maxf(_compute_silhouette(delta), sense_ratio)
 
 
 ## The strongest CloseSense on this creature (0 = nobody senses it).
@@ -1083,7 +1094,7 @@ func _compute_silhouette(delta: float) -> float:
 			continue
 		var inner: float = player.light_reveal_radius + body_radius
 		var outer: float = player.get_light_radius()
-		var distance: float = global_position.distance_to(player.global_position)
+		var distance: float = _flat_distance(global_position, player.global_position)
 		if outer <= inner or distance >= outer:
 			continue
 		var ratio: float = smoothstep(outer, inner, distance)
@@ -1096,12 +1107,11 @@ func _compute_silhouette(delta: float) -> float:
 	_silhouette_check_left -= delta
 	if _silhouette_check_left <= 0.0:
 		_silhouette_check_left = silhouette_check_interval
-		var query := PhysicsRayQueryParameters2D.create(source.global_position, global_position, wall_mask)
-		_silhouette_blocked = not get_world_2d().direct_space_state.intersect_ray(query).is_empty()
+		_silhouette_blocked = not _has_line_of_sight(source.global_position, global_position)
 	return 0.0 if _silhouette_blocked else best
 
 
-func _on_hitbox_body_entered(body: Node2D) -> void:
+func _on_hitbox_body_entered(body: Node3D) -> void:
 	var player := body as Player
 	if _dying or _stagger_left > 0.0:
 		return
@@ -1109,88 +1119,22 @@ func _on_hitbox_body_entered(body: Node2D) -> void:
 		player.health.take_hit(global_position, self)
 
 
-func _draw() -> void:
-	# Hidden creatures only show their body inside the Echo's light (drawn in the
-	# world, so the light itself makes it visible).
-	if hidden_until_pinged and not _was_in_light:
-		if silhouette_ratio > 0.0:
-			# Dark shape only: no outline and no eye dot (CreatureEyes adds faint eyes).
-			draw_shape(self, Color(silhouette_color, silhouette_ratio * silhouette_max_alpha), Color(0.0, 0.0, 0.0, 0.0), false)
-		return
-	var fill: Color = hit_flash_color if _flash_left > 0.0 else body_color.darkened(fill_darken)
-	draw_shape(self, fill, _hdr(get_type_color(), outline_energy, 1.0), true)
+## How much faster this direction must be to look as fast as sideways on screen
+## (the tilted camera; 1 without one, e.g. in headless tests).
+func _view_scale(direction: Vector3) -> float:
+	if _camera == null or not is_instance_valid(_camera):
+		_camera = SharedCamera.find(get_tree())
+	return _camera.speed_scale(direction) if _camera else 1.0
 
 
-## The colour that tells the creature type apart (the same as its sonar echo).
-func get_type_color() -> Color:
-	return _echo.color if _echo else body_color
+func _random_direction() -> Vector3:
+	var angle: float = randf() * TAU
+	return Vector3(cos(angle), 0.0, sin(angle))
 
 
-static func _hdr(color: Color, energy: float, alpha: float) -> Color:
-	return Color(color.r * energy, color.g * energy, color.b * energy, alpha)
+static func _flat(v: Vector3) -> Vector3:
+	return Vector3(v.x, 0.0, v.z)
 
 
-## Draws the creature's shape (body, fins / tendrils, eye) on canvas, centred on
-## canvas's origin, with the current procedural motion. Used for the full body,
-## the silhouette and the sonar echo (CreatureEcho), so all three match.
-## outline alpha 0 = no outline (tendrils then use the fill colour).
-func draw_shape(canvas: CanvasItem, fill: Color, outline: Color, with_eye: bool) -> void:
-	var forward: Vector2 = _facing
-	var side: Vector2 = forward.orthogonal()
-	var has_outline: bool = outline.a > 0.0
-	var limb_color: Color = Color(outline, outline.a * tendril_alpha) if has_outline else fill
-	var body := PackedVector2Array()
-	var tendrils: int = tendril_count
-	match look:
-		Look.SPIKY:
-			# Slowly turning spiky shell.
-			var spin: float = _anim_time * spike_spin_speed
-			for i: int in spike_count * 2:
-				var radius: float = body_radius * (1.0 + spike_length if i % 2 == 0 else 0.8)
-				body.append(Vector2.from_angle(TAU * i / (spike_count * 2) + spin) * radius)
-			tendrils = mini(tendril_count, 3)
-		Look.ARROW:
-			# A thin arrowhead with two flapping side fins.
-			var tip: Vector2 = forward * body_radius * 1.6
-			var back: Vector2 = -forward * body_radius * 0.9
-			body = PackedVector2Array([tip, back + side * body_radius * 0.8, back * 0.4, back - side * body_radius * 0.8])
-			var flap: float = sin(_anim_time * TAU * fin_flap_speed)
-			for s: float in [-1.0, 1.0]:
-				var root: Vector2 = side * s * body_radius * 0.35
-				var fin_tip: Vector2 = side * s * body_radius * (1.3 + 0.25 * flap) - forward * body_radius * 0.5
-				var fin := PackedVector2Array([root + forward * body_radius * 0.4, fin_tip, root - forward * body_radius * 0.5])
-				canvas.draw_colored_polygon(fin, fill)
-				if has_outline:
-					canvas.draw_polyline(_closed(fin), limb_color, outline_width, true)
-			tendrils = mini(tendril_count, 2)
-		_:
-			# A soft oval body, a little longer than wide, pointing where it moves.
-			for i: int in 20:
-				var angle: float = TAU * i / 20.0
-				body.append(forward * cos(angle) * body_radius * 1.15 + side * sin(angle) * body_radius * 0.85)
-	_draw_tendrils(canvas, forward, side, tendrils, limb_color)
-	canvas.draw_colored_polygon(body, fill)
-	if has_outline:
-		canvas.draw_polyline(_closed(body), outline, outline_width, true)
-	if with_eye:
-		var flare: float = lerpf(1.0, lunge_eye_flare, get_lunge_flare())
-		canvas.draw_circle(forward * body_radius * 0.55, body_radius * 0.18 * sqrt(flare), _hdr(eye_color, eye_energy * flare, 1.0))
-
-
-## Wavy tendrils trailing behind the body.
-func _draw_tendrils(canvas: CanvasItem, forward: Vector2, side: Vector2, count: int, color: Color) -> void:
-	for i: int in count:
-		var spread: float = (float(i) / maxf(count - 1, 1) - 0.5) * 2.0 if count > 1 else 0.0
-		var root: Vector2 = -forward * body_radius * 0.75 + side * spread * body_radius * 0.55
-		var line := PackedVector2Array([root])
-		for k: int in range(1, tendril_segments + 1):
-			var along: float = float(k) / tendril_segments
-			var wave: float = sin(_anim_time * TAU * tendril_wave_speed + i * 1.3 - k * 0.8) * tendril_wave_amount * along
-			line.append(root - forward * body_radius * tendril_length * along + side * (wave + spread * along * body_radius * 0.4))
-		canvas.draw_polyline(line, color, maxf(body_radius * tendril_width, 1.0), true)
-
-
-static func _closed(points: PackedVector2Array) -> PackedVector2Array:
-	var result: PackedVector2Array = points.duplicate()
-	result.append(points[0])
-	return result
+static func _flat_distance(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()

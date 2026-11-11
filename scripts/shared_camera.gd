@@ -65,6 +65,8 @@ static func find(tree: SceneTree) -> SharedCamera:
 
 func _ready() -> void:
 	add_to_group("shared_camera")
+	# Moved in _process from the players' drawn (interpolated) positions.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	projection = Camera3D.PROJECTION_ORTHOGONAL
 	size = min_size
 	near = 0.1
@@ -137,7 +139,7 @@ func _process(delta: float) -> void:
 		return
 	var middle := Vector3.ZERO
 	for player: Player in players:
-		middle += player.global_position
+		middle += player.get_global_transform_interpolated().origin
 		_listen_to(player)
 	middle /= float(players.size())
 	middle.y += focus_height
@@ -145,7 +147,7 @@ func _process(delta: float) -> void:
 	# How much screen the players need, measured on the camera's own axes.
 	var half := Vector2.ZERO
 	for player: Player in players:
-		var offset: Vector3 = player.global_position - middle
+		var offset: Vector3 = player.get_global_transform_interpolated().origin - middle
 		half.x = maxf(half.x, absf(offset.dot(global_basis.x)))
 		half.y = maxf(half.y, absf(offset.dot(global_basis.y)))
 	var view: Vector2 = get_viewport().get_visible_rect().size

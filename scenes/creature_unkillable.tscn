@@ -6,9 +6,7 @@
 unkillable = true
 stagger_scale = 0.35
 look = 1
-body_radius = 22.0
+body_radius = 0.44
 body_color = Color(0.55, 0.3, 0.95, 1)
+type_color = Color(0.65, 0.3, 1, 1)
 eye_color = Color(0.85, 1, 0.4, 1)
-
-[node name="Echo" parent="EchoLayer" index="0"]
-color = Color(0.65, 0.3, 1, 1)

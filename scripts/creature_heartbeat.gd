@@ -1,5 +1,5 @@
 class_name CreatureHeartbeat
-extends AudioStreamPlayer2D
+extends AudioStreamPlayer3D
 ## A low heartbeat that warns the player the hidden creature is near: it starts
 ## at start_distance and gets louder and faster as the creature gets closer.
 ## Positional (child of the creature), so the player hears which side it is on.
@@ -7,10 +7,11 @@ extends AudioStreamPlayer2D
 @export var creature: Creature
 
 @export_group("Range")
-## The heartbeat starts when the creature is this close to the player.
-@export var start_distance: float = 500.0
-## At this distance (or closer) the heartbeat is at its loudest and fastest.
-@export var full_distance: float = 120.0
+## The heartbeat starts when the creature is this close to the player
+## (world units, on the floor)...
+@export var start_distance: float = 10.0
+## ...and at this distance (or closer) it is at its loudest and fastest.
+@export var full_distance: float = 2.4
 
 @export_group("Beat")
 ## Seconds between beats at start_distance.
@@ -28,8 +29,9 @@ var _beat_timer: float = 0.0
 
 
 func _ready() -> void:
-	# Flat attenuation: volume is driven by closeness below, panning stays.
-	attenuation = 0.0
+	# No distance falloff: the volume is driven by closeness below, panning stays.
+	attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+	attenuation_filter_cutoff_hz = 20500.0
 	max_distance = start_distance * 3.0
 	panning_strength = panning
 
@@ -40,7 +42,8 @@ func _process(delta: float) -> void:
 	var player: Player = creature.get_nearest_player()
 	if player == null:
 		return
-	var distance: float = creature.global_position.distance_to(player.global_position)
+	var offset: Vector3 = creature.global_position - player.global_position
+	var distance: float = Vector2(offset.x, offset.z).length()
 	if distance > start_distance:
 		_beat_timer = 0.0
 		return

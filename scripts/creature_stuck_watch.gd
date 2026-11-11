@@ -17,11 +17,12 @@ static var log_enabled: bool = false
 @export var creature: Creature
 ## Seconds per check window.
 @export var check_time: float = 0.75
-## Moving less than this in one window (while it should move) = stuck.
-@export var stuck_distance: float = 10.0
+## Moving less than this in one window (while it should move) = stuck
+## (world units).
+@export var stuck_distance: float = 0.2
 ## Not stuck when the target is this close (it has arrived, or is next to the
 ## player it chases).
-@export var target_margin: float = 60.0
+@export var target_margin: float = 1.2
 ## Safety net (in check windows: 2 x 0.75 s = stuck for 1.5 s).
 @export var recover_enabled: bool = true
 @export var repath_after: int = 2
@@ -34,7 +35,7 @@ var nudges_done: int = 0
 var stuck_windows: int = 0
 var total_stuck_windows: int = 0
 var _window_left: float = 0.0
-var _window_start: Vector2
+var _window_start: Vector3
 var _repaths_at_start: int = 0
 var _state_changes_at_start: int = 0
 var _lunges_at_start: int = 0
@@ -87,34 +88,36 @@ func _should_move() -> bool:
 		return false
 	if creature.is_at_path_end():
 		return false
-	return creature.global_position.distance_to(creature.target) > creature.body_radius + target_margin
+	var offset: Vector3 = creature.target - creature.global_position
+	return Vector2(offset.x, offset.z).length() > creature.body_radius + target_margin
 
 
-## Distance to the nearest lit coral and its safe radius (-1 = none lit).
+## Distance to the nearest lit coral and its safe radius (corals read by duck
+## typing until Coral is ported).
 func _nearest_lit_coral() -> String:
 	var best: float = INF
 	var radius: float = -1.0
 	var lit: int = 0
 	for node: Node in creature.get_tree().get_nodes_in_group("corals"):
-		var coral := node as Coral
-		if coral == null or not coral.is_lit():
+		var coral := node as Node3D
+		if coral == null or not coral.has_method("is_lit") or not coral.call("is_lit"):
 			continue
 		lit += 1
 		var distance: float = coral.global_position.distance_to(creature.global_position)
 		if distance < best:
 			best = distance
-			radius = coral.safe_radius
-	return "none" if lit == 0 else "%d px (safe %d), %d lit" % [roundi(best), roundi(radius), lit]
+			radius = float(coral.get("safe_radius"))
+	return "none" if lit == 0 else "%.1f units (safe %.1f), %d lit" % [best, radius, lit]
 
 
 func _describe(moved: float) -> Dictionary:
 	return {
 		"creature": creature.name,
 		"state": creature.get_state_name(),
-		"position": creature.global_position.round(),
-		"velocity": creature.velocity.round(),
-		"target": creature.target.round(),
-		"next_point": creature.get_next_path_point().round(),
+		"position": creature.global_position.snappedf(0.1),
+		"velocity": creature.velocity.snappedf(0.1),
+		"target": creature.target.snappedf(0.1),
+		"next_point": creature.get_next_path_point().snappedf(0.1),
 		"path_points": creature.get_path_size(),
 		"moved": snappedf(moved, 0.1),
 		"repaths": creature.path_requests - _repaths_at_start,

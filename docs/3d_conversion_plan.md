@@ -318,20 +318,37 @@ Updated with every step, so a new session knows where the conversion stands.
 - [x] `Darkness`, `MarineSnow`, `AudioDirector` (3D positional; moved forward from Phase E
   because the ported classes call it).
 - [x] `RockMesher`; play-test stage `tools/core_test.tscn`.
-- [ ] `SwordAbility` (stand-in: `proto3d/proto_sword.gd`).
-- [ ] `Creature` on `NavigationRegion3D`, `CreatureEyes`, `CreatureStuckWatch`,
-  `CreatureVoice` (stand-in: `proto3d/proto_creature.gd`).
-- [ ] `PartnerMending`, `DistressPulse`, `CloseSense`, `PlayerOverlay` (downed and revive
-  rings), `GoalEcho`.
-- [ ] 3D physics interpolation (smooth movement above 60 Hz screens).
-- [ ] HUD glow over the 3D world (risk 4).
-- [ ] The core half of `test_creatures` ported; FPS benchmark at 1080p.
-- [ ] Delete `proto3d/`.
-- [x] The editor opens clean: every script not ported yet is in `legacy2d/` (has a
-  `.gdignore`; see its README), and `tools/check_scripts.tscn` lists every script that does
-  not parse (it must stay at zero).
+- [x] `SwordAbility` (placeholder blade, slash arc, kill burst, aim tick on the floor).
+- [x] `Creature` on `NavigationServer3D` (`NavigationBaker`: baked from the floor plans in
+  0.04 s for three rooms), `CreatureBody` (placeholder look), `CreatureEyes`,
+  `CreatureStuckWatch`, `CreatureVoice`, `CreatureHeartbeat`, `ExposedMark`.
+- [x] `PartnerMending`, `DistressPulse`, `CloseSense`, `PlayerOverlay` (downed and revive
+  rings), `GoalEcho`; `GlowLines` draws all of them.
+- [x] 3D physics interpolation (on; `I` in the core test switches it to compare).
+- [x] `tools/test_core.tscn`: the core half of `test_creatures`, rebuilt for 3D (40 checks).
+- [x] FPS benchmark (core test, RX 7800 XT, three rooms, four creatures, a pulse every
+  1.6 s): 1920x1080 about 360 FPS, GPU 1.2 ms and render CPU 0.36 ms per frame; no frame
+  over 16.7 ms (worst 13-17 ms); a pulse's 1024 rays take up to 3-4 ms. For the 2018 target
+  (about a quarter of this GPU) that is roughly 5 ms of GPU per frame. Still to measure
+  at level scale (Phase B), where most of the cost will be.
+- [x] `proto3d/` deleted.
+- [ ] HUD glow over the 3D world (risk 4): moved to Phase B, where the HUD is ported.
 
 ### Left for Phase B, noted while porting
+- **Scenes that inherit `scenes/creature.tscn`** (light hunter, sentinel, the placeholder
+  boss, the Angler, `tools/large_creature.tscn`) still override 2D nodes (`EchoLayer/Echo`,
+  `Shadow`...): redo them when their scripts come back. Their sonar echo colour is now
+  `Creature.type_color` (was `CreatureEcho.color`).
+- **Skill values in pixels**: `close_sense_add`, and any other length in the skill `.tres`
+  files, must be divided by 50 when the skill catalog comes back.
+- `Coral` (and every "corals" user) is read by duck typing; port it and type it again.
+- The F2 hitbox view (`HitShapes`, `get_debug_shapes`) is not on the 3D creature or sword
+  yet, and the F3 path view (`NavDebugDraw`) is in `legacy2d/`: Phase E.
+- `DropShadow` is in `legacy2d/`: real lights and shadows do its job for now; a soft contact
+  shadow under bodies may come back with the models (Phase C).
+- The pulse's occlusion rays (1024 per pulse, up to ~4 ms on the pulse frame) are the
+  biggest single cost: check them on a full level; fewer rays or rays spread over two
+  physics frames if needed.
 - `Darkness`: the darkening with depth through a stage needs the `LevelBuilder`
   (`stage_progress_at`); only the stage's ambient colour is applied for now.
 - The `Game` autoload has no worlds and no skill catalog (they load every unported

@@ -29,6 +29,7 @@ func setup(target_player: Player, skill: SkillDefinition, skill_rank: int) -> vo
 
 func _ready() -> void:
 	top_level = true
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	ready_cue = ReadyCue.new()
 	ready_cue.player = player
 	if definition:
@@ -72,7 +73,7 @@ func _process(delta: float) -> void:
 	cooldown_left = maxf(cooldown_left - delta, 0.0)
 	if was_cooling and cooldown_left <= 0.0:
 		_on_ready_again()
-	global_position = player.global_position
+	global_position = player.get_global_transform_interpolated().origin
 	_update(delta)
 
 
