@@ -135,14 +135,19 @@ func _wait(seconds: float) -> void:
 	await get_tree().create_timer(seconds).timeout
 
 
-## The viewport is linear float data (HDR 2D): convert it for the PNG.
 func _save(file_name: String) -> void:
+	await save_screen(self, folder.path_join(file_name + ".png"))
+	print("saved ", file_name)
+
+
+## Saves what node's viewport shows. The viewport is linear float data (HDR
+## 2D): it is converted for the PNG.
+static func save_screen(node: Node, path: String) -> void:
 	await RenderingServer.frame_post_draw
-	var image: Image = get_viewport().get_texture().get_image()
+	var image: Image = node.get_viewport().get_texture().get_image()
 	if image.get_format() != Image.FORMAT_RGBA8 and image.get_format() != Image.FORMAT_RGB8:
 		for y: int in image.get_height():
 			for x: int in image.get_width():
 				image.set_pixel(x, y, image.get_pixel(x, y).linear_to_srgb())
 		image.convert(Image.FORMAT_RGB8)
-	image.save_png(folder.path_join(file_name + ".png"))
-	print("saved ", file_name)
+	image.save_png(path)

@@ -92,6 +92,7 @@ var pulse: ProtoPulse
 var _echo_light: OmniLight3D
 var _guardian_light: OmniLight3D
 var _snow_material: ShaderMaterial
+var _snow: GPUParticles3D
 var _rng := RandomNumberGenerator.new()
 var _info: Label
 
@@ -124,7 +125,11 @@ func _process(_delta: float) -> void:
 		_echo_light.global_position, _guardian_light.global_position]))
 	_snow_material.set_shader_parameter("light_range", PackedFloat32Array([
 		_echo_light.omni_range, _guardian_light.omni_range]))
-	_info.text = "PROTO 3D   %d FPS\nEcho: WASD + Space (pulse)   Guardian: arrows + Enter (sword)   or two gamepads" % [
+	_info.text = _info_text()
+
+
+func _info_text() -> String:
+	return "PROTO 3D   %d FPS\nEcho: WASD + Space (pulse)   Guardian: arrows + Enter (sword)   or two gamepads" % [
 		int(Engine.get_frames_per_second())]
 
 
@@ -231,7 +236,7 @@ func _make_player(player_name: String, prefix: String, is_echo: bool, radius: fl
 	player.input_prefix = prefix
 	player.is_echo = is_echo
 	player.body_radius = radius
-	player.view_yaw = camera.get_yaw()
+	player.camera = camera
 	player.collision_layer = 2
 	player.collision_mask = 1
 
@@ -284,6 +289,7 @@ func _build_creature() -> void:
 	creature.name = "Creature"
 	creature.position = creature_start
 	creature.roam_extent = room_size * 0.5 - 2.0
+	creature.camera = camera
 	add_child(creature)
 
 
@@ -308,17 +314,17 @@ func _build_snow() -> void:
 	var quad := QuadMesh.new()
 	quad.size = Vector2(snow_size, snow_size)
 	quad.material = _snow_material
-	var snow := GPUParticles3D.new()
-	snow.name = "MarineSnow"
-	snow.amount = snow_amount
-	snow.lifetime = snow_lifetime
-	snow.preprocess = snow_lifetime
-	snow.process_material = process
-	snow.draw_pass_1 = quad
-	snow.position.y = snow_height * 0.5
-	snow.visibility_aabb = AABB(Vector3.ONE * -room_size, Vector3.ONE * room_size * 2.0)
-	snow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(snow)
+	_snow = GPUParticles3D.new()
+	_snow.name = "MarineSnow"
+	_snow.amount = snow_amount
+	_snow.lifetime = snow_lifetime
+	_snow.preprocess = snow_lifetime
+	_snow.process_material = process
+	_snow.draw_pass_1 = quad
+	_snow.position.y = snow_height * 0.5
+	_snow.visibility_aabb = AABB(Vector3.ONE * -room_size, Vector3.ONE * room_size * 2.0)
+	_snow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_snow)
 
 
 func _build_info() -> void:

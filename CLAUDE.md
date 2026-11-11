@@ -3,6 +3,22 @@
 2D top-down co-op roguelite set in the deep ocean, for exactly 2 players (local co-op).
 Target: PC (Steam).
 
+## 3D conversion (branch `3d`, in progress)
+The game is being converted to 3D (Godot 4.7, Forward+, orthographic tilted camera). `main`
+keeps the 2D game, with its gameplay code frozen, until the 3D version has caught up. The plan,
+the phases and the keep / adapt / rebuild verdict per system are in
+`docs/3d_conversion_plan.md`; everything below still describes the 2D game until a phase
+replaces it (this file is updated at the end of every phase).
+- **Approved decisions**: rooms are built in code from the 11 existing 2D floor plans (the room
+  scenes stay as data); 50 px = 1 world unit (lengths and speeds are divided by 50 when a
+  system is ported, times and ratios stay); scripts are converted in place (same class and
+  file names); the camera yaw (45 or 0) is chosen by playing `proto3d/camera_test.tscn`.
+- **Performance target**: 60 FPS at 1080p on a mid-range GPU from about 2018.
+- **`proto3d/`** (prototype, deleted at the end of Phase A): `proto_room.tscn` = the first test
+  room; `camera_test.tscn` = three real Ocean rooms pulled up into 3D with keys to switch the
+  camera while playing (1 / 2 = yaw 45 / 0, 3 = pitch, 4 = speed compensation, 5 = key
+  mapping; `-- shots <folder>` saves pictures and prints the speed per direction).
+
 ## Core idea
 The two playable characters are deep-sea creatures:
 - **The Echo** (P1, female): small and glowing. Sees with sonar pulses that reveal the
@@ -618,12 +634,20 @@ The world is tilted to match the characters, still 2D:
 - **File names in snake_case** (`player.gd`, `pulse_ring.tscn`). Class names in PascalCase via `class_name`.
 - **All tunable values are `@export` variables** (speeds, durations, radii, colors, amounts). No magic numbers in logic.
 - **Art style: "silhouette + glow".** In the dark world players only see dark silhouettes and
-  glowing parts. There is no artist and no budget: every character / creature visual is built
-  from vector shapes in Godot (Polygon2D, Line2D, `_draw()`, particles, lights) with procedural
-  animation (springs, verlet chains, sine motion). **No AI-generated art in the game.**
-  `assets/concepts/` is for mood reference only (never traced). Dark silhouettes are drawn in
-  the world (lit by lights); glowing parts on a CanvasLayer with `follow_viewport_enabled`
-  using HDR colours (energy > 1 blooms).
+  glowing parts. There is no artist and no budget. **No AI-generated art or audio in the
+  game.** `assets/concepts/` is for mood reference only (never traced).
+  - **2D** (`main`, and every menu / HUD / Journey screen): visuals are built from vector
+    shapes in Godot (Polygon2D, Line2D, `_draw()`, particles, lights) with procedural
+    animation (springs, verlet chains, sine motion). Dark silhouettes are drawn in the world
+    (lit by lights); glowing parts on a CanvasLayer with `follow_viewport_enabled` using HDR
+    colours (energy > 1 blooms).
+  - **3D** (branch `3d`): models may come from CC0 packs (Quaternius, KayKit, Kenney) and
+    animations from Mixamo. **Every such asset has its licence file in the repo**, beside the
+    asset (source URL, author, licence, date, what was changed), and is listed in
+    `assets/models/LICENSES.md`. Mixamo is free to use in a game but is not CC0: its files are
+    never redistributed on their own. Everything else is still built in code or by scripts
+    (Blender run headless with Python, in `tools/`). All models share one dark body + glowing
+    rim material, so packs of different styles read as one world.
 - **Terminology**: World > Stage > Level, everywhere (classes, files, signals, UI text).
   "Run" is not used any more.
 - **All menu / screen text is bilingual** (English + Arabic): add new strings to

@@ -3,12 +3,17 @@ extends CharacterBody3D
 ## One of the two players of the 3D prototype. The movement is the 2D Player's
 ## (acceleration, drag, glide, soft leash to the partner), on the floor plane
 ## and relative to the camera. Values are the 2D ones at 50 px = 1 unit.
+## The camera decides what a direction means: the stick maps to the exact
+## screen direction, the keys to plain directions, and the speed limit grows
+## in directions the camera squashes (ProtoCamera.speed_scale).
 
 ## Input actions are "<prefix>move_left" ... "<prefix>action" (the project's
 ## own InputMap: keyboard + this player's gamepad).
 @export var input_prefix: String = "p1_"
 @export var is_echo: bool = true
 @export var body_radius: float = 0.3
+## Left stick push (0-1) above which the stick, not the keys, steers.
+@export_range(0.0, 1.0) var stick_deadzone: float = 0.2
 
 @export_group("Movement")
 @export var acceleration: float = 18.0
@@ -31,26 +36,24 @@ extends CharacterBody3D
 
 ## Unit vector on the floor plane.
 var facing: Vector3 = Vector3.BACK
-## The camera's yaw in radians: "up" on the stick is away from the camera.
-var view_yaw: float = 0.0
+## Maps input to the floor; without one, up = -z and no compensation.
+var camera: ProtoCamera
+## The gamepad bound to this player's move actions (-1 = none).
+var joypad_device: int = -1
 var _knockback_left: float = 0.0
 
 
 func _ready() -> void:
 	add_to_group("proto_players")
 	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
+	joypad_device = _find_joypad_device()
 
 
 func _physics_process(delta: float) -> void:
-	var input: Vector2 = Input.get_vector(
-			input_prefix + "move_left", input_prefix + "move_right",
-			input_prefix + "move_up", input_prefix + "move_down")
-	var forward := Vector3(-sin(view_yaw), 0.0, -cos(view_yaw))
-	var right := Vector3(cos(view_yaw), 0.0, -sin(view_yaw))
-	var direction: Vector3 = right * input.x - forward * input.y
+	var direction: Vector3 = _read_direction()
 	if direction != Vector3.ZERO:
 		facing = direction.normalized()
-	velocity += direction * acceleration * delta
+	velocity += direction * acceleration * _speed_scale(direction) * delta
 
 	# Frame-rate independent drag: weaker drag when gliding.
 	var current_drag: float = drag if direction != Vector3.ZERO else glide_drag
@@ -58,12 +61,42 @@ func _physics_process(delta: float) -> void:
 	if _knockback_left > 0.0:
 		_knockback_left -= delta
 	else:
-		velocity = velocity.limit_length(max_speed)
+		velocity = velocity.limit_length(max_speed * _speed_scale(velocity))
 	_apply_leash()
 
 	velocity.y = 0.0
 	move_and_slide()
 	position.y = 0.0
+
+
+## The wanted move on the floor (length 0-1): the stick if it is pushed, else
+## the keys.
+func _read_direction() -> Vector3:
+	if joypad_device >= 0:
+		var stick := Vector2(
+				Input.get_joy_axis(joypad_device, JOY_AXIS_LEFT_X),
+				Input.get_joy_axis(joypad_device, JOY_AXIS_LEFT_Y))
+		if stick.length() > stick_deadzone:
+			stick = stick.limit_length(1.0)
+			return camera.stick_to_world(stick) if camera else Vector3(stick.x, 0.0, stick.y)
+	var keys: Vector2 = Input.get_vector(
+			input_prefix + "move_left", input_prefix + "move_right",
+			input_prefix + "move_up", input_prefix + "move_down")
+	return camera.keys_to_world(keys) if camera else Vector3(keys.x, 0.0, keys.y)
+
+
+func _speed_scale(direction: Vector3) -> float:
+	return camera.speed_scale(direction) if camera else 1.0
+
+
+func _find_joypad_device() -> int:
+	var action: String = input_prefix + "move_left"
+	if not InputMap.has_action(action):
+		return -1
+	for event: InputEvent in InputMap.action_get_events(action):
+		if event is InputEventJoypadMotion or event is InputEventJoypadButton:
+			return event.device
+	return -1
 
 
 func apply_knockback(push: Vector3) -> void:

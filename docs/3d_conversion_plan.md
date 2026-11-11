@@ -1,24 +1,24 @@
 # Echo — 2D to 3D conversion plan
 
-Status: **draft for review. No game code is written until this is approved.**
+Status: **approved; Phase A has started.** Section 1 records the decisions as approved.
 
 The 3D isometric prototype (`proto3d/`) was judged a success: lighting, darkness, the
 character lights and creature movement feel much better than in 2D. The game is being
 converted to 3D on Godot 4.7, Forward+. This plan says how, in what order, and what we
 check first.
 
-## 1. Decisions needed before Phase A
+## 1. Decisions (all approved)
 
-These five choices shape everything below. Each has a recommendation; the plan is written
-assuming the recommendation.
+These choices shape everything below.
 
-| # | Decision | Recommendation | Why |
+| # | Decision | Approved | Why |
 |---|---|---|---|
-| 1 | Camera yaw: 45° (prototype) or 0° (like the 2D view) | **Test both on day 1 of Phase A**, then fix it | Keyboard players only have 8 directions. At 45° every corridor runs diagonally on screen; see section 5.1 |
+| 1 | Camera yaw: 45° (prototype) or 0° (like the 2D view) | **Chosen by playing** `proto3d/camera_test.tscn` on day 1 of Phase A (still open until then) | Keyboard players only have 8 directions. At 45° every corridor runs diagonally on screen; see section 5.1 |
 | 2 | Rooms: redesign in 3D, or build the 3D rooms in code from the 11 existing floor plans | **From the existing floor plans** | All 9 Ocean levels, the validator and `check_levels` stay valid; no level design is redone |
 | 3 | Units | **50 px = 1 world unit**, as in the prototype | Lights, fog, physics and imported models all expect metre-sized numbers |
-| 4 | Art rule | **Change it**: CC0 models + Mixamo animation are allowed; still no AI art | The current rule ("vector shapes built in Godot only") cannot produce 3D characters |
+| 4 | Art rule | **Changed** (see `CLAUDE.md`): CC0 models (Quaternius, KayKit, Kenney) and Mixamo animations are allowed, each with its licence file in the repo; still no AI-generated art or audio | The old rule ("vector shapes built in Godot only") cannot produce 3D characters |
 | 5 | Convert in place or build beside the 2D code | **In place on branch `3d`**, same class and file names | One code base at the end; `main` is the working 2D game the whole time |
+| 6 | Performance target | **60 FPS at 1080p on a mid-range GPU from about 2018** | Sets the budget for shadowed lights, fog quality and the edge pass |
 
 ## 2. Branch strategy
 
@@ -245,8 +245,9 @@ stop and decide before building further.
    the kelp maze and the tunnel bend, with a creature chasing.
 3. **Performance at level scale.** The prototype's 1,760 FPS was one small room on an
    RX 7800 XT at 1280x720. A level is 9 to 16 rooms with many lights. Test: the largest
-   level with every light, at 1080p and 4K. We need a minimum target machine from you;
-   without one I will assume 60 FPS at 1080p on a mid-range card from about 2018.
+   level with every light, at 1080p and 4K. The target is 60 FPS at 1080p on a
+   mid-range card from about 2018; the development machine is far faster, so the
+   benchmark's numbers are scaled down, not taken as they are.
    Levers if it is slow: fewer shadowed lights, lower fog quality, a half-resolution
    edge pass.
 4. **HUD glow.** HUD and menu text bloom through a 2D glow environment today. Over a

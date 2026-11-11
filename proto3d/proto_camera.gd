@@ -3,7 +3,9 @@ extends Camera3D
 ## Orthographic isometric camera for both players: follows their midpoint and
 ## widens its view so both stay on screen (the players' leash keeps them inside
 ## max_size), like the 2D SharedCamera. Shakes through the "proto_camera"
-## group (shake_with).
+## group (shake_with). Movers ask it how input maps to the floor and how fast
+## a direction must be to look right on screen (ProtoViewMotion); yaw and
+## pitch can change while playing (they turn smoothly).
 
 @export_group("Angle")
 ## Degrees the camera looks down from the horizon.
@@ -13,6 +15,15 @@ extends Camera3D
 @export var distance: float = 40.0
 ## Height above the floor the camera aims at.
 @export var focus_height: float = 0.8
+## How fast a new yaw / pitch is reached.
+@export var turn_speed: float = 6.0
+
+@export_group("Movement")
+## 1 = every direction looks equally fast on screen, 0 = no compensation.
+@export_range(0.0, 1.0) var speed_compensation: float = 1.0
+## Keys: true = plain directions (two keys run along the walls at yaw 45),
+## false = the exact screen direction, like the stick.
+@export var keys_follow_walls: bool = true
 
 @export_group("Follow")
 @export var follow_speed: float = 5.0
@@ -28,6 +39,8 @@ extends Camera3D
 @export var shake_duration: float = 0.15
 
 var _focus: Vector3 = Vector3.ZERO
+var _yaw: float = 0.0
+var _pitch: float = 0.0
 var _snapped: bool = false
 var _shake_left: float = 0.0
 var _shake_total: float = 0.0
@@ -40,12 +53,35 @@ func _ready() -> void:
 	size = min_size
 	near = 0.1
 	far = distance * 3.0
-	rotation = Vector3(-deg_to_rad(pitch_degrees), deg_to_rad(yaw_degrees), 0.0)
+	_yaw = deg_to_rad(yaw_degrees)
+	_pitch = deg_to_rad(pitch_degrees)
+	rotation = Vector3(-_pitch, _yaw, 0.0)
 	current = true
 
 
 func get_yaw() -> float:
-	return deg_to_rad(yaw_degrees)
+	return _yaw
+
+
+func get_focus() -> Vector3:
+	return _focus
+
+
+## Floor direction for a player's move keys (length = how hard they push).
+func keys_to_world(input: Vector2) -> Vector3:
+	if keys_follow_walls:
+		return ProtoViewMotion.plain(input, _yaw)
+	return ProtoViewMotion.screen_exact(input, _yaw, _pitch)
+
+
+## Floor direction for a stick: exactly where it points on screen.
+func stick_to_world(input: Vector2) -> Vector3:
+	return ProtoViewMotion.screen_exact(input, _yaw, _pitch)
+
+
+## Speed multiplier for anything moving in direction (players, creatures).
+func speed_scale(direction: Vector3) -> float:
+	return ProtoViewMotion.speed_scale(direction, _yaw, _pitch, speed_compensation)
 
 
 func shake() -> void:
@@ -60,6 +96,11 @@ func shake_with(strength: float, duration: float) -> void:
 
 
 func _process(delta: float) -> void:
+	var turn: float = 1.0 - exp(-turn_speed * delta)
+	_yaw = lerp_angle(_yaw, deg_to_rad(yaw_degrees), turn)
+	_pitch = lerpf(_pitch, deg_to_rad(pitch_degrees), turn)
+	rotation = Vector3(-_pitch, _yaw, 0.0)
+
 	var players: Array[Node] = get_tree().get_nodes_in_group("proto_players")
 	if players.is_empty():
 		return

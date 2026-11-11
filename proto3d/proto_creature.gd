@@ -17,6 +17,7 @@ const SEE_THROUGH_SHADER: Shader = preload("res://proto3d/proto_see_through.gdsh
 @export var max_health: int = 3
 ## Half the side of the square it may wander in (the room, inside the walls).
 @export var roam_extent: float = 10.0
+@export var roam_center: Vector3 = Vector3.ZERO
 @export var respawn_time: float = 2.5
 ## False = it stands still (screenshots); it still shows reveals.
 @export var ai_enabled: bool = true
@@ -66,6 +67,9 @@ const SEE_THROUGH_SHADER: Shader = preload("res://proto3d/proto_see_through.gdsh
 @export var bob_height: float = 0.06
 @export var bob_speed: float = 2.2
 
+## Optional: makes its speed look the same on screen in every direction, like
+## the players' (ProtoCamera.speed_scale).
+var camera: ProtoCamera
 var state: State = State.WANDER
 var facing: Vector3 = Vector3.BACK
 var _health: int = 0
@@ -262,7 +266,8 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> void:
 		velocity = velocity.move_toward(Vector3.ZERO, turn_acceleration * delta)
 		return
 	var direction: Vector3 = _steer(wanted.normalized())
-	velocity = velocity.move_toward(direction * speed, turn_acceleration * delta)
+	var view_scale: float = camera.speed_scale(direction) if camera else 1.0
+	velocity = velocity.move_toward(direction * speed * view_scale, turn_acceleration * delta)
 	_face(direction)
 
 
@@ -305,7 +310,7 @@ func _players() -> Array[ProtoPlayer]:
 
 
 func _pick_wander_goal() -> void:
-	_goal = Vector3(randf_range(-roam_extent, roam_extent), 0.0, randf_range(-roam_extent, roam_extent))
+	_goal = roam_center + Vector3(randf_range(-roam_extent, roam_extent), 0.0, randf_range(-roam_extent, roam_extent))
 	_wander_time = randf_range(2.0, 4.5)
 	_state_time = 0.0
 
@@ -329,7 +334,7 @@ func _respawn() -> void:
 	var best_distance: float = -1.0
 	for x: float in [-1.0, 1.0]:
 		for z: float in [-1.0, 1.0]:
-			var corner := Vector3(x, 0.0, z) * roam_extent * 0.85
+			var corner: Vector3 = roam_center + Vector3(x, 0.0, z) * roam_extent * 0.85
 			var nearest: float = INF
 			for player: ProtoPlayer in _players():
 				nearest = minf(nearest, corner.distance_to(player.global_position))
