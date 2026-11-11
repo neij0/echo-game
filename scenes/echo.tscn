@@ -1,45 +1,27 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1_base"]
 [ext_resource type="Script" path="res://scripts/pulse_ability.gd" id="2_pulse"]
-[ext_resource type="PackedScene" path="res://scenes/pulse_ring.tscn" id="3_ring"]
-[ext_resource type="Script" path="res://scripts/goal_echo.gd" id="4_goal"]
-[ext_resource type="Script" path="res://scripts/echo_visual.gd" id="5_visual"]
-[ext_resource type="Script" path="res://scripts/distress_pulse.gd" id="6_distress"]
-[ext_resource type="Script" path="res://scripts/occluded_outline.gd" id="7_outline"]
 [ext_resource type="Script" path="res://scripts/ready_cue.gd" id="8_cue"]
 
 [node name="Echo" instance=ExtResource("1_base")]
 player_number = 1
 display_name = "Echo"
 input_prefix = "p1_"
-light_reveal_radius = 115.0
+light_reveal_radius = 2.3
 
 [node name="Body" parent="." index="1"]
-script = ExtResource("5_visual")
+color = Color(0.3, 0.9, 1, 1)
+rim_energy = 2.2
 
 [node name="Pulse" type="Node" parent="." node_paths=PackedStringArray("player", "ready_cue")]
 script = ExtResource("2_pulse")
 player = NodePath("..")
-ready_cue = NodePath("../UnlitLayer/PulseReadyCue")
-pulse_ring_scene = ExtResource("3_ring")
+ready_cue = NodePath("../PulseReadyCue")
 
-[node name="DistressPulse" type="Node" parent="." node_paths=PackedStringArray("player")]
-script = ExtResource("6_distress")
-player = NodePath("..")
-pulse_ring_scene = ExtResource("3_ring")
-
-[node name="GoalEcho" type="Node2D" parent="UnlitLayer" node_paths=PackedStringArray("player")]
-script = ExtResource("4_goal")
-player = NodePath("../..")
-
-[node name="OccludedOutline" type="Node" parent="Body"]
-script = ExtResource("7_outline")
-color = Color(0.3, 0.95, 1, 1)
-
-[node name="PulseReadyCue" type="Node2D" parent="UnlitLayer" node_paths=PackedStringArray("player")]
+[node name="PulseReadyCue" type="Node3D" parent="." node_paths=PackedStringArray("player")]
 script = ExtResource("8_cue")
-player = NodePath("../..")
+player = NodePath("..")
 energy = 1.6
-end_radius = 36.0
+end_radius = 0.72
 sound = ""

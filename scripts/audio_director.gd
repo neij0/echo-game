@@ -6,8 +6,8 @@ extends Node
 ## picks one variant at random). So a better recording dropped in with the same
 ## name (or an extra _4 variant) is used without code changes.
 ## Every play gets a little random pitch / volume (per-sound settings below).
-## With a position, the sound is an AudioStreamPlayer2D (heard from the shared
-## camera's AudioListener2D); without, a plain AudioStreamPlayer. The bus comes
+## With a position, the sound is an AudioStreamPlayer3D (heard from the shared
+## camera's AudioListener3D); without, a plain AudioStreamPlayer. The bus comes
 ## from the name's prefix (prefix_buses).
 ## Also: the world's underwater sound (low-pass + reverb on the SFX and
 ## Ambience buses, from the WorldConfig), music ducking under big sounds (the
@@ -16,9 +16,9 @@ extends Node
 ## Lives in game.tscn (group "audio_director"); find it with AudioDirector.find().
 
 ## Emitted on every play (debug, tests).
-signal sound_played(sound_name: String, at: Vector2)
+signal sound_played(sound_name: String, at: Vector3)
 
-const NO_POSITION: Vector2 = Vector2.INF
+const NO_POSITION: Vector3 = Vector3.INF
 
 @export var sound_dirs: PackedStringArray = PackedStringArray([
 	"res://assets/audio/sfx", "res://assets/audio/music", "res://assets/audio/ambience"])
@@ -36,9 +36,13 @@ const NO_POSITION: Vector2 = Vector2.INF
 @export_range(0.0, 0.5) var default_pitch_variation: float = 0.06
 @export var default_volume_variation_db: float = 1.5
 @export var default_volume_db: float = -4.0
-## Positional sounds: heard up to this far from the listener (pixels).
-@export var default_max_distance: float = 1500.0
-@export var default_attenuation: float = 1.2
+## Positional sounds: heard up to this far from the listener (world units).
+@export var default_max_distance: float = 30.0
+## Share of a sound's max distance within which it plays at full volume;
+## beyond it the sound gets quieter with the distance.
+@export_range(0.01, 1.0) var full_volume_share: float = 0.35
+## 0 = positional sounds are not panned left / right, 1 = fully.
+@export_range(0.0, 1.0) var panning_strength: float = 0.7
 
 ## Per sound (or per variant group): any of "volume_db", "pitch_variation",
 ## "volume_variation_db", "max_distance", "bus". Missing = the defaults above.
@@ -46,35 +50,35 @@ const NO_POSITION: Vector2 = Vector2.INF
 	"sword_whoosh": {"volume_db": -8.0, "pitch_variation": 0.05},
 	"sword_impact": {"volume_db": -3.0},
 	"sword_impact_heavy": {"volume_db": -1.0},
-	"sword_finisher": {"volume_db": 0.0, "pitch_variation": 0.02, "max_distance": 3000.0},
+	"sword_finisher": {"volume_db": 0.0, "pitch_variation": 0.02, "max_distance": 60.0},
 	"pulse_distress": {"volume_db": -3.0},
-	"creature_click": {"volume_db": -12.0, "pitch_variation": 0.12, "max_distance": 1100.0},
-	"sentinel_click": {"volume_db": -11.0, "pitch_variation": 0.1, "max_distance": 1100.0},
+	"creature_click": {"volume_db": -12.0, "pitch_variation": 0.12, "max_distance": 22.0},
+	"sentinel_click": {"volume_db": -11.0, "pitch_variation": 0.1, "max_distance": 22.0},
 	"boss_click": {"volume_db": -9.0, "pitch_variation": 0.08},
 	"creature_investigate_chitter": {"volume_db": -6.0, "pitch_variation": 0.1},
 	"creature_investigate_call": {"volume_db": -7.0, "pitch_variation": 0.08},
 	"sentinel_investigate_creak": {"volume_db": -6.0},
-	"boss_investigate": {"volume_db": -3.0, "max_distance": 2500.0},
+	"boss_investigate": {"volume_db": -3.0, "max_distance": 50.0},
 	"creature_screech": {"volume_db": -5.0},
 	"sentinel_screech": {"volume_db": -4.0},
-	"boss_screech": {"volume_db": -2.0, "max_distance": 2500.0},
+	"boss_screech": {"volume_db": -2.0, "max_distance": 50.0},
 	"creature_hiss": {"volume_db": -4.0},
 	"sentinel_hiss": {"volume_db": -3.0},
 	"boss_hiss": {"volume_db": -2.0},
 	"creature_death": {"volume_db": -4.0},
 	"sentinel_death": {"volume_db": -3.0},
-	"boss_death": {"volume_db": 0.0, "max_distance": 3000.0},
-	"boss_angler_orb_hum": {"volume_db": -9.0, "max_distance": 1100.0},
-	"player_move": {"volume_db": -20.0, "pitch_variation": 0.12, "max_distance": 900.0},
+	"boss_death": {"volume_db": 0.0, "max_distance": 60.0},
+	"boss_angler_orb_hum": {"volume_db": -9.0, "max_distance": 22.0},
+	"player_move": {"volume_db": -20.0, "pitch_variation": 0.12, "max_distance": 18.0},
 	"player_hurt": {"volume_db": -3.0},
 	"player_downed": {"volume_db": -2.0},
 	"player_revive": {"volume_db": -4.0},
 	"world_shard_pickup": {"volume_db": -4.0},
-	"world_barrier_close": {"volume_db": 0.0, "max_distance": 2500.0},
-	"world_barrier_open": {"volume_db": -2.0, "max_distance": 2500.0},
+	"world_barrier_close": {"volume_db": 0.0, "max_distance": 50.0},
+	"world_barrier_open": {"volume_db": -2.0, "max_distance": 50.0},
 	"world_rock_fall": {"volume_db": -12.0, "pitch_variation": 0.15},
 	"sting": {"volume_db": -5.0, "pitch_variation": 0.0, "volume_variation_db": 0.0},
-	"amb_bubbles": {"pitch_variation": 0.2, "max_distance": 1200.0},
+	"amb_bubbles": {"pitch_variation": 0.2, "max_distance": 24.0},
 	"amb_whale": {"pitch_variation": 0.1, "volume_variation_db": 2.0},
 }
 
@@ -90,7 +94,7 @@ const NO_POSITION: Vector2 = Vector2.INF
 @export var silence_db: float = -60.0
 
 var _catalog: Dictionary = {}
-var _positional: Array[AudioStreamPlayer2D] = []
+var _positional: Array[AudioStreamPlayer3D] = []
 var _flat: Array[AudioStreamPlayer] = []
 var _next_positional: int = 0
 var _next_flat: int = 0
@@ -113,7 +117,7 @@ func _ready() -> void:
 	_rng.randomize()
 	_load_catalog()
 	for i: int in positional_pool_size:
-		var player := AudioStreamPlayer2D.new()
+		var player := AudioStreamPlayer3D.new()
 		add_child(player)
 		_positional.append(player)
 	for i: int in flat_pool_size:
@@ -200,7 +204,7 @@ func get_bus(sound_name: String) -> StringName:
 
 ## Plays a sound once (a random variant, with a little random pitch and
 ## volume). at = world position for a positional sound. Returns the player.
-func play(sound_name: String, at: Vector2 = NO_POSITION, volume_offset_db: float = 0.0, pitch: float = 1.0) -> Node:
+func play(sound_name: String, at: Vector3 = NO_POSITION, volume_offset_db: float = 0.0, pitch: float = 1.0) -> Node:
 	var stream: AudioStream = pick_stream(sound_name)
 	if stream == null:
 		return null
@@ -217,16 +221,28 @@ func play(sound_name: String, at: Vector2 = NO_POSITION, volume_offset_db: float
 		flat.play()
 		player = flat
 	else:
-		var positional: AudioStreamPlayer2D = _positional[_next_positional]
+		var positional: AudioStreamPlayer3D = _positional[_next_positional]
 		_next_positional = (_next_positional + 1) % _positional.size()
 		_setup(positional, stream, sound_name, volume, pitch_scale)
 		positional.global_position = at
-		positional.max_distance = float(get_setting(sound_name, "max_distance", default_max_distance))
-		positional.attenuation = default_attenuation
+		_setup_distance(positional, sound_name)
 		positional.play()
 		player = positional
 	sound_played.emit(sound_name, at)
 	return player
+
+
+## How a positional sound fades with its distance to the listener.
+func _setup_distance(positional: AudioStreamPlayer3D, sound_name: String) -> void:
+	var max_distance: float = float(get_setting(sound_name, "max_distance", default_max_distance))
+	positional.max_distance = max_distance
+	positional.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+	positional.unit_size = max_distance * full_volume_share
+	# Never louder than the sound's own volume, and no extra muffling by
+	# distance: the world's underwater filter is on the bus.
+	positional.max_db = 0.0
+	positional.attenuation_filter_cutoff_hz = 20500.0
+	positional.panning_strength = panning_strength
 
 
 func _setup(player: Node, stream: AudioStream, sound_name: String, volume_db: float, pitch_scale: float) -> void:
@@ -237,17 +253,16 @@ func _setup(player: Node, stream: AudioStream, sound_name: String, volume_db: fl
 
 
 ## A player of its own for a looping sound (a shard's hum, the mending link):
-## a child of parent, positional when parent is a Node2D. The caller plays
+## a child of parent, positional when parent is a Node3D. The caller plays
 ## and stops it. Null if the sound does not exist.
 func make_loop_player(sound_name: String, parent: Node) -> Node:
 	var stream: AudioStream = pick_stream(sound_name)
 	if stream == null or parent == null:
 		return null
 	var player: Node
-	if parent is Node2D:
-		var positional := AudioStreamPlayer2D.new()
-		positional.max_distance = float(get_setting(sound_name, "max_distance", default_max_distance))
-		positional.attenuation = default_attenuation
+	if parent is Node3D:
+		var positional := AudioStreamPlayer3D.new()
+		_setup_distance(positional, sound_name)
 		player = positional
 	else:
 		player = AudioStreamPlayer.new()
@@ -264,7 +279,7 @@ func duck(depth_db: float = NAN, hold: float = NAN) -> void:
 
 ## The finisher: every SFX and the ambience go silent for `silence` real
 ## seconds (the hit-stop), then the sound plays with the music ducked.
-func play_after_silence(sound_name: String, at: Vector2, silence: float) -> void:
+func play_after_silence(sound_name: String, at: Vector3, silence: float) -> void:
 	_silence_left = silence
 	_set_gate(silence_db)
 	await get_tree().create_timer(silence, true, false, true).timeout
@@ -334,7 +349,7 @@ func _bus_effect(bus: StringName, effect_class: String) -> AudioEffect:
 
 func _exit_tree() -> void:
 	# Stopped playbacks are freed with the scene (a playing one would outlive it).
-	for player: AudioStreamPlayer2D in _positional:
+	for player: AudioStreamPlayer3D in _positional:
 		player.stop()
 	for player: AudioStreamPlayer in _flat:
 		player.stop()

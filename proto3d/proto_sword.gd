@@ -1,5 +1,6 @@
 class_name ProtoSword
 extends Node3D
+## STAND-IN until the real SwordAbility is ported to 3D (Phase A).
 ## The Guardian's 3-hit combo (two quick slashes, then a finisher with a
 ## wind-up), with the 2D SwordAbility's timings at 50 px = 1 unit. Draws a
 ## simple blade and a glowing slash arc. Hits everything in the
@@ -10,7 +11,7 @@ signal hit_landed(finisher: bool, killed: bool)
 
 enum Phase { IDLE, WINDUP, SWING, RECOVERY }
 
-@export var player: ProtoPlayer
+@export var player: Player
 
 @export_group("Quick Slash (hits 1 and 2)")
 @export var quick_damage: int = 1
@@ -84,7 +85,7 @@ func is_swinging() -> bool:
 
 func _physics_process(delta: float) -> void:
 	_buffer_left = maxf(_buffer_left - delta, 0.0)
-	if Input.is_action_just_pressed(player.input_prefix + "action"):
+	if player.try_action_pressed():
 		_buffer_left = buffer_time
 	_time += delta
 	match _phase:
@@ -123,7 +124,7 @@ func _range() -> float:
 
 func _start_hit() -> void:
 	_buffer_left = 0.0
-	_direction = player.facing
+	_direction = player.get_attack_direction()
 	_swing_sign = -_swing_sign
 	_time = 0.0
 	if _is_finisher():
@@ -171,7 +172,7 @@ func _apply_hits() -> void:
 		if not creature.take_sword_hit(damage, push, stagger, finisher):
 			continue
 		var killed: bool = creature.state == ProtoCreature.State.DEAD
-		get_tree().call_group("proto_camera", "shake_with", kill_shake if killed else hit_shake, 0.2)
+		get_tree().call_group("shared_camera", "shake_with", kill_shake if killed else hit_shake, 0.2)
 		hit_landed.emit(finisher, killed)
 		if killed:
 			_hit_stop()

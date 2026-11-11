@@ -15,7 +15,7 @@ static func all(tree: SceneTree) -> Array[Player]:
 
 
 ## The player closest to [param from], or null if there are no players.
-static func nearest(tree: SceneTree, from: Vector2) -> Player:
+static func nearest(tree: SceneTree, from: Vector3) -> Player:
 	var best: Player = null
 	var best_distance: float = INF
 	for player: Player in all(tree):

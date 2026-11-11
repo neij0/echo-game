@@ -1,31 +1,35 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/player_health.gd" id="5_health"]
 [ext_resource type="Script" path="res://scripts/player_pressure.gd" id="6_pressure"]
 [ext_resource type="AudioStream" path="res://assets/audio/sfx/player_low_oxygen.wav" id="7_alarm"]
 [ext_resource type="Script" path="res://scripts/revive_helper.gd" id="8_revive"]
-[ext_resource type="Script" path="res://scripts/player_overlay.gd" id="9_overlay"]
+[ext_resource type="Script" path="res://scripts/capsule_body.gd" id="9_body"]
 [ext_resource type="Script" path="res://scripts/player_light.gd" id="10_light"]
 [ext_resource type="Script" path="res://scripts/player_audio.gd" id="11_audio"]
-[ext_resource type="Script" path="res://scripts/drop_shadow.gd" id="12_shadow"]
 [ext_resource type="Script" path="res://scripts/player_skills.gd" id="13_skills"]
 
-[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
-radius = 14.0
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.28
+height = 1.0
 
-[node name="Player" type="CharacterBody2D"]
+[node name="Player" type="CharacterBody3D"]
 collision_layer = 2
 collision_mask = 1
 motion_mode = 1
 script = ExtResource("1_script")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-shape = SubResource("CircleShape2D_body")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("CapsuleShape3D_body")
 
-[node name="Body" type="Node2D" parent="."]
+[node name="Body" type="MeshInstance3D" parent="." node_paths=PackedStringArray("player")]
+script = ExtResource("9_body")
+player = NodePath("..")
 
-[node name="PlayerLight" type="PointLight2D" parent="."]
+[node name="PlayerLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
 script = ExtResource("10_light")
 
 [node name="Health" type="Node" parent="." node_paths=PackedStringArray("player")]
@@ -42,20 +46,9 @@ alarm_stream = ExtResource("7_alarm")
 script = ExtResource("8_revive")
 player = NodePath("..")
 
-[node name="UnlitLayer" type="CanvasLayer" parent="."]
-follow_viewport_enabled = true
-
-[node name="Overlay" type="Node2D" parent="UnlitLayer" node_paths=PackedStringArray("player")]
-script = ExtResource("9_overlay")
-player = NodePath("../..")
-
 [node name="Audio" type="Node" parent="." node_paths=PackedStringArray("player")]
 script = ExtResource("11_audio")
 player = NodePath("..")
-
-[node name="Shadow" type="Node2D" parent="."]
-z_index = -2
-script = ExtResource("12_shadow")
 
 [node name="Skills" type="Node" parent="." node_paths=PackedStringArray("player")]
 script = ExtResource("13_skills")

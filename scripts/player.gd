@@ -1,14 +1,19 @@
 class_name Player
-extends CharacterBody2D
-## One of the two playable creatures (Echo or Guardian): movement (acceleration,
-## drag, glide), per-player input, the soft leash to the partner and the
-## downed state. Abilities (pulse, sword) are child nodes that read input
-## through try_action_pressed(). Joins the "players" group so creatures, the HUD
-## and the stage logic never need a fixed player reference.
+extends CharacterBody3D
+## One of the two playable creatures (Echo or Guardian): movement on the floor
+## plane (acceleration, drag, glide), per-player input, the soft leash to the
+## partner and the downed state. Abilities (pulse, sword) are child nodes that
+## read input through try_action_pressed(). Joins the "players" group so
+## creatures, the HUD and the stage logic never need a fixed player reference.
+## Lengths are world units (50 px of the 2D game = 1 unit).
+## Directions come from the SharedCamera: the stick maps to the exact screen
+## direction, the keys to plain directions (two keys run along the walls), and
+## the speed limit grows in directions the tilted camera squashes, so every
+## direction looks equally fast (SharedCamera.speed_scale).
 
 ## Emitted by the PulseAbility (Echo only). Lives here so every system can
 ## listen to any player the same way.
-signal pulse_emitted(origin: Vector2)
+signal pulse_emitted(origin: Vector3)
 
 ## 1 = Echo (P1), 2 = Guardian (P2). Used for spawn points and HUD order.
 @export var player_number: int = 1
@@ -20,15 +25,20 @@ signal pulse_emitted(origin: Vector2)
 @export var skill_owner: SkillDefinition.Owner = SkillDefinition.Owner.ECHO
 ## Creatures within this distance of this player count as revealed (lit).
 ## 0 = this player's light does not reveal anything (Guardian).
-@export var light_reveal_radius: float = 115.0
+@export var light_reveal_radius: float = 2.3
+## Radius and height of the body (collision, the cut-away, hit tests).
+@export var body_radius: float = 0.28
+@export var body_height: float = 1.0
 
 @export_group("Movement")
-@export var acceleration: float = 900.0
-@export var max_speed: float = 260.0
+@export var acceleration: float = 18.0
+@export var max_speed: float = 5.2
 ## Drag while the player is pressing a direction.
 @export var drag: float = 2.5
 ## Lower drag when input stops, so the player glides a little.
 @export var glide_drag: float = 1.2
+## Left stick push (0-1) above which the stick, not the keys, steers.
+@export_range(0.0, 1.0) var stick_deadzone: float = 0.2
 
 @export_group("Aim")
 ## Right stick push (0-1) needed to count as aiming.
@@ -44,14 +54,15 @@ signal pulse_emitted(origin: Vector2)
 
 @export_group("Leash")
 ## The two players cannot get further apart than this (matches the camera's
-## maximum zoom-out, so both always stay on screen).
-@export var leash_distance: float = 800.0
-## Over the last leash_soft_zone pixels, moving away gets harder and harder.
-@export var leash_soft_zone: float = 160.0
-## Pull back towards the partner per pixel beyond leash_distance.
+## widest view, so both always stay on screen).
+@export var leash_distance: float = 16.0
+## Over the last leash_soft_zone units, moving away gets harder and harder.
+@export var leash_soft_zone: float = 3.2
+## Pull back towards the partner per unit beyond leash_distance.
 @export var leash_pull: float = 6.0
 
-var facing: Vector2 = Vector2.DOWN
+## Unit vector on the floor plane.
+var facing: Vector3 = Vector3.BACK
 ## Share of max_speed / acceleration allowed right now (a raised Shield: < 1).
 var speed_scale: float = 1.0
 ## True while an active skill uses the move keys to aim (keyboard Lure Pulse):
@@ -63,6 +74,7 @@ var uses_gamepad: bool = false
 ## The gamepad bound to this player's actions (-1 = none / any).
 var joypad_device: int = -1
 var _knockback_left: float = 0.0
+var _camera: SharedCamera
 
 @onready var health: PlayerHealth = $Health
 @onready var pressure: PlayerPressure = $Pressure
@@ -72,6 +84,8 @@ var _knockback_left: float = 0.0
 
 func _ready() -> void:
 	add_to_group("players")
+	add_to_group("cutaway_targets")
+	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	joypad_device = _find_joypad_device()
 	# Player 1 starts on the device that pressed on the title screen. Looked up
 	# by path, so tools without autoloads can still load this script.
@@ -94,23 +108,25 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventKey and (event as InputEventKey).pressed and _is_own_key(event):
 		uses_gamepad = false
 
+
 func _physics_process(delta: float) -> void:
-	var input_dir: Vector2 = Vector2.ZERO
+	var direction := Vector3.ZERO
 	if not health.is_downed and not move_locked:
-		input_dir = Input.get_vector(_action("move_left"), _action("move_right"), _action("move_up"), _action("move_down"))
-	if input_dir != Vector2.ZERO:
-		facing = input_dir.normalized()
-	velocity += input_dir * acceleration * speed_scale * delta
+		direction = get_move_direction()
+	if direction != Vector3.ZERO:
+		facing = direction.normalized()
+	velocity += direction * acceleration * speed_scale * _view_scale(direction) * delta
 
 	# Frame-rate independent drag: weaker drag when gliding.
-	var current_drag: float = drag if input_dir != Vector2.ZERO else glide_drag
+	var current_drag: float = drag if direction != Vector3.ZERO else glide_drag
 	velocity *= exp(-current_drag * delta)
 	if _knockback_left > 0.0:
 		_knockback_left -= delta
 	else:
-		velocity = velocity.limit_length(max_speed * speed_scale)
+		velocity = velocity.limit_length(max_speed * speed_scale * _view_scale(velocity))
 	_apply_leash()
 
+	velocity.y = 0.0
 	move_and_slide()
 
 
@@ -130,6 +146,16 @@ func get_light_radius() -> float:
 ## "echo" or "guardian": this player's entry in the SkillLoadout.
 func get_character_key() -> String:
 	return SkillDefinition.owner_key(skill_owner)
+
+
+## The middle of the body (the cut-away keeps it visible, hits aim at it).
+func get_body_center() -> Vector3:
+	return global_position + Vector3(0.0, body_height * 0.5, 0.0)
+
+
+## ViewCutaway ("cutaway_targets" group): a player is never hidden by rock.
+func wants_cutaway() -> bool:
+	return true
 
 
 ## True when this player's action button was just pressed and may be used by an
@@ -154,35 +180,54 @@ func is_skill_held() -> bool:
 	return not health.is_downed and Input.is_action_pressed(_action("skill"))
 
 
-## The current move input (zero while downed), also while move_locked (then
-## it aims instead of moving).
+## The raw move input as pressed (zero while downed), also while move_locked.
 func get_move_input() -> Vector2:
 	if health.is_downed:
 		return Vector2.ZERO
 	return Input.get_vector(_action("move_left"), _action("move_right"), _action("move_up"), _action("move_down"))
 
 
-## The right stick of this player's gamepad (normalized), zero inside aim_deadzone.
-func get_stick_aim() -> Vector2:
+## The move input as a direction on the floor (length 0-1; zero while
+## downed), also while move_locked (then it aims instead of moving): the left
+## stick if it is pushed, else the keys.
+func get_move_direction() -> Vector3:
 	if health.is_downed:
-		return Vector2.ZERO
+		return Vector3.ZERO
+	if joypad_device >= 0:
+		var stick := Vector2(
+				Input.get_joy_axis(joypad_device, JOY_AXIS_LEFT_X),
+				Input.get_joy_axis(joypad_device, JOY_AXIS_LEFT_Y))
+		if stick.length() > stick_deadzone:
+			return _stick_to_world(stick.limit_length(1.0))
+	var keys: Vector2 = get_move_input()
+	var camera: SharedCamera = _get_camera()
+	return camera.keys_to_world(keys) if camera else Vector3(keys.x, 0.0, keys.y)
+
+
+## The right stick of this player's gamepad as a floor direction (unit
+## vector), zero inside aim_deadzone.
+func get_stick_aim() -> Vector3:
+	if health.is_downed:
+		return Vector3.ZERO
 	var aim: Vector2 = Input.get_vector(_action("aim_left"), _action("aim_right"), _action("aim_up"), _action("aim_down"))
-	return aim.normalized() if aim.length() >= aim_deadzone else Vector2.ZERO
+	if aim.length() < aim_deadzone:
+		return Vector3.ZERO
+	return _stick_to_world(aim.normalized()).normalized()
 
 
 ## Where skills aim: the right stick, else the move direction, else the facing.
-func get_aim_direction() -> Vector2:
-	var stick: Vector2 = get_stick_aim()
-	if stick != Vector2.ZERO:
+func get_aim_direction() -> Vector3:
+	var stick: Vector3 = get_stick_aim()
+	if stick != Vector3.ZERO:
 		return stick
-	var move: Vector2 = get_move_input()
+	var move: Vector3 = get_move_direction()
 	return move.normalized() if move.length() > 0.1 else facing
 
 
 ## Where sword hits go: the right stick, else the facing (keyboard: always the facing).
-func get_attack_direction() -> Vector2:
-	var stick: Vector2 = get_stick_aim()
-	return stick if stick != Vector2.ZERO else facing
+func get_attack_direction() -> Vector3:
+	var stick: Vector3 = get_stick_aim()
+	return stick if stick != Vector3.ZERO else facing
 
 
 func is_action_held() -> bool:
@@ -196,14 +241,14 @@ func is_reviving() -> bool:
 	return helper != null and helper.has_target()
 
 
-func knock_back(impulse: Vector2) -> void:
+func knock_back(impulse: Vector3) -> void:
 	burst(impulse, knockback_time)
 
 
 ## Sets the velocity and lets it go above max_speed for `duration` seconds
 ## (knockback, Dash). Drag still slows it down.
-func burst(new_velocity: Vector2, duration: float) -> void:
-	velocity = new_velocity
+func burst(new_velocity: Vector3, duration: float) -> void:
+	velocity = Vector3(new_velocity.x, 0.0, new_velocity.z)
 	_knockback_left = duration
 
 
@@ -229,16 +274,35 @@ func _find_joypad_device() -> int:
 	return -1
 
 
+## The scene's camera (none in headless tests: then up = -z, no compensation).
+func _get_camera() -> SharedCamera:
+	if _camera == null or not is_instance_valid(_camera):
+		_camera = SharedCamera.find(get_tree())
+	return _camera
+
+
+func _stick_to_world(stick: Vector2) -> Vector3:
+	var camera: SharedCamera = _get_camera()
+	return camera.stick_to_world(stick) if camera else Vector3(stick.x, 0.0, stick.y)
+
+
+## How much faster this direction must be to look as fast as sideways.
+func _view_scale(direction: Vector3) -> float:
+	var camera: SharedCamera = _get_camera()
+	return camera.speed_scale(direction) if camera else 1.0
+
+
 func _apply_leash() -> void:
 	var partner: Player = get_partner()
 	if partner == null:
 		return
-	var offset: Vector2 = global_position - partner.global_position
+	var offset: Vector3 = global_position - partner.global_position
+	offset.y = 0.0
 	var distance: float = offset.length()
 	var soft_start: float = leash_distance - leash_soft_zone
 	if distance <= soft_start or distance == 0.0:
 		return
-	var away: Vector2 = offset / distance
+	var away: Vector3 = offset / distance
 	var outward: float = velocity.dot(away)
 	if outward > 0.0:
 		# The closer to the limit, the more of the outward speed is removed.

@@ -77,18 +77,20 @@ extends Resource
 @export var ambient_life: Array[AmbientLifeSpawn] = []
 
 @export_group("Marine Snow")
-## Tiny glowing particles drifting across the whole level (around the camera).
-@export var snow_count: int = 140
+## Tiny glowing particles drifting in a box round the camera's focus, over the
+## whole level (3D: world units).
+@export var snow_count: int = 2200
 @export var snow_color: Color = Color(0.7, 0.9, 1.0)
-## Opacity range of one particle (each one twinkles between the two).
-@export_range(0.0, 1.0) var snow_alpha_min: float = 0.08
-@export_range(0.0, 1.0) var snow_alpha_max: float = 0.35
-@export var snow_size_min: float = 0.8
-@export var snow_size_max: float = 2.2
-## Slow downward drift in pixels per second (random per particle up to this).
-@export var snow_fall_speed: float = 9.0
-## Side-to-side sway in pixels, and its cycles per second.
-@export var snow_sway_amount: float = 12.0
+## Brightness range of one particle in the dark (each one twinkles between
+## the two); the players' lights add to it.
+@export_range(0.0, 1.0) var snow_alpha_min: float = 0.01
+@export_range(0.0, 1.0) var snow_alpha_max: float = 0.05
+@export var snow_size_min: float = 0.03
+@export var snow_size_max: float = 0.07
+## Slow downward drift in units per second (random per particle up to this).
+@export var snow_fall_speed: float = 0.18
+## Side-to-side sway in units, and its cycles per second.
+@export var snow_sway_amount: float = 0.24
 @export var snow_sway_speed: float = 0.12
 ## Twinkle cycles per second.
 @export var snow_twinkle_speed: float = 0.25
@@ -154,7 +156,8 @@ extends Resource
 
 @export_group("Pulse")
 ## Echo pulse in this world.
-@export var pulse_radius: float = 650.0
+## World units (3D: 50 px of the 2D game = 1 unit).
+@export var pulse_radius: float = 13.0
 ## Seconds for the pulse front to reach pulse_radius (lower = faster).
 @export var pulse_expand_time: float = 0.8
 ## 0-1: share of a full pressure meter each pulse costs.

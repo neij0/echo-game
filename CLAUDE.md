@@ -6,18 +6,36 @@ Target: PC (Steam).
 ## 3D conversion (branch `3d`, in progress)
 The game is being converted to 3D (Godot 4.7, Forward+, orthographic tilted camera). `main`
 keeps the 2D game, with its gameplay code frozen, until the 3D version has caught up. The plan,
-the phases and the keep / adapt / rebuild verdict per system are in
-`docs/3d_conversion_plan.md`; everything below still describes the 2D game until a phase
-replaces it (this file is updated at the end of every phase).
+the phases, the keep / adapt / rebuild verdict per system and **what is ported so far** (its
+section 9) are in `docs/3d_conversion_plan.md`. Everything below this section still describes
+the 2D game until a phase replaces it (this file is updated at the end of every phase).
 - **Approved decisions**: rooms are built in code from the 11 existing 2D floor plans (the room
   scenes stay as data); 50 px = 1 world unit (lengths and speeds are divided by 50 when a
   system is ported, times and ratios stay); scripts are converted in place (same class and
-  file names); the camera yaw (45 or 0) is chosen by playing `proto3d/camera_test.tscn`.
+  file names). The floor is the XZ plane, y is up; 2D (x, y) becomes (x, 0, y).
+- **Camera** (`SharedCamera`, chosen by playing; all `@export`): yaw 45, pitch 45, speed
+  compensation 100 % (every direction looks equally fast on screen: `ViewMotion`, used by
+  players and creatures), keys follow the walls (two keys held run along a wall), the stick
+  maps to the exact screen direction.
 - **Performance target**: 60 FPS at 1080p on a mid-range GPU from about 2018.
-- **`proto3d/`** (prototype, deleted at the end of Phase A): `proto_room.tscn` = the first test
-  room; `camera_test.tscn` = three real Ocean rooms pulled up into 3D with keys to switch the
-  camera while playing (1 / 2 = yaw 45 / 0, 3 = pitch, 4 = speed compensation, 5 = key
-  mapping; `-- shots <folder>` saves pictures and prints the speed per direction).
+- **Ported to 3D so far** (Phase A, part 1): `Player` + `scenes/player.tscn` / `echo.tscn` /
+  `guardian.tscn` (placeholder `CapsuleBody` until the models), `PlayerHealth`,
+  `PlayerPressure`, `ReviveHelper`, `PlayerSkills`, `ActiveSkill` (base only), `PlayerLight`,
+  `PlayerAudio`, `PulseAbility`, `ReadyCue`, `SharedCamera`, `ViewMotion`, `Sonar` (replaces
+  `SonarOverlay` + `PulseRing`: up to 4 pulses, `add_pulse` through the "sonar" group,
+  `on_sonar_hit` on "sonar_targets"), `SonarAudio`, `Darkness` (a `WorldEnvironment`: ambient,
+  fog, glow), `MarineSnow`, `AudioDirector` (3D positional sounds, the listener at the
+  camera's focus), `RockMesher` (floor-plan polygon -> rock) and `ViewCutaway` (rock between
+  the camera and a character is cut away). Shaders are in `shaders/`.
+- **Not ported yet = broken on this branch**: every other script that touches positions
+  (creatures, sword, skills' actives, level builder, stage manager, bosses, HUD in the level,
+  the scene tests). `scenes/game.tscn` does not run. The `Game` autoload has **no world and no
+  skill catalog** for now (`scenes/game_state.tscn`: they load every unported scene); both
+  come back in Phase B. `tools/test_save.gd` still passes.
+- **Play-test stage**: `tools/core_test.tscn` (F6): three real Ocean rooms with the real
+  classes above, plus two stand-ins in `proto3d/` (`ProtoCreature`, `ProtoSword`) until the
+  real `Creature` and `SwordAbility` are ported. Keys: C = cut-away on / off, T = rock height
+  normal / tall, R = back to the start. `-- shots <folder>` saves pictures and prints checks.
 
 ## Core idea
 The two playable characters are deep-sea creatures:

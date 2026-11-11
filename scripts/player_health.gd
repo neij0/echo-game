@@ -42,8 +42,8 @@ const EPSILON: float = 0.001
 @export var calm_hit_damage: float = 1.0
 @export var challenge_hit_damage: float = 1.5
 @export var invulnerable_time: float = 1.5
-## Speed of the knockback push away from the creature.
-@export var knockback_speed: float = 650.0
+## Speed of the knockback push away from the creature (world units / s).
+@export var knockback_speed: float = 13.0
 ## Seconds of invulnerability right after being revived.
 @export var revive_invulnerable_time: float = 2.0
 
@@ -61,7 +61,7 @@ var challenge_mode: bool = false
 ## The last take_hit: was it blocked (the Shield), and what sent it (a creature,
 ## a boss, an orb, a mine...). Read right after take_hit.
 var last_hit_blocked: bool = false
-var last_hit_source: Node2D
+var last_hit_source: Node3D
 var _invulnerable_left: float = 0.0
 var _since_damage: float = 0.0
 
@@ -121,10 +121,10 @@ func make_invulnerable(seconds: float) -> void:
 
 
 ## A creature touch. Nodes in the "hit_blockers" group (the Shield) can stop it:
-## blocks_hit(target: Player, from_position: Vector2, source: Node2D) -> bool.
+## blocks_hit(target: Player, from_position: Vector3, source: Node3D) -> bool.
 ## damage / knockback < 0 = this mode's hit damage / knockback_speed (a boss
 ## attack passes its own).
-func take_hit(from_position: Vector2, source: Node2D = null, damage: float = -1.0, knockback: float = -1.0) -> void:
+func take_hit(from_position: Vector3, source: Node3D = null, damage: float = -1.0, knockback: float = -1.0) -> void:
 	last_hit_blocked = false
 	last_hit_source = source
 	if is_downed or is_invulnerable():
@@ -142,7 +142,10 @@ func take_hit(from_position: Vector2, source: Node2D = null, damage: float = -1.
 		return
 	_invulnerable_left = invulnerable_time
 	if player:
-		player.knock_back(from_position.direction_to(player.global_position) * (knockback if knockback >= 0.0 else knockback_speed))
+		# Pushed away along the floor.
+		var away: Vector3 = player.global_position - from_position
+		away.y = 0.0
+		player.knock_back(away.normalized() * (knockback if knockback >= 0.0 else knockback_speed))
 	hurt.emit()
 
 
@@ -169,7 +172,7 @@ func down(cause: Cause) -> void:
 	is_downed = true
 	last_cause = cause
 	if player:
-		player.velocity = Vector2.ZERO
+		player.velocity = Vector3.ZERO
 	downed.emit(cause)
 
 
@@ -182,7 +185,7 @@ func revive() -> void:
 	revived.emit()
 
 
-func _is_blocked(from_position: Vector2, source: Node2D) -> bool:
+func _is_blocked(from_position: Vector3, source: Node3D) -> bool:
 	for blocker: Node in player.get_tree().get_nodes_in_group("hit_blockers"):
 		if blocker.call("blocks_hit", player, from_position, source):
 			return true

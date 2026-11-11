@@ -1,14 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1_base"]
-[ext_resource type="Script" path="res://scripts/sword_ability.gd" id="2_sword"]
-[ext_resource type="Script" path="res://scripts/guardian_visual.gd" id="6_visual"]
-[ext_resource type="Script" path="res://scripts/close_sense.gd" id="7_sense"]
-[ext_resource type="Script" path="res://scripts/occluded_outline.gd" id="8_outline"]
 
-[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_body"]
-radius = 13.0
-height = 46.0
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.32
+height = 1.6
 
 [node name="Guardian" instance=ExtResource("1_base")]
 player_number = 2
@@ -16,32 +12,24 @@ display_name = "Guardian"
 input_prefix = "p2_"
 skill_owner = 1
 light_reveal_radius = 0.0
-acceleration = 600.0
-max_speed = 230.0
+body_radius = 0.32
+body_height = 1.6
+acceleration = 12.0
+max_speed = 4.6
 drag = 2.5
 glide_drag = 1.6
 
-[node name="CollisionShape2D" parent="." index="0"]
-shape = SubResource("CapsuleShape2D_body")
+[node name="CollisionShape3D" parent="." index="0"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+shape = SubResource("CapsuleShape3D_body")
 
-[node name="Body" parent="." index="1" node_paths=PackedStringArray("sword")]
-script = ExtResource("6_visual")
-sword = NodePath("../UnlitLayer/Sword")
+[node name="Body" parent="." index="1"]
+color = Color(1, 0.75, 0.25, 1)
+rim_energy = 1.1
 
 [node name="PlayerLight" parent="." index="2"]
-radius = 70.0
-base_energy = 0.35
-light_color = Color(0.55, 0.65, 0.9, 1)
-
-
-[node name="Sword" type="Node2D" parent="UnlitLayer" node_paths=PackedStringArray("player")]
-script = ExtResource("2_sword")
-player = NodePath("../..")
-
-[node name="CloseSense" type="Node" parent="." node_paths=PackedStringArray("player")]
-script = ExtResource("7_sense")
-player = NodePath("..")
-
-[node name="OccludedOutline" type="Node" parent="Body"]
-script = ExtResource("8_outline")
-color = Color(1, 0.78, 0.3, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
+radius = 2.2
+base_energy = 1.6
+light_color_tint = Color(0.55, 0.7, 1, 1)
+shadows = false

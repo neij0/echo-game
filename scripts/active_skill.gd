@@ -1,8 +1,8 @@
 class_name ActiveSkill
-extends Node2D
+extends Node3D
 ## Base of an active skill (Lure Pulse, Shield, Dash...): one per character
-## (PlayerSkills adds it to the player's UnlitLayer, so it draws unlit in world
-## coordinates and follows the player). Used with the player's skill button
+## (PlayerSkills adds it to the player; it keeps its own world position on the
+## player, without the player's rotation). Used with the player's skill button
 ## (Player.try_skill_pressed / is_skill_held). Its numbers come from the
 ## SkillDefinition's values at the owned rank (value(key)); the look and the
 ## sounds are this node's own exports. The HUD reads get_cooldown_ratio().
@@ -28,6 +28,7 @@ func setup(target_player: Player, skill: SkillDefinition, skill_rank: int) -> vo
 
 
 func _ready() -> void:
+	top_level = true
 	ready_cue = ReadyCue.new()
 	ready_cue.player = player
 	if definition:
@@ -73,7 +74,6 @@ func _process(delta: float) -> void:
 		_on_ready_again()
 	global_position = player.global_position
 	_update(delta)
-	queue_redraw()
 
 
 ## Override: called every frame (input, effect, timers).
@@ -93,7 +93,7 @@ func _mark_used() -> void:
 	used.emit()
 
 
-func _play(sound_name: String, at: Vector2) -> void:
+func _play(sound_name: String, at: Vector3) -> void:
 	var audio: AudioDirector = AudioDirector.find(get_tree())
 	if audio and sound_name != "":
 		audio.play(sound_name, at)

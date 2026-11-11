@@ -10,7 +10,8 @@ extends Node
 signal revived_partner(partner: Player)
 
 @export var player: Player
-@export var revive_distance: float = 70.0
+## World units.
+@export var revive_distance: float = 1.4
 @export var revive_time: float = 2.0
 ## 0-1: pressure meter the revived partner gets at least (so partners downed by
 ## an empty meter do not go down again immediately).

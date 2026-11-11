@@ -96,7 +96,7 @@ func is_low() -> bool:
 	return _is_low
 
 
-func _on_pulse_emitted(_origin: Vector2) -> void:
+func _on_pulse_emitted(_origin: Vector3) -> void:
 	spend_ratio(get_pulse_cost_ratio())
 
 

@@ -1,5 +1,7 @@
 class_name ProtoCreature
 extends CharacterBody3D
+## STAND-IN until the real Creature is ported to 3D (Phase A): works with the
+## real Player (health, downed) and SharedCamera.
 ## The prototype's one creature: a dark shape with glowing eyes that wanders,
 ## investigates pulses, chases a player it can see and lunges (telegraphed).
 ## Like in the 2D game the sword only hurts it while it is revealed (a pulse,
@@ -10,10 +12,11 @@ signal died
 
 enum State { WANDER, INVESTIGATE, CHASE, WINDUP, LUNGE, RECOVER, STAGGER, DEAD }
 
-const BODY_SHADER: Shader = preload("res://proto3d/proto_character.gdshader")
-const SEE_THROUGH_SHADER: Shader = preload("res://proto3d/proto_see_through.gdshader")
+const BODY_SHADER: Shader = preload("res://shaders/character.gdshader")
+const SEE_THROUGH_SHADER: Shader = preload("res://shaders/see_through.gdshader")
 
 @export var body_radius: float = 0.45
+@export var body_height: float = 0.8
 @export var max_health: int = 3
 ## Half the side of the square it may wander in (the room, inside the walls).
 @export var roam_extent: float = 10.0
@@ -44,7 +47,6 @@ const SEE_THROUGH_SHADER: Shader = preload("res://proto3d/proto_see_through.gdsh
 @export var lunge_speed: float = 9.0
 @export var lunge_time: float = 0.25
 @export var lunge_recovery: float = 0.6
-@export var hit_knockback: float = 8.0
 
 @export_group("Reveal")
 ## Seconds it stays Exposed after a pulse reached it in sight.
@@ -68,15 +70,15 @@ const SEE_THROUGH_SHADER: Shader = preload("res://proto3d/proto_see_through.gdsh
 @export var bob_speed: float = 2.2
 
 ## Optional: makes its speed look the same on screen in every direction, like
-## the players' (ProtoCamera.speed_scale).
-var camera: ProtoCamera
+## the players' (SharedCamera.speed_scale).
+var camera: SharedCamera
 var state: State = State.WANDER
 var facing: Vector3 = Vector3.BACK
 var _health: int = 0
 var _state_time: float = 0.0
 var _goal: Vector3 = Vector3.ZERO
 var _wander_time: float = 0.0
-var _target: ProtoPlayer
+var _target: Player
 var _last_seen: Vector3 = Vector3.ZERO
 var _lost_time: float = 0.0
 var _lunge_direction: Vector3 = Vector3.ZERO
@@ -94,13 +96,19 @@ var _eye_material: StandardMaterial3D
 
 func _ready() -> void:
 	add_to_group("proto_creatures")
-	add_to_group("proto_sonar_targets")
+	add_to_group("sonar_targets")
+	add_to_group("cutaway_targets")
 	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	collision_layer = 4
 	collision_mask = wall_mask
 	_health = max_health
 	_build_visual()
 	_pick_wander_goal()
+
+
+## ViewCutaway: rock never hides it while it lunges or is Exposed.
+func wants_cutaway() -> bool:
+	return state == State.WINDUP or state == State.LUNGE or is_exposed()
 
 
 func is_exposed() -> bool:
@@ -113,19 +121,18 @@ func is_hittable() -> bool:
 		return false
 	if is_exposed():
 		return true
-	for player: ProtoPlayer in _players():
-		var reach: float = light_reveal_radius if player.is_echo else close_sense_radius
+	for player: Player in _players():
+		var reach: float = light_reveal_radius if player.light_reveal_radius > 0.0 else close_sense_radius
 		if _flat_distance(player.global_position) <= reach:
 			return true
 	return false
 
 
-## Called by the ProtoSonar when a wave reaches it.
-func on_sonar_wave(origin: Vector3, seen: bool) -> void:
+## Called by the Sonar when a wave reaches it in line of sight.
+func on_sonar_hit(origin: Vector3) -> void:
 	if state == State.DEAD:
 		return
-	if seen:
-		_reveal_left = expose_time
+	_reveal_left = expose_time
 	if state == State.WANDER or state == State.INVESTIGATE:
 		_goal = origin
 		_set_state(State.INVESTIGATE)
@@ -208,7 +215,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _update_chase(delta: float) -> void:
-	if _target == null:
+	if _target == null or _target.health.is_downed:
+		_target = null
 		_set_state(State.WANDER)
 		return
 	if _can_see(_target):
@@ -228,9 +236,9 @@ func _update_chase(delta: float) -> void:
 
 
 func _try_spot() -> bool:
-	var best: ProtoPlayer = null
+	var best: Player = null
 	var best_distance: float = INF
-	for player: ProtoPlayer in _players():
+	for player: Player in _players():
 		var distance: float = _flat_distance(player.global_position)
 		if distance < best_distance and _can_see(player):
 			best = player
@@ -243,7 +251,7 @@ func _try_spot() -> bool:
 	return true
 
 
-func _can_see(player: ProtoPlayer) -> bool:
+func _can_see(player: Player) -> bool:
 	if _flat_distance(player.global_position) > sight_radius:
 		return false
 	return not _blocked(global_position, player.global_position)
@@ -252,11 +260,11 @@ func _can_see(player: ProtoPlayer) -> bool:
 func _check_lunge_hit() -> void:
 	if _lunge_hit:
 		return
-	for player: ProtoPlayer in _players():
+	for player: Player in _players():
 		if _flat_distance(player.global_position) <= body_radius + player.body_radius:
 			_lunge_hit = true
-			player.apply_knockback(_lunge_direction * hit_knockback)
-			get_tree().call_group("proto_camera", "shake_with", 0.12, 0.2)
+			player.health.take_hit(global_position, self)
+			get_tree().call_group("shared_camera", "shake_with", 0.12, 0.2)
 
 
 func _move_towards(goal: Vector3, speed: float, delta: float) -> void:
@@ -302,10 +310,12 @@ func _flat_distance(point: Vector3) -> float:
 	return Vector2(point.x - global_position.x, point.z - global_position.z).length()
 
 
-func _players() -> Array[ProtoPlayer]:
-	var result: Array[ProtoPlayer] = []
-	for node: Node in get_tree().get_nodes_in_group("proto_players"):
-		result.append(node as ProtoPlayer)
+func _players() -> Array[Player]:
+	var result: Array[Player] = []
+	for player: Player in Players.all(get_tree()):
+		# Downed players are ignored, as in the 2D game.
+		if not player.health.is_downed:
+			result.append(player)
 	return result
 
 
@@ -336,7 +346,7 @@ func _respawn() -> void:
 		for z: float in [-1.0, 1.0]:
 			var corner: Vector3 = roam_center + Vector3(x, 0.0, z) * roam_extent * 0.85
 			var nearest: float = INF
-			for player: ProtoPlayer in _players():
+			for player: Player in _players():
 				nearest = minf(nearest, corner.distance_to(player.global_position))
 			if nearest > best_distance:
 				best_distance = nearest

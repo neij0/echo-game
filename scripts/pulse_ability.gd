@@ -1,22 +1,23 @@
 class_name PulseAbility
 extends Node
-## The Echo's sonar pulse: on the action button, spawns a PulseRing and emits
-## the player's pulse_emitted signal (pressure cost, awareness, creatures, sound
-## and camera shake all listen to that signal). Skills: "pulse_radius_mult".
+## The Echo's sonar pulse: on the action button, starts a pulse in the Sonar
+## ("sonar" group, add_pulse) and emits the player's pulse_emitted signal
+## (pressure cost, awareness, creatures, sound and camera shake all listen to
+## that signal). Skills: "pulse_radius_mult".
 ## When the cooldown ends, ready_cue plays (ring on the Echo + chime).
 
 ## Emitted once when the cooldown has run out.
 signal became_ready
 
 @export var player: Player
-@export var pulse_ring_scene: PackedScene
 @export var pulse_cooldown: float = 3.0
-## Ring + chime when the pulse is ready again (a ReadyCue on the UnlitLayer).
+## Ring + chime when the pulse is ready again.
 @export var ready_cue: ReadyCue
 
 var cooldown_left: float = 0.0
 ## Set by the WorldConfig (the pulse can behave differently in each world).
-var pulse_radius: float = 650.0
+## World units (the 2D game's 650 px).
+var pulse_radius: float = 13.0
 var pulse_expand_time: float = 0.8
 
 
@@ -30,7 +31,8 @@ func apply_world(world: WorldConfig) -> void:
 	pulse_expand_time = world.pulse_expand_time
 
 
-func _process(delta: float) -> void:
+## In the physics step: starting a pulse casts the sonar's rays.
+func _physics_process(delta: float) -> void:
 	var was_cooling: bool = cooldown_left > 0.0
 	cooldown_left = maxf(cooldown_left - delta, 0.0)
 	if was_cooling and cooldown_left <= 0.0:
@@ -58,10 +60,5 @@ func get_radius() -> float:
 
 func emit_pulse() -> void:
 	cooldown_left = pulse_cooldown
-	if pulse_ring_scene:
-		var ring := pulse_ring_scene.instantiate() as PulseRing
-		ring.max_radius = get_radius()
-		ring.expand_time = pulse_expand_time
-		ring.position = player.position
-		player.get_parent().add_child(ring)
+	get_tree().call_group("sonar", "add_pulse", player.global_position, get_radius(), pulse_expand_time)
 	player.pulse_emitted.emit(player.global_position)

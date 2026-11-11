@@ -158,6 +158,9 @@ p2_aim_down={
 2d_physics/layer_1="walls"
 2d_physics/layer_2="player"
 2d_physics/layer_3="creatures"
+3d_physics/layer_1="walls"
+3d_physics/layer_2="player"
+3d_physics/layer_3="creatures"
 
 [rendering]
 

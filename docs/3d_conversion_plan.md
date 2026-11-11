@@ -13,7 +13,7 @@ These choices shape everything below.
 
 | # | Decision | Approved | Why |
 |---|---|---|---|
-| 1 | Camera yaw: 45° (prototype) or 0° (like the 2D view) | **Chosen by playing** `proto3d/camera_test.tscn` on day 1 of Phase A (still open until then) | Keyboard players only have 8 directions. At 45° every corridor runs diagonally on screen; see section 5.1 |
+| 1 | Camera | **Chosen by playing: yaw 45°, pitch 45°, speed compensation 100 %, keys follow the walls.** These are the defaults of `SharedCamera` (all still `@export`) | Tested against yaw 0°, pitch 55°, less compensation and exact-direction keys on real rooms; see section 5.1 |
 | 2 | Rooms: redesign in 3D, or build the 3D rooms in code from the 11 existing floor plans | **From the existing floor plans** | All 9 Ocean levels, the validator and `check_levels` stay valid; no level design is redone |
 | 3 | Units | **50 px = 1 world unit**, as in the prototype | Lights, fog, physics and imported models all expect metre-sized numbers |
 | 4 | Art rule | **Changed** (see `CLAUDE.md`): CC0 models (Quaternius, KayKit, Kenney) and Mixamo animations are allowed, each with its licence file in the repo; still no AI-generated art or audio | The old rule ("vector shapes built in Godot only") cannot produce 3D characters |
@@ -133,6 +133,13 @@ becomes too easy), the fallback is half compensation.
 3. **See-through outlines stay** (already in the prototype) as the cheap fallback for
    everything else.
 4. **Doorways stay clear**, using the existing `doorway_clear_distance` rule.
+
+**Found while building it (Phase A):** at the 2D heights and pitch 45° a rock can only
+hide a character's feet or lower body, and only right beside the rock: a 1.16-unit rock
+never covers the middle of the Echo unless she is within about 0.6 units of it. So the
+hole opens only when at least half of the body is covered (`ViewCutaway.min_covered_share`);
+below that the see-through outline is enough. Full cover, and so the cut-away, will
+mostly happen at taller rock: the boss arena (up to 1.44 units), landmarks, outer walls.
 
 ### 5.3 Unrevealed creatures fully hidden behind rocks
 
@@ -277,3 +284,38 @@ stop and decide before building further.
 - The other four worlds, the unique bosses for stages 2-3 and roadmap step 7. They
   resume after the switch-over, on the 3D version.
 - Roadmap step 6 (story text) can go ahead on `main` at any time; it is text only.
+
+## 9. Progress
+
+Updated with every step, so a new session knows where the conversion stands.
+
+### Phase A — 3D core
+- [x] Camera test on real rooms; camera chosen (decision 1).
+- [x] Rock cut-away (`ViewCutaway`, `shaders/cutaway.gdshaderinc`).
+- [x] `Player` and its scenes, `PlayerHealth`, `PlayerPressure`, `ReviveHelper`,
+  `PlayerSkills`, `ActiveSkill` (base only), `PlayerLight`, `PlayerAudio`.
+- [x] `SharedCamera`, `ViewMotion`.
+- [x] `Sonar` (4 pulse slots, per-pulse reach and speed, `on_sonar_hit`), `PulseAbility`,
+  `ReadyCue`, `SonarAudio`.
+- [x] `Darkness`, `MarineSnow`, `AudioDirector` (3D positional; moved forward from Phase E
+  because the ported classes call it).
+- [x] `RockMesher`; play-test stage `tools/core_test.tscn`.
+- [ ] `SwordAbility` (stand-in: `proto3d/proto_sword.gd`).
+- [ ] `Creature` on `NavigationRegion3D`, `CreatureEyes`, `CreatureStuckWatch`,
+  `CreatureVoice` (stand-in: `proto3d/proto_creature.gd`).
+- [ ] `PartnerMending`, `DistressPulse`, `CloseSense`, `PlayerOverlay` (downed and revive
+  rings), `GoalEcho`.
+- [ ] 3D physics interpolation (smooth movement above 60 Hz screens).
+- [ ] HUD glow over the 3D world (risk 4).
+- [ ] The core half of `test_creatures` ported; FPS benchmark at 1080p.
+- [ ] Delete `proto3d/`.
+
+### Left for Phase B, noted while porting
+- `Darkness`: the darkening with depth through a stage needs the `LevelBuilder`
+  (`stage_progress_at`); only the stage's ambient colour is applied for now.
+- The `Game` autoload has no worlds and no skill catalog (they load every unported
+  scene); put both back in `scenes/game_state.tscn` once the levels build in 3D.
+- `WorldConfig`: only `pulse_radius` and the marine snow values are in world units so far;
+  the room sizes and everything else are still pixels.
+- Rock tops are flat and every rock has one height; the 2D rise and fall along a rock
+  (`height_wave`) comes back with the real `LevelBuilder`.

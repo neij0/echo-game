@@ -1,11 +1,10 @@
 class_name SonarAudio
 extends Node
 ## Sonar sounds: a deep ping on each pulse, and a soft tick when the wave front
-## hits rock edges (rate-limited, quieter for far edges). Listens to every
-## player registered by the StageManager.
+## hits rock (rate-limited, quieter for far rock). Listens to every player
+## in the "players" group and to the Sonar.
 
-@export var stage_manager: StageManager
-@export var sonar_overlay: SonarOverlay
+@export var sonar: Sonar
 
 @export_group("Ping")
 @export var ping_stream: AudioStream
@@ -29,23 +28,23 @@ extends Node
 var _ping_player: AudioStreamPlayer
 var _tick_player: AudioStreamPlayer
 var _tick_cooldown: float = 0.0
+## Players whose pulses already ping (instance ids).
+var _heard: Dictionary = {}
 
 
 func _ready() -> void:
 	_ping_player = _make_player(ping_stream, ping_polyphony)
 	_tick_player = _make_player(tick_stream, tick_polyphony)
-	if stage_manager:
-		stage_manager.player_registered.connect(_on_player_registered)
-	if sonar_overlay:
-		sonar_overlay.edge_hit.connect(_on_edge_hit)
+	if sonar:
+		sonar.edge_hit.connect(_on_edge_hit)
 
 
 func _process(delta: float) -> void:
 	_tick_cooldown = maxf(_tick_cooldown - delta, 0.0)
-
-
-func _on_player_registered(player: Player) -> void:
-	player.pulse_emitted.connect(_on_pulse_emitted)
+	for player: Player in Players.all(get_tree()):
+		if not _heard.has(player.get_instance_id()):
+			_heard[player.get_instance_id()] = true
+			player.pulse_emitted.connect(_on_pulse_emitted)
 
 
 func _make_player(stream: AudioStream, polyphony: int) -> AudioStreamPlayer:
@@ -57,7 +56,7 @@ func _make_player(stream: AudioStream, polyphony: int) -> AudioStreamPlayer:
 	return audio
 
 
-func _on_pulse_emitted(_origin: Vector2) -> void:
+func _on_pulse_emitted(_origin: Vector3) -> void:
 	if ping_stream == null:
 		return
 	_ping_player.volume_db = ping_volume_db
@@ -65,7 +64,7 @@ func _on_pulse_emitted(_origin: Vector2) -> void:
 	_ping_player.play()
 
 
-func _on_edge_hit(_point: Vector2, distance_ratio: float) -> void:
+func _on_edge_hit(distance_ratio: float) -> void:
 	if tick_stream == null or _tick_cooldown > 0.0:
 		return
 	_tick_cooldown = tick_min_interval
