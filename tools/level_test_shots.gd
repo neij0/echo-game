@@ -3,8 +3,9 @@ extends Node
 ## Pictures and the FPS benchmark of the level test (needs a window):
 ## godot --path . res://tools/level_test.tscn -- shots <folder> [level number]
 ## Saves, for the largest level (or the one asked for): an overview with the
-## lights up, the start, a pulse, sand trails in the Echo's light and in a
-## pulse's afterglow. Then measures the frame rate (vsync off, 1920x1080) on
+## lights up, the start with and without the near ambient (Darkness), the
+## same near rock, a pulse, sand trails in the Echo's light and in a pulse's
+## afterglow. Then measures the frame rate (vsync off, 1920x1080) on
 ## that level while the players run about, the creatures hunt and the Echo
 ## pulses: once with the sand trails on, once off (their cost).
 
@@ -12,12 +13,16 @@ extends Node
 @export var folder: String = ""
 ## Level of the world to use (0-based); -1 = the one with the most rooms.
 @export var bench_level: int = -1
+## False = pictures only.
+@export var benchmark: bool = true
 @export var settle_time: float = 1.0
 @export var bench_time: float = 8.0
 @export var bench_pulse_every: float = 1.6
 ## Overview picture: camera view height (units) and ambient light.
 @export var overview_size: float = 80.0
 @export var overview_ambient: float = 2.0
+## Pixels between the players and the rock in the "01_rock" pictures.
+@export var rock_view_distance: float = 180.0
 
 var _frames: int = 0
 var _counting: bool = false
@@ -75,8 +80,25 @@ func _run() -> void:
 	test.darkness.ambient_energy = ambient_before
 	await _wait(0.5)
 
-	# 1. The start, 2. a pulse.
+	# 1. The start and beside rock, with the near ambient and without it.
 	await _save("01_start")
+	test.darkness.near_enabled = false
+	await _wait(0.1)
+	await _save("01_start_no_near_ambient")
+	test.darkness.near_enabled = true
+	_move_players_near_rock()
+	await _wait(0.6)
+	await _save("01_rock")
+	test.darkness.near_enabled = false
+	await _wait(0.1)
+	await _save("01_rock_no_near_ambient")
+	test.darkness.near_enabled = true
+	for player: Player in [test.echo, test.guardian]:
+		player.global_position = test.builder.get_spawn_position(player.player_number)
+		player.reset_physics_interpolation()
+	await _wait(0.6)
+
+	# 2. A pulse.
 	var pulse := test.echo.get_node("Pulse") as PulseAbility
 	await get_tree().physics_frame
 	pulse.emit_pulse()
@@ -96,10 +118,39 @@ func _run() -> void:
 	test.set_creatures_frozen(false)
 
 	# 5. The benchmark, trails on and off.
+	if not benchmark:
+		get_tree().quit()
+		return
 	for trails_on: bool in [true, false]:
 		test.trails.enabled = trails_on
 		await _bench(number, trails_on)
 	get_tree().quit()
+
+
+## Puts the players on open floor about rock_view_distance from the nearest
+## rock of their room, so the near rock shows in the pictures.
+func _move_players_near_rock() -> void:
+	var layout: LevelBuilder.Layout = test.builder.get_layout()
+	var start: Vector2 = test.builder.to_plan(test.echo.global_position)
+	var best: Vector2 = start
+	var best_score: float = INF
+	for chunk: LevelChunk in layout.chunks:
+		for polygon: PackedVector2Array in chunk.get_wall_polygons():
+			for i: int in polygon.size():
+				var a: Vector2 = polygon[i]
+				var b: Vector2 = polygon[(i + 1) % polygon.size()]
+				var normal: Vector2 = (b - a).orthogonal().normalized()
+				if Geometry2D.is_point_in_polygon((a + b) * 0.5 + normal, polygon):
+					normal = -normal
+				var spot: Vector2 = (a + b) * 0.5 + normal * rock_view_distance
+				var score: float = spot.distance_to(start)
+				if score < best_score and layout.validator.is_reachable(spot) and not layout.validator.is_near_blocked(spot, rock_view_distance * 0.6):
+					best_score = score
+					best = spot
+	for player: Player in [test.echo, test.guardian]:
+		var offset := Vector3(0.6 if player == test.guardian else -0.6, 0.0, 0.0)
+		player.global_position = test.builder.to_world(best) + offset
+		player.reset_physics_interpolation()
 
 
 ## Both players walk a small loop (real input), leaving trails.

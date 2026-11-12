@@ -48,6 +48,19 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `get_global_transform_interpolated()`; a teleport calls `reset_physics_interpolation()`.
   Lit corals are read by duck typing ("corals" group: `is_lit`, `safe_radius`,
   `is_in_safe_zone`) until `Coral` is ported; a boss is recognised by `allows_mending`.
+  Bodies move with `FloorMotion.move` (y stays 0). **Rock colliders are never the drawn
+  mesh**: `RockMesher.add_colliders` puts upright walls (both sides solid) along each
+  rock's base outline, from `collider_depth` below the floor to `collider_height` (3)
+  above it, so a rounded body never slides up onto a low rock (doorway rock is only
+  0.2 high). Convex prisms were tried and fail (a concave outline splits into slivers
+  that push a body deeper in). `tools/test_walls.tscn` checks it.
+- **Darkness** (3D): the far ambient (`Environment`, the stage's colour x 0.06) stays
+  near zero; a faint deep-blue **near ambient** round each player (`Darkness`: one
+  shadowless light high above each player, fading out by `near_ambient_radius`) makes
+  the nearby floor and rock silhouettes faintly readable, never far ones. Colour,
+  energy and radius in `WorldConfig` (`near_ambient_*`), a share per stage
+  (`StageDefinition.near_ambient_scale`: Ocean 1 / 0.85 / 0.7), times the Brightness
+  option.
 - **Not ported yet**: every script and tool in **`legacy2d/`** (it has a `.gdignore`, so the
   editor never parses it; paths mirror the project; `git mv` a file back when its phase
   comes, see `legacy2d/README.md`): stage manager, the full HUD, shard door, lockdown,
@@ -60,12 +73,19 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   creatures; fish later) stamps a furrow into one texture that wraps over the world
   (`trail_window`, no scrolling); only makers within `active_radius` of the camera stamp;
   `fade_time` / `stir_fade_time` (exports); puffs (lit particles) above `puff_speed`. The
-  floor shader only changes how the sand takes light, so a trail shows only where lit or
-  in a pulse's afterglow. Teleports (> `max_step`) leave no furrow.
+  floor shader only changes how the sand takes light (no glow of its own: the pulse's
+  afterglow lights the groove like any other sand, a little darker), so a trail shows
+  only where lit or in a pulse's afterglow. Teleports (> `max_step`) leave no furrow.
 - **Tests on this branch**: `tools/test_levels.tscn` (headless: every Ocean level builds in
   3D with every shard and the exit reachable, the level flow, stations, corals, Sentinel
   leash, light hunter, sand trails; prints the quiet-spaces report):
   `godot --headless --path . --fixed-fps 60 res://tools/test_levels.tscn`;
+  `tools/test_walls.tscn` (headless, ~7 min: on every Ocean level, the Echo's, the
+  Guardian's and a creature's collision shapes are pushed into every wall spot, sliding
+  along it, at swim and lunge speed, plus the real players along every wall near a
+  doorway; fails if anyone ends above the floor, inside a rock outline or outside the
+  rooms; `-- N` = only world level N):
+  `godot --headless --path . --fixed-fps 60 res://tools/test_walls.tscn`;
   `tools/test_core.tscn` (headless: creature senses, chase speeds,
   leash-aware chase speed, lunge, alerting, search, the unkillable creature giving up,
   navigation round a wall, sword reveal rules + Exposed kill, close
@@ -76,8 +96,8 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player
   blocks; a stand-in level flow (shards -> light -> next level; both down = again). Keys:
   N / P level, 1-9 jump, R again, M mode, F freeze creatures, T trails, C cut-away,
-  I interpolation, O oxygen drain. `-- shots <folder> [level]`: pictures + FPS benchmark
-  (trails on / off) on the largest level. It loads `worlds/ocean.tres` at run time, which
+  I interpolation, O oxygen drain, L near ambient, B brightness 70 / 100 / 130 %. `-- shots <folder> [level]`: pictures (with and without the near
+  ambient) + FPS benchmark (trails on / off) on the largest level. It loads `worlds/ocean.tres` at run time, which
   prints load errors for the scenes whose scripts are still in `legacy2d/` (harmless).
 - **Play-test stage**: `tools/core_test.tscn` (F6): three real Ocean rooms with the real
   classes above, four creatures (one unkillable) that come back after being killed, two test

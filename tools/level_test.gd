@@ -14,9 +14,12 @@ extends Node3D
 ## Keys: N / P = next / previous level, 1-9 = level 1-9 of the world,
 ## R = this level again (new seed), M = Calm / Challenge, F = freeze and hide
 ## every creature, T = sand trails on / off, C = cut-away on / off,
-## I = physics interpolation on / off, O = oxygen drain on / off.
-## "-- shots <folder> [level number]" saves pictures and runs the FPS
-## benchmark on the largest level (LevelTestShots).
+## I = physics interpolation on / off, O = oxygen drain on / off,
+## L = the near ambient (faint deep-blue fill round the players) on / off,
+## B = Brightness option 70 / 100 / 130 %.
+## "-- shots <folder> [level number] [pictures]" saves pictures and runs the
+## FPS benchmark on the largest level (LevelTestShots; "pictures" = no
+## benchmark).
 
 const ECHO_SCENE: PackedScene = preload("res://scenes/echo.tscn")
 const GUARDIAN_SCENE: PackedScene = preload("res://scenes/guardian.tscn")
@@ -97,6 +100,7 @@ func _ready() -> void:
 		shots.folder = arguments[1]
 		if arguments.size() >= 3:
 			shots.bench_level = int(arguments[2]) - 1
+		shots.benchmark = not arguments.has("pictures")
 		add_child(shots)
 		return
 	start_level(stage_index, level_index)
@@ -123,6 +127,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			cutaway.radius = _cut_radius if cutaway.radius <= 0.0 else 0.0
 		KEY_I:
 			get_tree().physics_interpolation = not get_tree().physics_interpolation
+		KEY_L:
+			darkness.near_enabled = not darkness.near_enabled
+		KEY_B:
+			_cycle_brightness()
 		KEY_O:
 			oxygen_drain = not oxygen_drain
 			for player: Player in [echo, guardian]:
@@ -131,6 +139,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			var number: int = key.physical_keycode - KEY_1
 			if number >= 0 and number < 9:
 				start_level(number / 3, number % 3)
+
+
+## The Brightness option: 70 % -> 100 % -> 130 % -> 70 %.
+func _cycle_brightness() -> void:
+	var game := get_node_or_null("/root/Game") as GameState
+	if game == null:
+		return
+	var steps: Array[float] = [game.min_brightness, 1.0, game.max_brightness]
+	var next: int = 0
+	for i: int in steps.size():
+		if absf(game.brightness - steps[i]) < 0.01:
+			next = (i + 1) % steps.size()
+	game.set_brightness(steps[next])
 
 
 ## Builds a level of the world and puts the players on its start.
@@ -295,6 +316,9 @@ func _info_text() -> String:
 	lines.append("[N/P] level  [1-9] jump  [R] again  [M] mode  [F] creatures %s  [T] trails %s  [C] cut-away %s  [I] interpolation %s  [O] oxygen drain %s" % [
 		"FROZEN" if creatures_frozen else "on", "on" if trails.enabled else "OFF", "on" if cutaway.radius > 0.0 else "OFF",
 		"on" if get_tree().physics_interpolation else "OFF", "on" if oxygen_drain else "OFF"])
+	var game := get_node_or_null("/root/Game") as GameState
+	lines.append("[L] near ambient %s  [B] brightness %d%%" % ["on" if darkness.near_enabled else "OFF",
+		roundi((game.brightness if game else 1.0) * 100.0)])
 	return "\n".join(lines)
 
 

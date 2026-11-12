@@ -401,6 +401,24 @@ Updated with every step, so a new session knows where the conversion stands.
   have no creature; the biggest group of creatures within each other's alert radius is
   1-3. Light hunters sense the Echo through rock from 22 units, so they are the ones
   that can make a level feel restless: watch them in the play-test.
+- [x] **Step 1 play-test fixes**:
+  - **Walking onto rock** (bug): the rock collider was the drawn mesh. Near doorways
+    the rock drops to 10 px (0.2 units), below the middle of a body's rounded bottom
+    (0.28-0.4), so sliding along the edge pushed the body up and nothing brought it
+    down (floating motion, no gravity); creatures were put back to y = 0 but still slid
+    in over low rock. Now every rock gets upright walls along its base outline, 3.5
+    units tall and solid from both sides (`RockMesher.add_colliders`), and every body
+    moves with `FloorMotion.move` (y back to 0 after each move). Convex prisms were
+    tried first: a concave outline splits into thin slivers and a body pressing on one
+    is pushed out the short way, into the rock. `tools/test_walls.tscn` pushes the
+    Echo's, the Guardian's and a creature's shapes into every wall spot of every level
+    (swim and lunge speed) plus the real players near every doorway: before the fix
+    about 17 % of pushes ended on top of rock, now none.
+  - **Sand trails**: no sonar-coloured glow of their own any more; a groove takes light
+    and the pulse's afterglow like the rest of the sand, a little darker.
+  - **Darkness**: a faint deep-blue near ambient round each player (`Darkness`, values
+    in `WorldConfig.near_ambient_*`, a share per stage, times Brightness); the far
+    ambient stays near zero, so far rock is still only seen by the pulse.
 - [ ] Next: `StageManager` (level fades, retries, counts, the full `Hud`), `game.tscn`
   running in 3D; lockdown, collapse escape, arena door, bubble vents, the placeholder
   boss; skills (stats, the three actives, aiming); the `Game` autoload's worlds and

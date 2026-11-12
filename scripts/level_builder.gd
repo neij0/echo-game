@@ -67,6 +67,12 @@ const FLOOR_SHADER: Shader = preload("res://shaders/floor_surface.gdshader")
 ## Height of a landmark's solid footprint until the landmark models (pixels).
 @export var landmark_rock_height: float = 40.0
 
+@export_group("Collision")
+## Every rock's colliders reach from collider_depth below the floor to
+## collider_height above it (units), whatever its drawn height.
+@export var collider_height: float = 3.0
+@export var collider_depth: float = 0.5
+
 @export_group("Navigation")
 ## Creature clearance of the normal navigation mesh (units; a whole number of
 ## cells: the bake rounds it up).
@@ -710,7 +716,7 @@ func _surface_material(shader: Shader, color: Color, fill_energy: float) -> Shad
 	return material
 
 
-## The rocks of one room as one mesh and one collider. rocks: outline (plan
+## The rocks of one room as one mesh and one body with their colliders. rocks: outline (plan
 ## space), middle height and spread (pixels).
 func _room_rock(rocks: Array[Dictionary], doorways: Array[Rect2]) -> StaticBody3D:
 	var body := StaticBody3D.new()
@@ -740,12 +746,10 @@ func _room_rock(rocks: Array[Dictionary], doorways: Array[Rect2]) -> StaticBody3
 	instance.mesh = merged
 	instance.material_override = _rock_material
 	body.add_child(instance)
-	if merged.get_surface_count() > 0:
-		var shape: ConcavePolygonShape3D = merged.create_trimesh_shape()
-		shape.backface_collision = true
-		var collider := CollisionShape3D.new()
-		collider.shape = shape
-		body.add_child(collider)
+	# Colliders from the base outlines, upright and taller than any body
+	# (never the drawn shape: a low rock near a doorway could be climbed).
+	for rock: Dictionary in rocks:
+		RockMesher.add_colliders(body, _to_units(rock["outline"] as PackedVector2Array), -collider_depth, collider_height)
 	return body
 
 

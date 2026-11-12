@@ -126,8 +126,7 @@ func _physics_process(delta: float) -> void:
 		velocity = velocity.limit_length(max_speed * speed_scale * _view_scale(velocity))
 	_apply_leash()
 
-	velocity.y = 0.0
-	move_and_slide()
+	FloorMotion.move(self)
 
 
 ## The other living player (null when playing alone).

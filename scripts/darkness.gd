@@ -1,17 +1,36 @@
 class_name Darkness
 extends WorldEnvironment
-## The darkness of the 3D world: a black background, a very faint deep-blue
-## ambient light (so the level cannot be read from a distance: what is near is
+## The darkness of the 3D world: a black background, a near-zero ambient light
+## everywhere (so the level cannot be read from a distance: what is near is
 ## shown by real lights, the far layout only by the pulse), volumetric fog that
 ## the lights shine into, and the glow of everything brighter than
 ## glow_threshold (sonar lines, rims, eyes).
-## Each stage has its own ambient colour (StageDefinition, apply_stage). The
-## Brightness setting (Game.brightness, a narrow range) scales it a little.
+## Near ambient: a faint deep-blue fill round each player (a soft light high
+## above them, no shadows, fading out by near_radius), so the floor and the
+## rock silhouettes near the players are faintly readable, never far ones.
+## Its colour, strength and reach come from the WorldConfig (apply_world),
+## each stage scales it (StageDefinition.near_ambient_scale, apply_stage).
+## Each stage also has its own far ambient colour. The Brightness setting
+## (Game.brightness, a narrow range) scales both a little.
 
 @export_group("Ambient")
 @export var ambient_color: Color = Color(0.1, 0.18, 0.32)
 ## Strength of the ambient light: low on purpose.
 @export var ambient_energy: float = 0.06
+
+@export_group("Near Ambient")
+## Set from the WorldConfig (near_ambient_*) when a world is applied.
+@export var near_color: Color = Color(0.14, 0.26, 0.62)
+@export var near_energy: float = 4.5
+## Distance (units) round a player where the fill has faded to nothing.
+@export var near_radius: float = 9.0
+## Height of the fill light above the player (high = the floor and the rock
+## tops are lit evenly, the rock faces a little).
+@export var near_height: float = 3.0
+## Fall-off curve (1 = natural, below 1 = flatter, then a soft edge).
+@export var near_falloff: float = 0.6
+## Off = only the far ambient (a debug comparison: level test key L).
+@export var near_enabled: bool = true
 
 @export_group("Fog")
 @export var fog_enabled: bool = true
@@ -32,10 +51,15 @@ extends WorldEnvironment
 ## 0-1: share taken off the ambient on top of everything (a boss phase
 ## darkens its arena; set_extra_darkness, "darkness" group).
 var extra_darkness: float = 0.0
+## Share of the near ambient this stage uses (apply_stage).
+var stage_scale: float = 1.0
+## One fill light per player, in the order of Players.all.
+var _near_lights: Array[OmniLight3D] = []
 
 
 func _ready() -> void:
 	add_to_group("stage_listeners")
+	add_to_group("world_listeners")
 	add_to_group("darkness")
 	environment = Environment.new()
 	environment.background_mode = Environment.BG_COLOR
@@ -64,15 +88,58 @@ func set_extra_darkness(amount: float) -> void:
 ## Called (via the "stage_listeners" group) by StageManager.
 func apply_stage(stage: StageDefinition) -> void:
 	ambient_color = stage.ambient_color
+	stage_scale = stage.near_ambient_scale
+
+
+## Called (via the "world_listeners" group) when a world is applied.
+func apply_world(world: WorldConfig) -> void:
+	near_color = world.near_ambient_color
+	near_energy = world.near_ambient_energy
+	near_radius = world.near_ambient_radius
 
 
 func _process(_delta: float) -> void:
 	_apply_ambient()
+	_update_near_lights()
+
+
+## The energy of the near fill right now (brightness, stage, boss darkness).
+func get_near_energy() -> float:
+	return near_energy * stage_scale * _brightness() * (1.0 - extra_darkness)
 
 
 func _apply_ambient() -> void:
+	environment.ambient_light_color = ambient_color
+	environment.ambient_light_energy = ambient_energy * _brightness() * (1.0 - extra_darkness)
+
+
+func _brightness() -> float:
 	# Looked up by path, so tools that run without autoloads can load this.
 	var game := get_node_or_null("/root/Game") as GameState
-	var brightness: float = game.brightness if game else 1.0
-	environment.ambient_light_color = ambient_color
-	environment.ambient_light_energy = ambient_energy * brightness * (1.0 - extra_darkness)
+	return game.brightness if game else 1.0
+
+
+func _update_near_lights() -> void:
+	var players: Array[Player] = Players.all(get_tree())
+	while _near_lights.size() < players.size():
+		var light := OmniLight3D.new()
+		light.name = "NearAmbient%d" % (_near_lights.size() + 1)
+		light.shadow_enabled = false
+		light.light_volumetric_fog_energy = 0.0
+		light.light_specular = 0.0
+		# Follows the drawn (interpolated) player in _process.
+		light.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		add_child(light)
+		_near_lights.append(light)
+	var energy: float = get_near_energy() if near_enabled else 0.0
+	for i: int in _near_lights.size():
+		var light: OmniLight3D = _near_lights[i]
+		light.visible = i < players.size() and energy > 0.0
+		if not light.visible:
+			continue
+		light.light_color = near_color
+		light.light_energy = energy
+		light.omni_range = near_radius
+		light.omni_attenuation = near_falloff
+		var at: Vector3 = players[i].get_global_transform_interpolated().origin
+		light.global_position = Vector3(at.x, near_height, at.z)

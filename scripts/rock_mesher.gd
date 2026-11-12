@@ -10,6 +10,10 @@ extends RefCounted
 
 ## Points closer than this are merged.
 const MERGE_DISTANCE: float = 0.001
+## Default bottom and top of a rock's colliders (world units): far taller
+## than any body, whatever the rock's drawn height.
+const COLLIDER_BOTTOM: float = -0.5
+const COLLIDER_TOP: float = 3.0
 
 
 ## The mesh of one rock. smooth_degrees: corners sharper than this stay hard.
@@ -101,7 +105,7 @@ static func _face_normal(points: PackedVector2Array, heights: PackedFloat32Array
 	return normal.normalized() if normal.length() > 0.0 else Vector3.UP
 
 
-## A solid rock: the mesh plus a collider of the same shape (wall layer).
+## A solid rock: the mesh plus its colliders (wall layer, add_colliders).
 static func rock_body(outline: PackedVector2Array, height: float, smooth_degrees: float, material: Material, height_at: Callable = Callable()) -> StaticBody3D:
 	var mesh: ArrayMesh = rock_mesh(outline, height, smooth_degrees, height_at)
 	var body := StaticBody3D.new()
@@ -111,13 +115,35 @@ static func rock_body(outline: PackedVector2Array, height: float, smooth_degrees
 	instance.mesh = mesh
 	instance.material_override = material
 	body.add_child(instance)
-	if mesh.get_surface_count() > 0:
-		var shape: ConcavePolygonShape3D = mesh.create_trimesh_shape()
-		shape.backface_collision = true
-		var collider := CollisionShape3D.new()
-		collider.shape = shape
-		body.add_child(collider)
+	add_colliders(body, outline)
 	return body
+
+
+## The colliders of a rock, whatever its drawn height: upright walls along its
+## base outline (floor plane, world units) from `bottom` to `top`, solid from
+## both sides. A body only ever touches straight upright sides taller than
+## itself, so its contact normals are flat: it can never slide up onto a low
+## rock (a rounded body against the edge of a short wall is pushed upwards) or
+## be pushed through it. (Convex prisms were tried: a concave outline splits
+## into thin slivers, and a body pressing on one is pushed out the short way,
+## deeper into the rock.) Returns the number of shapes added (0 or 1).
+static func add_colliders(body: StaticBody3D, outline: PackedVector2Array, bottom: float = COLLIDER_BOTTOM, top: float = COLLIDER_TOP) -> int:
+	var points: PackedVector2Array = _clean(outline)
+	if points.size() < 3:
+		return 0
+	var faces := PackedVector3Array()
+	for i: int in points.size():
+		var a: Vector2 = points[i]
+		var b: Vector2 = points[(i + 1) % points.size()]
+		faces.append_array([Vector3(a.x, bottom, a.y), Vector3(b.x, bottom, b.y), Vector3(b.x, top, b.y),
+			Vector3(a.x, bottom, a.y), Vector3(b.x, top, b.y), Vector3(a.x, top, a.y)])
+	var walls := ConcavePolygonShape3D.new()
+	walls.set_faces(faces)
+	walls.backface_collision = true
+	var collider := CollisionShape3D.new()
+	collider.shape = walls
+	body.add_child(collider)
+	return 1
 
 
 ## The normal a side face uses at a corner it shares with a neighbour face:

@@ -88,16 +88,21 @@ script = ExtResource("2_stage")
 levels = Array[ExtResource("3_level")]([ExtResource("level_2_1"), ExtResource("level_2_2"), ExtResource("level_2_3")])
 ambient_color = Color(0.145, 0.215, 0.265, 1)
 deep_ambient_color = Color(0.13, 0.195, 0.245, 1)
+near_ambient_scale = 0.85
 
 [sub_resource type="Resource" id="Stage3"]
 script = ExtResource("2_stage")
 levels = Array[ExtResource("3_level")]([ExtResource("level_3_1"), ExtResource("level_3_2"), ExtResource("level_3_3")])
 ambient_color = Color(0.11, 0.17, 0.22, 1)
 deep_ambient_color = Color(0.095, 0.15, 0.2, 1)
+near_ambient_scale = 0.7
 
 [resource]
 script = ExtResource("1_world")
 stages = Array[ExtResource("2_stage")]([SubResource("Stage1"), SubResource("Stage2"), SubResource("Stage3")])
+near_ambient_color = Color(0.14, 0.26, 0.62, 1)
+near_ambient_energy = 4.5
+near_ambient_radius = 9.0
 coral_scene = ExtResource("7_coral")
 station_scene = ExtResource("8_station")
 goal_scene = ExtResource("9_goal")

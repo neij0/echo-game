@@ -884,10 +884,7 @@ func _physics_process(delta: float) -> void:
 
 ## Moves on the floor plane only.
 func _move() -> void:
-	velocity.y = 0.0
-	move_and_slide()
-	if absf(global_position.y) > 0.001:
-		global_position.y = 0.0
+	FloorMotion.move(self)
 
 
 func _steer_direction(delta: float) -> Vector3:

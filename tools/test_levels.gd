@@ -7,7 +7,8 @@ extends Node
 ## oxygen stations, corals (wake on a pulse, safe zone), the Sentinel's leash,
 ## the light hunter sensing the Echo through rock, and the sand trails
 ## (stamps while moving near the camera, none for a teleport or far away,
-## puffs when fast). Also prints the "quiet spaces" report per level (rooms
+## puffs when fast), the near ambient (WorldConfig values, follows the
+## players, scaled by the stage and the Brightness option). Also prints the "quiet spaces" report per level (rooms
 ## without creatures, alert chains) for tuning.
 ## godot --headless --path . --fixed-fps 60 res://tools/test_levels.tscn
 ## Exits with 1 when a check fails.
@@ -34,6 +35,7 @@ func _run() -> void:
 	await _test_station_and_coral()
 	await _test_sentinel_and_hunter()
 	await _test_sand_trails()
+	await _test_darkness()
 	print("")
 	print("%d checks, %d failed" % [_checks, _failures])
 	print("RESULT: ", "LEVELS OK" if _failures == 0 else "LEVELS FAIL")
@@ -233,6 +235,40 @@ func _test_sand_trails() -> void:
 
 ## Rooms without a creature at the start, and the biggest group of creatures
 ## that alert each other (each within the alert radius of the next).
+func _test_darkness() -> void:
+	print("- darkness: a faint near ambient round the players only")
+	test.start_level(0, 0)
+	test.set_creatures_frozen(true)
+	await _frames(3)
+	var darkness: Darkness = test.darkness
+	var world: WorldConfig = test.world
+	_check(darkness.near_color == world.near_ambient_color and is_equal_approx(darkness.near_energy, world.near_ambient_energy)
+		and is_equal_approx(darkness.near_radius, world.near_ambient_radius), "its colour, energy and reach come from the WorldConfig")
+	await get_tree().process_frame
+	var lights: Array[OmniLight3D] = darkness._near_lights
+	var follows: bool = lights.size() == 2
+	for i: int in mini(lights.size(), 2):
+		var player: Player = [test.echo, test.guardian][i]
+		follows = follows and lights[i].visible and not lights[i].shadow_enabled and is_equal_approx(lights[i].omni_range, world.near_ambient_radius) 			and Creature._flat_distance(lights[i].global_position, player.get_global_transform_interpolated().origin) < 0.01
+	_check(follows, "one shadowless fill light above each player, fading out by %.0f units" % world.near_ambient_radius)
+	_check(darkness.environment.ambient_light_energy < 0.1, "far from the players the ambient stays near zero (%.3f)" % darkness.environment.ambient_light_energy)
+	var game := get_node_or_null("/root/Game") as GameState
+	var first: float = darkness.get_near_energy()
+	if game:
+		var before: float = game.brightness
+		game.set_brightness(game.max_brightness)
+		_check(is_equal_approx(darkness.get_near_energy(), first * game.max_brightness / before), "the Brightness option scales it")
+		game.set_brightness(before)
+	test.start_level(2, 0)
+	await _frames(2)
+	_check(is_equal_approx(darkness.get_near_energy(), first * world.get_stage(2).near_ambient_scale / world.get_stage(0).near_ambient_scale),
+		"stage 3 is darker (x%.2f)" % world.get_stage(2).near_ambient_scale)
+	darkness.near_enabled = false
+	await _frames(2)
+	_check(lights.all(func(light: OmniLight3D) -> bool: return not light.visible), "key L turns it off (comparison)")
+	darkness.near_enabled = true
+
+
 func _quiet_report(label: String) -> String:
 	var layout: LevelBuilder.Layout = test.builder.get_layout()
 	var size: float = test.world.room_size
