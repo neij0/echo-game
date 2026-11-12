@@ -10,6 +10,7 @@ extends Node3D
 const ECHO_SCENE: PackedScene = preload("res://scenes/echo.tscn")
 const GUARDIAN_SCENE: PackedScene = preload("res://scenes/guardian.tscn")
 const CREATURE_SCENE: PackedScene = preload("res://scenes/creature.tscn")
+const UNKILLABLE_SCENE: PackedScene = preload("res://scenes/creature_unkillable.tscn")
 
 ## The arena: a 24 x 16 floor with a wall across its middle (a gap at one end)
 ## and a pillar.
@@ -35,6 +36,7 @@ func _run() -> void:
 	await _test_lunge_hits_once()
 	await _test_downed_ignored()
 	await _test_search_after_losing_sight()
+	await _test_unkillable_gives_up()
 	await _test_navigation_round_the_wall()
 	await _test_sword_reveal_rules()
 	await _test_close_sense()
@@ -67,6 +69,13 @@ func _test_chase_speeds() -> void:
 	_check_near(creature.get_chase_speed() / echo.max_speed, 1.0, 0.001, "Challenge, full awareness: 1.0 (never clearly faster)")
 	awareness.value = 0.0
 	_check_near(creature.get_chase_speed() / echo.max_speed, 0.95, 0.001, "Challenge, no awareness: 0.95")
+	# The leash: with the slower Guardian standing, the pair flees at his speed.
+	var guardian: Player = _add_player(GUARDIAN_SCENE, Vector3(3.0, 0.0, 5.0))
+	await _frames(2)
+	_check_near(creature.get_chase_speed() / guardian.max_speed, 0.95, 0.001,
+		"chasing the Echo with the Guardian standing: measured against his (slower) speed")
+	guardian.health.down(PlayerHealth.Cause.CREATURE)
+	_check_near(creature.get_chase_speed() / echo.max_speed, 0.95, 0.001, "the Guardian downed: the Echo's own speed again")
 
 
 func _test_spot_and_alert() -> void:
@@ -126,6 +135,52 @@ func _test_search_after_losing_sight() -> void:
 	echo.reset_physics_interpolation()
 	await _seconds(1.0)
 	_check(creature.state == Creature.State.SEARCH, "losing sight (the wall in between) starts a SEARCH")
+
+
+func _test_unkillable_gives_up() -> void:
+	print("- an unkillable creature gives up a pursuit, rests, then hunts again")
+	await _build_arena()
+	var echo: Player = _add_player(ECHO_SCENE, Vector3(8.0, 0.0, 7.0))
+	var scene_copy := UNKILLABLE_SCENE.instantiate() as Creature
+	_check(scene_copy.calm_pursuit_limit > 0.0 and scene_copy.challenge_pursuit_limit >= scene_copy.calm_pursuit_limit,
+		"the unkillable scene has a pursuit limit in both modes (Calm %.0f s, Challenge %.0f s)" % [
+			scene_copy.calm_pursuit_limit, scene_copy.challenge_pursuit_limit])
+	scene_copy.free()
+	var creature := UNKILLABLE_SCENE.instantiate() as Creature
+	creature.position = Vector3(4.5, 0.0, 7.0)
+	creature.calm_pursuit_limit = 3.0
+	creature.give_up_rest_time = 2.0
+	# It must keep the Echo in sight without hurting her (no lunge, no touch).
+	creature.lunge_enabled = false
+	_arena.add_child(creature)
+	(creature.get_node("Hitbox") as Area3D).monitoring = false
+	var normal: Creature = _add_creature(Vector3(4.5, 0.0, 4.0))
+	normal.lunge_enabled = false
+	(normal.get_node("Hitbox") as Area3D).monitoring = false
+	var gave_up: Array[bool] = [false]
+	creature.gave_up.connect(func() -> void: gave_up[0] = true)
+	await _frames(2)
+	creature.hunt(echo)
+	normal.hunt(echo)
+	await _seconds(2.5)
+	_check(creature.state == Creature.State.CHASE, "still chasing before its limit (%s)" % creature.get_state_name())
+	await _seconds(1.0)
+	_check(gave_up[0] and creature.state == Creature.State.WANDER and creature.is_resting(),
+		"gave up at its limit with the Echo in plain sight: wandering, resting (%s)" % creature.get_state_name())
+	_check(normal.state == Creature.State.CHASE, "a normal creature (no limit) keeps chasing")
+	creature.hear_pulse(echo.global_position, echo)
+	creature.hear_noise(echo.global_position, 100.0)
+	await _seconds(0.3)
+	_check(creature.state == Creature.State.WANDER, "while resting it ignores a pulse and the sword's noise next to it")
+	var echo_distance: float = Creature._flat_distance(creature.global_position, echo.global_position)
+	await _seconds(1.5)
+	_check(Creature._flat_distance(creature.global_position, echo.global_position) > echo_distance,
+		"while resting it swims away from the Echo")
+	# Rest over and the Echo close and in sight: a new pursuit.
+	echo.global_position = creature.global_position + Vector3(2.0, 0.0, 0.0)
+	echo.reset_physics_interpolation()
+	await _seconds(0.8)
+	_check(creature.state == Creature.State.CHASE and not creature.is_resting(), "after the rest it hunts again (%s)" % creature.get_state_name())
 
 
 func _test_navigation_round_the_wall() -> void:

@@ -8,8 +8,9 @@ extends Node3D
 ## partner mending, Depth Awareness and the audio. Two test shards and a test
 ## exit give the goal arrow something to point at (walk onto a shard to take it).
 ## Keys: C = rock cut-away on / off, T = rock height normal / tall, M = Calm /
-## Challenge, I = physics interpolation on / off, R = back to the start
-## (revived, shards back). Killed creatures come back after respawn_time, on
+## Challenge, I = physics interpolation on / off, F = freeze and hide every
+## creature (to try mending and the other partner features calmly), R = back
+## to the start (revived, shards back). Killed creatures come back after respawn_time, on
 ## the Creature marker furthest from the players. Oxygen does not drain here.
 ## "-- shots <folder>" saves pictures, prints checks and the FPS benchmark
 ## (CoreTestShots).
@@ -38,6 +39,8 @@ const CREATURES: Array[Array] = [
 ## Test shards (room index, marker) and the test exit (room index, marker).
 const SHARDS: Array[Array] = [[1, "Shard1"], [2, "Shard1"]]
 const EXIT: Array = [2, "Goal"]
+## The groups a frozen creature leaves (key F).
+const FROZEN_GROUPS: Array[String] = ["creatures", "sonar_targets", "cutaway_targets"]
 ## Opening bits as in RoomGrid.Side: north, east, south, west.
 const SIDES: Array[int] = [1, 2, 4, 8]
 const SIDE_STEPS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
@@ -95,6 +98,9 @@ var room_markers: Array[Dictionary] = []
 ## Seconds the last navigation bake took.
 var bake_seconds: float = 0.0
 var challenge_mode: bool = false
+## Key F: every creature frozen, hidden and out of every group (nothing sees it).
+var creatures_frozen: bool = false
+var _frozen: Array[Creature] = []
 var _cut_radius: float = 0.0
 var _tall: bool = false
 var _rocks: Node3D
@@ -151,12 +157,51 @@ func _unhandled_input(event: InputEvent) -> void:
 			set_challenge_mode(not challenge_mode)
 		KEY_I:
 			get_tree().physics_interpolation = not get_tree().physics_interpolation
+		KEY_F:
+			set_creatures_frozen(not creatures_frozen)
 		KEY_R:
 			reset_players()
 
 
 func set_cutaway(enabled: bool) -> void:
 	cutaway.radius = _cut_radius if enabled else 0.0
+
+
+## Freezes and hides every creature (it forgets the players and leaves its
+## groups, so mending, the music and the sonar ignore it), or brings them back.
+func set_creatures_frozen(frozen: bool) -> void:
+	creatures_frozen = frozen
+	if frozen:
+		for node: Node in get_tree().get_nodes_in_group("creatures"):
+			_freeze(node as Creature)
+		return
+	for creature: Creature in _frozen:
+		if not is_instance_valid(creature):
+			continue
+		for group: String in FROZEN_GROUPS:
+			creature.add_to_group(group)
+		creature.visible = true
+		creature.process_mode = Node.PROCESS_MODE_INHERIT
+		_set_sounds_paused(creature, false)
+		creature.reset_physics_interpolation()
+	_frozen.clear()
+
+
+func _freeze(creature: Creature) -> void:
+	creature.forget_players()
+	creature.velocity = Vector3.ZERO
+	for group: String in FROZEN_GROUPS:
+		creature.remove_from_group(group)
+	creature.visible = false
+	# Disabled: no processing, and its bodies leave the physics world (no touch).
+	creature.process_mode = Node.PROCESS_MODE_DISABLED
+	_set_sounds_paused(creature, true)
+	_frozen.append(creature)
+
+
+func _set_sounds_paused(node: Node, paused: bool) -> void:
+	for child: Node in node.find_children("*", "AudioStreamPlayer3D", true, false):
+		(child as AudioStreamPlayer3D).stream_paused = paused
 
 
 ## Calm / Challenge for every node that has values per mode.
@@ -208,6 +253,8 @@ func spawn_creature(room: int, marker: String, unkillable: bool) -> Creature:
 	add_child(creature)
 	creature.set_challenge_mode(challenge_mode)
 	creature.killed.connect(_on_creature_killed.bind(room, unkillable))
+	if creatures_frozen:
+		_freeze.call_deferred(creature)
 	return creature
 
 
@@ -220,13 +267,14 @@ func _process(delta: float) -> void:
 	_update_shards()
 	var pulse := echo.get_node("Pulse") as PulseAbility
 	_info.text = "CORE TEST   %d FPS\n" % int(Engine.get_frames_per_second()) \
-		+ "[C] cut-away: %s   [T] rocks: %s   [M] mode: %s   [I] interpolation: %s   [R] restart\n" % [
+		+ "[C] cut-away: %s   [T] rocks: %s   [M] mode: %s   [I] interpolation: %s   [F] creatures: %s   [R] restart\n" % [
 			"ON" if cutaway.radius > 0.0 else "off", "TALL" if _tall else "normal",
-			"Challenge" if challenge_mode else "Calm", "ON" if get_tree().physics_interpolation else "off"] \
+			"Challenge" if challenge_mode else "Calm", "ON" if get_tree().physics_interpolation else "off",
+			"FROZEN" if creatures_frozen else "on"] \
 		+ "%s      %s      pulse %s      awareness %d%%%s\n" % [_status(echo), _status(guardian),
 			"ready" if pulse.is_ready() else "%.1f s" % pulse.cooldown_left, roundi(awareness.get_ratio() * 100.0),
 			"      MENDING" if mending.is_mending else ""] \
-		+ "creatures: %s      shards left: %d\n" % [_creature_states(), get_tree().get_nodes_in_group("echo_shards").size()] \
+		+ "creatures: %s      shards left: %d\n" % ["frozen" if creatures_frozen else _creature_states(), get_tree().get_nodes_in_group("echo_shards").size()] \
 		+ "Echo: WASD + Space (pulse)   Guardian: arrows + Enter (sword)   or two gamepads\n" \
 		+ "Hold the action button next to a downed partner to revive; a downed Echo's button sends a distress pulse"
 

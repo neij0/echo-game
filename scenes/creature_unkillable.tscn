@@ -5,6 +5,8 @@
 [node name="CreatureUnkillable" instance=ExtResource("1_base")]
 unkillable = true
 stagger_scale = 0.35
+calm_pursuit_limit = 12.0
+challenge_pursuit_limit = 18.0
 look = 1
 body_radius = 0.44
 body_color = Color(0.55, 0.3, 0.95, 1)

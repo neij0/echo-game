@@ -333,6 +333,17 @@ Updated with every step, so a new session knows where the conversion stands.
   at level scale (Phase B), where most of the cost will be.
 - [x] `proto3d/` deleted.
 - [ ] HUD glow over the 3D world (risk 4): moved to Phase B, where the HUD is ported.
+- [x] Play-test fix: the unkillable creature could not be escaped. The 3D sight rays were
+  checked against the 2D floor plans (519 random pairs in the three rooms: none sees through
+  rock, none is blocked in the open) and the chase / search / give-up rules are the 2D ones.
+  What held it on the players: its SEARCH runs to where they were heading and finds them
+  again, each pulse lures it back, and its chase speed was measured against the Echo while
+  the leash holds her to the slower Guardian (Challenge, full awareness: faster than the
+  pair). Fixes: the chase speed uses the slower of the pair while both stand, and a pursuit
+  limit (unkillable: 12 s Calm / 18 s Challenge of CHASE + SEARCH, then 6 s of rest). A
+  fleeing-bot measurement (both players on real input through the maze) went from 14-45 s
+  or never to at most the limit plus the time the pulses lure it back. Core test: F freezes
+  and hides every creature.
 
 ### Left for Phase B, noted while porting
 - **Scenes that inherit `scenes/creature.tscn`** (light hunter, sentinel, the placeholder

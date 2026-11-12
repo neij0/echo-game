@@ -50,14 +50,16 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   back in Phase B. **`tools/check_scripts.tscn`** lists every script outside `legacy2d/` that
   does not parse; it must stay at zero.
 - **Tests on this branch**: `tools/test_core.tscn` (headless: creature senses, chase speeds,
-  lunge, alerting, search, navigation round a wall, sword reveal rules + Exposed kill, close
+  leash-aware chase speed, lunge, alerting, search, the unkillable creature giving up,
+  navigation round a wall, sword reveal rules + Exposed kill, close
   sense, distress pulse, sonar blocked by rock, revive decay, mending, goal arrow):
   `godot --headless --path . --fixed-fps 60 res://tools/test_core.tscn`; `tools/test_save.gd`;
   `tools/check_scripts.tscn`.
 - **Play-test stage**: `tools/core_test.tscn` (F6): three real Ocean rooms with the real
   classes above, four creatures (one unkillable) that come back after being killed, two test
   shards + a test exit for the goal arrow. Keys: C = cut-away, T = rock height normal / tall,
-  M = Calm / Challenge, I = physics interpolation, R = back to the start. `-- shots <folder>`
+  M = Calm / Challenge, I = physics interpolation, F = freeze + hide every creature (to try
+  mending and the partner features calmly), R = back to the start. `-- shots <folder>`
   saves pictures and runs the FPS benchmark (1080p + 720p: average, render CPU / GPU per
   frame, pulse ray time, frames over 16.7 ms).
 
@@ -206,7 +208,12 @@ After the 3rd stage of a world: a story text screen, then the Journey screen.
   SEARCH. They path with a navigation mesh the `LevelBuilder` bakes from every rock (doorways,
   corners; the closed arena door is an obstacle until it opens). Chase speed = the chased
   player's `max_speed` x a ratio per mode (Calm 0.82-0.88, Challenge 0.95-1.0, the higher end
-  at full Depth Awareness), so they are never clearly faster. Danger comes from the lunge
+  at full Depth Awareness), so they are never clearly faster; the players are leashed, so
+  while the partner stands the slower `max_speed` of the two counts (3D branch).
+  **Pursuit limit** (3D branch, `calm_pursuit_limit` / `challenge_pursuit_limit`, 0 = never;
+  the unkillable creature: 12 s / 18 s): after that much CHASE + SEARCH in a row it gives up
+  (`gave_up`) and rests `give_up_rest_time` (6 s: ignores sight, pulses, noise and alerts,
+  swims away), so a creature the players cannot kill can always be escaped. Danger comes from the lunge
   (within ~120 px: 0.3 s telegraphed wind-up with flaring eyes + sound, burst, recovery).
   Losing sight: go where the player was heading and SEARCH there a few seconds. Entering
   CHASE alerts creatures within `alert_radius` (they INVESTIGATE towards it).

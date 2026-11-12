@@ -36,6 +36,8 @@ signal state_changed(old_state: State, new_state: State)
 signal lunge_started
 ## Emitted when a pulse front reaches it in line of sight (its sonar echo).
 signal pinged
+## Emitted when it gives up a pursuit at its pursuit limit (it rests a while).
+signal gave_up
 
 ## Optional: if empty, the first node in the "depth_awareness" group is used.
 @export var awareness: DepthAwareness
@@ -89,6 +91,18 @@ signal pinged
 ## After a search ends, seconds before it can spot a player by sight again
 ## (a nearby pulse still gives the player away).
 @export var respot_cooldown: float = 1.0
+## Gives up a pursuit after this many seconds of CHASE + SEARCH in a row (re-
+## spotting does not reset it; wandering lets it recover). 0 = never gives up.
+## Set on creatures the players cannot kill, so they can always escape them.
+@export var calm_pursuit_limit: float = 0.0
+@export var challenge_pursuit_limit: float = 0.0
+## Seconds of pursuit recovered per second of wandering.
+@export var pursuit_recovery_rate: float = 1.0
+## After giving up: seconds it ignores the players (no spotting by sight or
+## pulse, no investigating) while it swims away.
+@export var give_up_rest_time: float = 6.0
+## While resting it swims this far away from the nearest player.
+@export var give_up_retreat_distance: float = 8.0
 
 @export_group("Search")
 ## After losing sight: goes to the last seen position plus the player's
@@ -228,6 +242,9 @@ var _path_index: int = 0
 var _path_target: Vector3
 var _path_refresh_left: float = 0.0
 var _respot_left: float = 0.0
+## Seconds of the current pursuit (CHASE + SEARCH) and of the rest after giving up.
+var _pursuit_time: float = 0.0
+var _rest_left: float = 0.0
 var _spot_timer: float = 0.0
 var health: int = 0
 var _stagger_left: float = 0.0
@@ -281,6 +298,8 @@ func _ready() -> void:
 
 ## Called (via the "creatures" group) by StageManager on every pulse.
 func hear_pulse(origin: Vector3, player: Player) -> void:
+	if is_resting():
+		return
 	var distance: float = _flat_distance(global_position, origin)
 	if player and distance <= pulse_spot_distance and _can_chase(player):
 		_spot(player)
@@ -292,7 +311,7 @@ func hear_pulse(origin: Vector3, player: Player) -> void:
 
 ## Called (via the "creatures" group) by the Guardian's sword on every swing.
 func hear_noise(origin: Vector3, radius: float) -> void:
-	if _dying or state == State.CHASE or _flat_distance(global_position, origin) > radius:
+	if _dying or is_resting() or state == State.CHASE or _flat_distance(global_position, origin) > radius:
 		return
 	_investigate(origin)
 
@@ -300,7 +319,7 @@ func hear_noise(origin: Vector3, radius: float) -> void:
 ## Called (via the "creatures" group) when another creature starts a chase:
 ## creatures within its alert_radius investigate towards it.
 func hear_alert(source: Creature) -> void:
-	if source == self or _dying or not responds_to_alerts or state == State.CHASE:
+	if source == self or _dying or is_resting() or not responds_to_alerts or state == State.CHASE:
 		return
 	if _flat_distance(global_position, source.global_position) > source.alert_radius:
 		return
@@ -494,6 +513,63 @@ func _spot(player: Player) -> void:
 		get_tree().call_group("creatures", "hear_alert", self)
 
 
+## True while it rests after giving up a pursuit (it ignores the players).
+func is_resting() -> bool:
+	return _rest_left > 0.0
+
+
+## Seconds of CHASE + SEARCH before it gives up (0 = never) in this mode.
+func get_pursuit_limit() -> float:
+	return challenge_pursuit_limit if challenge_mode else calm_pursuit_limit
+
+
+## Counts the pursuit, and gives it up at the limit (never while frenzied).
+func _update_pursuit(delta: float) -> void:
+	_rest_left = maxf(_rest_left - delta, 0.0)
+	if state == State.CHASE or state == State.SEARCH:
+		_pursuit_time += delta
+		var limit: float = get_pursuit_limit()
+		if limit > 0.0 and _pursuit_time >= limit and not is_frenzied:
+			_give_up()
+	elif state == State.WANDER:
+		_pursuit_time = maxf(_pursuit_time - delta * pursuit_recovery_rate, 0.0)
+
+
+## Breaks off the pursuit: rests for give_up_rest_time, swimming away from
+## the nearest player.
+func _give_up() -> void:
+	forget_players()
+	_pursuit_time = 0.0
+	_rest_left = give_up_rest_time
+	_respot_left = give_up_rest_time
+	var nearest: Player = null
+	var nearest_distance: float = INF
+	for player: Player in Players.all(get_tree()):
+		var distance: float = _flat_distance(global_position, player.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = player
+	if nearest:
+		var away: Vector3 = _flat(global_position - nearest.global_position).normalized()
+		_set_home(global_position + away * give_up_retreat_distance)
+		_pick_wander_target()
+	gave_up.emit()
+
+
+## Drops whatever it was doing (chase, search, investigation) and wanders
+## where it is.
+func forget_players() -> void:
+	_chased = null
+	_chase_in_sight = false
+	_end_lunge()
+	state = State.WANDER
+	_pause_left = 0.0
+	_reset_detour()
+	_set_home(global_position)
+	_reset_path()
+	_pick_wander_target()
+
+
 ## Lost sight: go to where the player was heading and SEARCH there.
 func _lose_track() -> void:
 	var last_known: Vector3 = _last_seen + _last_seen_velocity * search_lead_time
@@ -545,7 +621,7 @@ func _can_chase(player: Player) -> bool:
 func _look_for_players(delta: float) -> void:
 	_respot_left = maxf(_respot_left - delta, 0.0)
 	_spot_timer -= delta
-	if state == State.CHASE or _respot_left > 0.0 or _spot_timer > 0.0:
+	if state == State.CHASE or is_resting() or _respot_left > 0.0 or _spot_timer > 0.0:
 		return
 	_spot_timer = spot_check_interval
 	# Spot the nearest player that is close, in line of sight and not downed.
@@ -713,6 +789,8 @@ func get_state_name() -> String:
 		state_name += " +" + String(Lunge.keys()[lunge_phase])
 	if _detour_left > 0.0:
 		state_name += " +DETOUR"
+	if is_resting():
+		state_name += " +RESTING"
 	return state_name
 
 
@@ -729,9 +807,17 @@ func get_chase_ratio() -> float:
 	return lerpf(calm_chase_ratio_min, calm_chase_ratio_max, awareness_ratio)
 
 
-## Speed while chasing (and while rushing to the last seen position).
+## Speed while chasing (and while rushing to the last seen position). The
+## players are leashed together, so a pair flees at the slower one's speed:
+## the chase is measured against that (else it would outrun the Echo held back
+## by the Guardian).
 func get_chase_speed() -> float:
-	var player_speed: float = _chased.max_speed if is_instance_valid(_chased) else reference_player_speed
+	var player_speed: float = reference_player_speed
+	if is_instance_valid(_chased):
+		player_speed = _chased.max_speed
+		var partner: Player = _chased.get_partner()
+		if partner and not partner.health.is_downed:
+			player_speed = minf(player_speed, partner.max_speed)
 	return player_speed * get_chase_ratio()
 
 
@@ -748,6 +834,7 @@ func _physics_process(delta: float) -> void:
 		_last_state = state
 		state_changes += 1
 		state_changed.emit(old_state, state)
+	_update_pursuit(delta)
 	if _stagger_left > 0.0:
 		# Staggered: no steering, just slide out the knockback.
 		_stagger_left -= delta
