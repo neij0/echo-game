@@ -44,8 +44,8 @@ extends Camera3D
 @export_group("Shake")
 @export var shake_enabled: bool = true
 ## Maximum offset in world units at the start of the shake.
-@export var shake_strength: float = 0.06
-@export var shake_duration: float = 0.15
+@export var shake_strength: float = 0.09
+@export var shake_duration: float = 0.22
 
 var _focus: Vector3 = Vector3.ZERO
 var _yaw: float = 0.0

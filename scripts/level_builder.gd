@@ -55,10 +55,6 @@ const FLOOR_SHADER: Shader = preload("res://shaders/floor_surface.gdshader")
 ## The outer rock: the rock colour darkened by this share (it is never lit by
 ## the sonar, only by lights near the level's edge).
 @export_range(0.0, 1.0) var outer_rock_darken: float = 0.25
-@export var sonar_color: Color = Color(0.25, 0.85, 1.0)
-## How strongly the pulse lights flat ground and rock.
-@export var floor_fill_energy: float = 0.07
-@export var rock_fill_energy: float = 0.24
 ## Corners sharper than this get a hard edge (and a sonar line).
 @export var rock_smooth_degrees: float = 40.0
 ## Rock outlines are split into pieces this long (pixels), so the height can
@@ -248,12 +244,13 @@ func _ready() -> void:
 	# mesh for up to ~5 frames after a build.
 	NavigationServer3D.map_set_use_async_iterations(_large_map, false)
 	NavigationServer3D.map_set_use_async_iterations(get_world_3d().navigation_map, false)
-	_floor_material = _surface_material(FLOOR_SHADER, floor_color, floor_fill_energy)
-	_rock_material = _surface_material(ROCK_SHADER, rock_color, rock_fill_energy)
+	_floor_material = _surface_material(FLOOR_SHADER, floor_color)
+	_rock_material = _surface_material(ROCK_SHADER, rock_color)
 	_rock_material.set_shader_parameter("cut_enabled", true)
-	_outer_material = _surface_material(ROCK_SHADER, rock_color.darkened(outer_rock_darken), 0.0)
+	_outer_material = _surface_material(ROCK_SHADER, rock_color.darkened(outer_rock_darken))
 	_outer_material.set_shader_parameter("cut_enabled", true)
-	_outer_material.set_shader_parameter("sonar_color", Color.BLACK)
+	# The pulse never shows the outer rock round the level.
+	_outer_material.set_shader_parameter("pulse_share", 0.0)
 
 
 func _exit_tree() -> void:
@@ -711,12 +708,10 @@ func _register_materials() -> void:
 			darkness.register_material(material)
 
 
-func _surface_material(shader: Shader, color: Color, fill_energy: float) -> ShaderMaterial:
+func _surface_material(shader: Shader, color: Color) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = shader
 	material.set_shader_parameter("base_color", color)
-	material.set_shader_parameter("sonar_color", sonar_color)
-	material.set_shader_parameter("fill_energy", fill_energy)
 	return material
 
 

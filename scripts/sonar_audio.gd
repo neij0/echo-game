@@ -1,7 +1,8 @@
 class_name SonarAudio
 extends Node
-## Sonar sounds: a deep ping on each pulse, and a soft tick when the wave front
-## hits rock (rate-limited, quieter for far rock). Listens to every player
+## Sonar sounds: a deep ping on each pulse with a low pressure thump under it,
+## and a soft tick when the wave front hits rock (rate-limited, quieter for far
+## rock). Listens to every player
 ## in the "players" group and to the Sonar.
 
 @export var sonar: Sonar
@@ -13,6 +14,12 @@ extends Node
 @export var ping_pitch_jitter: float = 0.03
 ## How many pings can ring at once (the echo tail is longer than the cooldown).
 @export var ping_polyphony: int = 3
+
+@export_group("Thump")
+## A deep pressure thump played with the ping (null = none).
+@export var thump_stream: AudioStream
+@export var thump_volume_db: float = -3.0
+@export var thump_pitch_jitter: float = 0.04
 
 @export_group("Tick")
 @export var tick_stream: AudioStream
@@ -26,6 +33,7 @@ extends Node
 @export var tick_polyphony: int = 4
 
 var _ping_player: AudioStreamPlayer
+var _thump_player: AudioStreamPlayer
 var _tick_player: AudioStreamPlayer
 var _tick_cooldown: float = 0.0
 ## Players whose pulses already ping (instance ids).
@@ -34,6 +42,7 @@ var _heard: Dictionary = {}
 
 func _ready() -> void:
 	_ping_player = _make_player(ping_stream, ping_polyphony)
+	_thump_player = _make_player(thump_stream, ping_polyphony)
 	_tick_player = _make_player(tick_stream, tick_polyphony)
 	if sonar:
 		sonar.edge_hit.connect(_on_edge_hit)
@@ -57,6 +66,10 @@ func _make_player(stream: AudioStream, polyphony: int) -> AudioStreamPlayer:
 
 
 func _on_pulse_emitted(_origin: Vector3) -> void:
+	if thump_stream:
+		_thump_player.volume_db = thump_volume_db
+		_thump_player.pitch_scale = 1.0 + randf_range(-thump_pitch_jitter, thump_pitch_jitter)
+		_thump_player.play()
 	if ping_stream == null:
 		return
 	_ping_player.volume_db = ping_volume_db

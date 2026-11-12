@@ -199,6 +199,30 @@ plus or minus half.
      something moves fast. Darkness rules hold: seen only where lit or in a pulse's
      afterglow. Cheap: a trail texture sampled by the floor shader; FPS cost measured.
 
+### Look, assets and combat plan (decided after the Phase B sonar play-test)
+The order of the next phases' art and feel work. Blender:
+`C:\Program Files\Blender Foundation\Blender 5.2\blender.exe` (run headless with Python
+scripts in `tools/blender/`).
+1. **Look-dev room for the Ocean** (the start of Phase C): one room that settles the
+   world's look before anything is mass-produced.
+   - Real CC0 textures for sand and rock from Poly Haven / ambientCG (licence file
+     beside each, listed in a `LICENSES.md`), used by the floor and rock shaders.
+   - A natural rock kit of 10-20 pieces (boulders, slabs, columns, overhangs), made by
+     Blender scripts or taken from Poly Haven; the room walls are assembled from it
+     along the floor-plan outlines (collision stays the upright walls of
+     `RockMesher.add_colliders`).
+   - Shader detail on rock: cracks, strata, moss, barnacles.
+   - Depth colour and fog (shallow -> deep per stage), checked against the world
+     ambient and the pulse.
+2. **The Echo and the Guardian**: CC0 bases edited in Blender, Mixamo for the
+   Guardian's rig and animations; a silhouette test (both must read in the dark, by
+   shape and glow alone).
+3. **Creatures**: clearly different silhouettes per type; procedural animation
+   (springs, chains, sine motion) plus key animations made by Blender scripts.
+4. **Combat-feel pass**: anticipation, hit-stop, flash, knockback, particles, layered
+   sound; creature hit reactions, armour cracks and deaths.
+5. **Bosses**: full rigs, intro and death scenes, arenas that change with the phases.
+
 ### Phase C — asset pipeline and characters (8-12 days)
 - `tools/blender/`: Blender 5.2 run headless with Python (it is installed) to import a
   source model, clean it, apply the shared dark material, and export `.glb`.
@@ -429,11 +453,13 @@ Updated with every step, so a new session knows where the conversion stands.
   - Measured after these: about 440 FPS on the largest level, GPU 0.9 ms. A single
     frame of ~30 ms sometimes shows on the benchmark's first pass (not the second);
     cause not found yet, render time per frame is unchanged.
-- [ ] **Sonar style choice** (third play-test, waiting for the choice): the neon
-  outlines read as lines drawn over the 3D game. Three switchable looks in the level
-  test (key V): A light wave, B point cloud, C soft outlines (see CLAUDE.md). All keep
-  the same rules, rock blocking and creature echoes; same cost (about 630 FPS on the
-  largest level, GPU 0.65 ms). The style not chosen is removed afterwards.
+- [x] **Sonar style**: the neon outlines read as lines drawn over the 3D game. Three
+  looks were play-tested (A light wave, B point cloud, C soft outlines; same cost);
+  **A was chosen**, B and C and the edge pass were removed. A then got a soft bright
+  front band, soft shadows (penumbra, never black) and layered impact: flash, ripple,
+  marine snow pushed out, deep thump (sound waiting for approval), camera shake.
+  About 640 FPS on the largest level (GPU 0.78 ms, +0.13 ms for the new layers).
+- [x] Brightness: the 70 % look is the new 100 % (a second time; settings version 3).
 - [x] The Echo stirs the sand only lightly (no furrow) when she swims fast or low.
 - [ ] Next: `StageManager` (level fades, retries, counts, the full `Hud`), `game.tscn`
   running in 3D; lockdown, collapse escape, arena door, bubble vents, the placeholder

@@ -3,7 +3,7 @@ shader_type spatial;
 // with faint ripples and the sand trails (furrows behind players and
 // creatures, stirred puffs). A furrow is only a darker groove: it shows where
 // something lights the sand (a player's light, a lit coral, the pulse's
-// afterglow, which shows it like any other sand). It never tilts the
+// light, which shows it like any other sand). It never tilts the
 // surface's normal: the sonar's outline pass finds creases in the normal
 // buffer, and would draw glowing lines along every groove. Plus the sonar in
 // world space.
@@ -19,9 +19,6 @@ uniform float grain_strength = 0.18;
 // they darken the troughs.
 uniform float ripple_spacing = 0.55;
 uniform float ripple_strength = 0.08;
-uniform vec3 sonar_color : source_color = vec3(0.25, 0.85, 1.0);
-uniform float front_energy = 0.9;
-uniform float fill_energy = 0.07;
 // Furrows: how much darker the groove is.
 uniform float furrow_darken = 0.6;
 // Stirred sand: a little lighter for a moment.
@@ -56,24 +53,14 @@ void fragment() {
 
 	vec4 trail = trail_at(world_pos);
 	vec3 albedo = base_color * (1.0 + (grain - 0.5) * 2.0 * grain_strength) * (1.0 - ripple * ripple_strength);
-	// The furrow's shade also shades the pulse's afterglow, so the pulse
-	// shows the groove as it is.
 	float furrow_shade = (1.0 - trail.x * furrow_darken) * (1.0 + trail.y * stirred_lighten);
 	albedo *= furrow_shade;
 	ALBEDO = albedo;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.05;
 
-	// The normal stays straight up (see the top).
-	vec3 sonar = sonar_at(world_pos, vec3(0.0, 1.0, 0.0));
-	vec3 up = vec3(0.0, 1.0, 0.0);
-	vec3 pulse = vec3(0.0);
-	if (sonar_style == 0) {
-		pulse = albedo * wave_color * wave_energy * sonar_light(world_pos, up);
-	} else if (sonar_style == 1) {
-		pulse = sonar_color * (sonar_dots(world_pos, up) * dot_energy + sonar.z * fill_energy * dot_fill_share * furrow_shade);
-	} else {
-		pulse = sonar_color * (sonar.x * front_energy + sonar.z * fill_energy * furrow_shade);
-	}
+	// The normal stays straight up (see the top). The pulse's light takes the
+	// sand's own shade, so a furrow shows in it as a darker groove.
+	vec3 pulse = albedo * wave_color * wave_energy * sonar_light(world_pos, vec3(0.0, 1.0, 0.0));
 	EMISSION = pulse + world_ambient(world_pos, albedo);
 }

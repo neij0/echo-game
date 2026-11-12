@@ -80,10 +80,6 @@ const OPPOSITE: Array[int] = [4, 8, 1, 2]
 @export_group("Look")
 @export var floor_color: Color = Color(0.15, 0.19, 0.25)
 @export var rock_color: Color = Color(0.24, 0.29, 0.36)
-@export var sonar_color: Color = Color(0.25, 0.85, 1.0)
-## How strongly the pulse lights flat ground compared with rock.
-@export var floor_fill_energy: float = 0.07
-@export var rock_fill_energy: float = 0.24
 
 var sonar: Sonar
 var camera: SharedCamera
@@ -343,12 +339,10 @@ func _add(node: Node, node_name: String) -> Node:
 	return node
 
 
-func _surface_material(color: Color, fill_energy: float) -> ShaderMaterial:
+func _surface_material(color: Color) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = SURFACE_SHADER
 	material.set_shader_parameter("base_color", color)
-	material.set_shader_parameter("sonar_color", sonar_color)
-	material.set_shader_parameter("fill_energy", fill_energy)
 	sonar.register_material(material)
 	var darkness: Darkness = Darkness.find(get_tree())
 	if darkness:
@@ -358,8 +352,8 @@ func _surface_material(color: Color, fill_energy: float) -> ShaderMaterial:
 
 ## Builds the rooms of PLACEMENTS from their 2D scenes.
 func _build_rooms() -> void:
-	var floor_material: ShaderMaterial = _surface_material(floor_color, floor_fill_energy)
-	_rock_material = _surface_material(rock_color, rock_fill_energy)
+	var floor_material: ShaderMaterial = _surface_material(floor_color)
+	_rock_material = _surface_material(rock_color)
 	# Only rock is cut away, never the floor.
 	cutaway.register_material(_rock_material)
 	var room_units: float = room_size_px * units_per_pixel

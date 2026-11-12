@@ -17,12 +17,12 @@ extends WorldEnvironment
 @export_group("Ambient")
 ## The far ambient on everything (characters, creatures): near zero on purpose.
 @export var ambient_color: Color = Color(0.1, 0.18, 0.32)
-@export var ambient_energy: float = 0.042
+@export var ambient_energy: float = 0.0294
 
 @export_group("World Ambient")
 ## Set from the WorldConfig (world_ambient_*) when a world is applied.
 @export var world_color: Color = Color(0.14, 0.26, 0.62)
-@export var world_energy: float = 0.6
+@export var world_energy: float = 0.42
 ## Distance from the camera's focus (world units, on the floor) where the fog
 ## starts / where the world ambient has sunk into darkness.
 @export var world_fog_begin: float = 9.0

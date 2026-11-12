@@ -33,7 +33,7 @@ rim_energy = 1.1
 [node name="PlayerLight" parent="." index="2"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
 radius = 2.2
-base_energy = 1.12
+base_energy = 0.784
 light_color_tint = Color(0.55, 0.7, 1, 1)
 shadows = false
 

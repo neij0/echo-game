@@ -1,6 +1,7 @@
 shader_type spatial;
 // Marine snow: tiny camera-facing dots, almost invisible in the dark, brighter
-// inside a player's light and flashing as the sonar wave passes through them.
+// inside a player's light, flashing as the sonar wave passes through them and
+// pushed outward by its front (then drifting back).
 // Each one sways and twinkles on its own (from its particle index).
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled, shadows_disabled;
 
@@ -26,6 +27,8 @@ varying float flash;
 void vertex() {
 	float seed = fract(float(INSTANCE_ID) * 0.61803398875);
 	vec3 center = MODEL_MATRIX[3].xyz;
+	vec3 home = center;
+	center += sonar_push(home);
 	center.x += sin((TIME * sway_speed + seed) * TAU) * sway_amount;
 	center.z += cos((TIME * sway_speed * 0.8 + seed * 3.7) * TAU) * sway_amount * 0.6;
 	mat4 facing = mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], vec4(center, 1.0));
@@ -39,7 +42,7 @@ void vertex() {
 		float reach = max(1.0 - distance(center, light_pos[i]) / max(light_range[i], 0.001), 0.0);
 		glow += light_gain[i] * reach * reach;
 	}
-	flash = sonar_at(center, vec3(0.0, 1.0, 0.0)).x * sonar_gain;
+	flash = sonar_front(home) * sonar_gain;
 }
 
 void fragment() {

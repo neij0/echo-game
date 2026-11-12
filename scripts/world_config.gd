@@ -64,7 +64,7 @@ extends Resource
 ## layout stays dark (the pulse shows it). Each stage scales the energy
 ## (StageDefinition.world_ambient_scale); the Brightness option too.
 @export var world_ambient_color: Color = Color(0.14, 0.26, 0.62)
-@export var world_ambient_energy: float = 0.6
+@export var world_ambient_energy: float = 0.42
 @export var world_ambient_fog_begin: float = 9.0
 @export var world_ambient_fog_end: float = 22.0
 

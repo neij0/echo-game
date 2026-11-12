@@ -1,10 +1,9 @@
 shader_type spatial;
-// Room surfaces (floor, rocks, walls): dark lit rock with a little grain, the
-// world's faint ambient (world_ambient.gdshaderinc), plus
-// the sonar in world space (the wave front crossing the surface, a faint
-// afterglow shaded towards the pulse, contour lines on steep faces) and the
-// cut-away (rock between the camera and a character is removed; turned on
-// per material with cut_enabled: the floor never is).
+// Room surfaces (rocks, walls, the outer rock): dark lit rock with a little
+// grain, the world's faint ambient (world_ambient.gdshaderinc), the pulse's
+// wave of light (sonar_light: shaded from its origin, soft shadows behind
+// rock) and the cut-away (rock between the camera and a character is removed;
+// turned on per material with cut_enabled).
 
 #include "res://shaders/sonar.gdshaderinc"
 #include "res://shaders/cutaway.gdshaderinc"
@@ -13,12 +12,9 @@ shader_type spatial;
 uniform vec3 base_color : source_color = vec3(0.1, 0.12, 0.16);
 uniform float grain_scale = 1.6;
 uniform float grain_strength = 0.3;
-uniform vec3 sonar_color : source_color = vec3(0.25, 0.85, 1.0);
-uniform float front_energy = 0.9;
-uniform float fill_energy = 0.22;
-uniform float contour_spacing = 0.5;
-uniform float contour_width = 0.035;
-uniform float contour_energy = 0.5;
+// Share of the pulse's light this surface takes (0 = the outer rock round the
+// level, which the pulse never shows).
+uniform float pulse_share = 1.0;
 uniform bool cut_enabled = false;
 uniform vec3 cut_rim_color : source_color = vec3(0.25, 0.6, 0.8);
 uniform float cut_rim_energy = 0.35;
@@ -64,17 +60,6 @@ void fragment() {
 	SPECULAR = 0.1;
 
 	vec3 world_normal = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
-	vec3 sonar = sonar_at(world_pos, world_normal);
-	float steep = 1.0 - abs(world_normal.y);
-	float band = abs(fract(world_pos.y / contour_spacing + 0.5) - 0.5) * contour_spacing;
-	float contour = (1.0 - smoothstep(0.0, contour_width, band)) * steep;
-	vec3 pulse = vec3(0.0);
-	if (sonar_style == 0) {
-		pulse = albedo * wave_color * wave_energy * sonar_light(world_pos, world_normal);
-	} else if (sonar_style == 1) {
-		pulse = sonar_color * (sonar_dots(world_pos, world_normal) * dot_energy + sonar.z * fill_energy * dot_fill_share);
-	} else {
-		pulse = sonar_color * (sonar.x * front_energy + sonar.z * fill_energy + sonar.y * contour * contour_energy);
-	}
+	vec3 pulse = albedo * wave_color * wave_energy * pulse_share * sonar_light(world_pos, world_normal);
 	EMISSION = pulse + cut_rim_color * cut.y * cut_rim_energy + world_ambient(world_pos, albedo);
 }

@@ -64,22 +64,26 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   follows a player (a follow light read as a lamp). Colour, energy and fog in
   `WorldConfig` (`world_ambient_*`), a share per stage
   (`StageDefinition.world_ambient_scale`: Ocean 1 / 0.85 / 0.7), times the Brightness
-  option. **Brightness**: 1 (100 %) is the look the 3D play-test chose (it was 70 %
-  before; the player lights were scaled to match); settings saved before settings
-  version 2 are converted (`GameState.OLD_BRIGHTNESS_BASE`).
-- **Sonar styles** (a test, the choice is pending; `Sonar.style`, level test key V):
-  **A light wave** (`sonar_light`: the pulse lights the level surfaces it passes,
-  shaded towards a point `wave_height` above its origin, dark behind rock, then they
-  fade back into the dark over `wave_fade`; no outlines), **B point cloud**
-  (`sonar_dots`: world-anchored glowing dots on the surfaces it passed, each fading
-  after its own time), **C soft outlines** (the edge pass, thinner, paler, shorter
-  afterglow). Same reach, rock blocking (`sonar_pulse`) and gameplay rules in all;
-  creatures always show their own echo (`CreatureBody`). `Sonar` defaults to C, the
-  level test starts on A. Measured the same cost (about 630 FPS on the largest level).
-- **Sonar outlines** (`shaders/sonar_edges.gdshader`, screen space: depth + normal
-  buffers) only outline rock, landmarks and creatures: a crease between two up-facing
-  surfaces never counts, and the floor shader never tilts its normal (sand trails and
-  floor detail are albedo only), or every groove would glow.
+  option. **Brightness**: 1 (100 %) is the look the 3D play-tests chose (twice the old
+  70 %: the player lights and both ambients were scaled to match); older settings
+  files are converted (`GameState.SETTINGS_VERSION` 3, `OLD_BRIGHTNESS_BASES`).
+- **Sonar = a wave of light** (chosen after three styles were play-tested; the outlines
+  of the 2D game read as lines drawn over the 3D game): `shaders/sonar.gdshaderinc`
+  `sonar_light` lights the level surfaces (floor, rock; the outer rock has
+  `pulse_share` 0) as the front passes: a soft bright band (`wave_peak`, `wave_lead`,
+  `wave_tail`, wrapping round surfaces by `wave_wrap`), shaded towards a point
+  `wave_height` above the origin, then `wave_rest` fading over `wave_fade`. Shadows
+  behind rock are soft (`sonar_pulse`: 7 taps of the occlusion rays, a penumbra that
+  widens with distance behind the rock) and never black (`shadow_light_near` /
+  `_far`). No outlines on rock; creatures show their own echo (`CreatureBody`). The
+  impact, layered: a strong flash at the origin (`Sonar._flash`: a shadowed light + an
+  over-bright glow, `pulse_flash.gdshader`), a refraction ripple with the front
+  (`pulse_ripple.gdshader`, a full-screen pass drawn only while a front expands,
+  before the characters), the marine snow pushed outward (`sonar_push`), a deep
+  thump (`SonarAudio.thump_stream`, `pulse_thump`) and a light camera shake
+  (`SharedCamera.shake_strength`). Gameplay (reach, rays, `on_sonar_hit`, timing via
+  `hold_time` + `fade_time`) is unchanged. The floor never tilts its normal (sand
+  trails are albedo only).
 - **Not ported yet**: every script and tool in **`legacy2d/`** (it has a `.gdignore`, so the
   editor never parses it; paths mirror the project; `git mv` a file back when its phase
   comes, see `legacy2d/README.md`): stage manager, the full HUD, shard door, lockdown,
@@ -119,10 +123,9 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player
   blocks; a stand-in level flow (shards -> light -> next level; both down = again). Keys:
   N / P level, 1-9 jump, R again, M mode, F freeze creatures, T trails, C cut-away,
-  I interpolation, O oxygen drain, L world ambient, B brightness 70 / 100 / 130 %,
-  V sonar style (A light wave / B point cloud / C soft outlines). `-- shots <folder> [level] [pictures]`: pictures (with and without
-  the world ambient, each sonar style with a creature in reach) + FPS benchmark (each
-  sonar style, trails on / off) on the largest level. It loads `worlds/ocean.tres` at run time, which
+  I interpolation, O oxygen drain, L world ambient, B brightness 70 / 100 / 130 %. `-- shots <folder> [level] [pictures]`: pictures (with and without
+  the world ambient; a pulse with a creature in reach: flash, front, peak, fade) + FPS
+  benchmark (trails on / off) on the largest level. It loads `worlds/ocean.tres` at run time, which
   prints load errors for the scenes whose scripts are still in `legacy2d/` (harmless).
 - **Play-test stage**: `tools/core_test.tscn` (F6): three real Ocean rooms with the real
   classes above, four creatures (one unkillable) that come back after being killed, two test
@@ -473,7 +476,8 @@ numbered variant) replaces one without code changes.
 `assets/audio/preview/` (same names as the files they would replace; the game never reads
 that folder); the Sound Test lists them first, each beside the current version. Once approved
 they are copied over the files in `sfx/` (`music/` for music) and deleted from `preview/`
-(nothing is pending now). The Journey themes `music_map_<world id>` are in `music/` (the
+(pending now: `pulse_thump`, the pulse's deep thump; until it is approved only the
+level test plays it, straight from `preview/`). The Journey themes `music_map_<world id>` are in `music/` (the
 Ocean's own theme and placeholders for the other four worlds).
 - **Buses** (`default_bus_layout.tres`): Master, Music (a "Duck" amplify), SFX and Ambience
   (a "Gate" amplify + the world's underwater low-pass + reverb), UI. Volumes: `Game.volumes`

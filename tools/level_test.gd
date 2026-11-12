@@ -16,8 +16,7 @@ extends Node3D
 ## every creature, T = sand trails on / off, C = cut-away on / off,
 ## I = physics interpolation on / off, O = oxygen drain on / off,
 ## L = the world ambient (faint deep-blue light + fog, Darkness) on / off,
-## B = Brightness option 70 / 100 / 130 %,
-## V = sonar style A light wave / B point cloud / C soft outlines (Sonar).
+## B = Brightness option 70 / 100 / 130 %.
 ## "-- shots <folder> [level number] [pictures]" saves pictures and runs the
 ## FPS benchmark on the largest level (LevelTestShots; "pictures" = no
 ## benchmark).
@@ -26,6 +25,8 @@ const ECHO_SCENE: PackedScene = preload("res://scenes/echo.tscn")
 const GUARDIAN_SCENE: PackedScene = preload("res://scenes/guardian.tscn")
 const PING_STREAM: AudioStream = preload("res://assets/audio/sfx/pulse_ping.wav")
 const TICK_STREAM: AudioStream = preload("res://assets/audio/sonar_tick.wav")
+const THUMP_PATH: String = "res://assets/audio/sfx/pulse_thump.wav"
+const THUMP_PREVIEW_PATH: String = "res://assets/audio/preview/pulse_thump.wav"
 ## The groups a frozen creature leaves (key F).
 const FROZEN_GROUPS: Array[String] = ["creatures", "sonar_targets", "cutaway_targets"]
 
@@ -40,8 +41,6 @@ const FROZEN_GROUPS: Array[String] = ["creatures", "sonar_targets", "cutaway_tar
 ## -1 = a new spawn seed on every build.
 @export var forced_seed: int = -1
 ## Seconds after the ancient light wakes before the next level starts.
-## The sonar style the test starts with (key V cycles).
-@export var sonar_style: Sonar.Style = Sonar.Style.LIGHT_WAVE
 @export var next_level_delay: float = 2.5
 ## Seconds after both players are down before the level starts again.
 @export var retry_delay: float = 2.0
@@ -78,11 +77,11 @@ func _ready() -> void:
 	_add(AudioDirector.new(), "AudioDirector")
 	awareness = _add(DepthAwareness.new(), "DepthAwareness") as DepthAwareness
 	sonar = _add(Sonar.new(), "Sonar") as Sonar
-	sonar.style = sonar_style
 	var sonar_audio := SonarAudio.new()
 	sonar_audio.sonar = sonar
 	sonar_audio.ping_stream = PING_STREAM
 	sonar_audio.tick_stream = TICK_STREAM
+	sonar_audio.thump_stream = _thump_stream()
 	_add(sonar_audio, "SonarAudio")
 	camera = _add(SharedCamera.new(), "SharedCamera") as SharedCamera
 	cutaway = _add(ViewCutaway.new(), "ViewCutaway") as ViewCutaway
@@ -135,8 +134,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			darkness.world_enabled = not darkness.world_enabled
 		KEY_B:
 			_cycle_brightness()
-		KEY_V:
-			sonar.cycle_style()
 		KEY_O:
 			oxygen_drain = not oxygen_drain
 			for player: Player in [echo, guardian]:
@@ -145,6 +142,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			var number: int = key.physical_keycode - KEY_1
 			if number >= 0 and number < 9:
 				start_level(number / 3, number % 3)
+
+
+## The pulse's thump: the approved sound, else (this test only) the one waiting
+## for approval in assets/audio/preview/, so it can be judged in the level.
+func _thump_stream() -> AudioStream:
+	for path: String in [THUMP_PATH, THUMP_PREVIEW_PATH]:
+		if ResourceLoader.exists(path):
+			return load(path) as AudioStream
+	return null
 
 
 ## The Brightness option: 70 % -> 100 % -> 130 % -> 70 %.
@@ -323,7 +329,7 @@ func _info_text() -> String:
 		"FROZEN" if creatures_frozen else "on", "on" if trails.enabled else "OFF", "on" if cutaway.radius > 0.0 else "OFF",
 		"on" if get_tree().physics_interpolation else "OFF", "on" if oxygen_drain else "OFF"])
 	var game := get_node_or_null("/root/Game") as GameState
-	lines.append("[V] SONAR STYLE: %s   [L] world ambient %s  [B] brightness %d%%" % [sonar.get_style_name(), "on" if darkness.world_enabled else "OFF",
+	lines.append("[L] world ambient %s  [B] brightness %d%%" % ["on" if darkness.world_enabled else "OFF",
 		roundi((game.brightness if game else 1.0) * 100.0)])
 	return "\n".join(lines)
 

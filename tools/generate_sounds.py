@@ -799,6 +799,18 @@ def make_sonar(rng, freq: float, echoes, cutoff: float, wobble: float, peak: flo
     return _norm(_trim_tail(_reverb(out, 3.0, 0.35, rng)), peak)
 
 
+def make_pulse_thump(rng):
+    """A deep pressure thump under the pulse ping: a falling sub sine and a
+    short low-passed push of water."""
+    seconds = 1.4
+    t = _t(seconds)
+    freq = 30.0 + 48.0 * np.exp(-t / 0.08)
+    body = _osc(freq, partials=((1.0, 1.0), (2.0, 0.22))) * _env(t, 0.006, 0.3)
+    push = _filter(_noise(seconds, rng), "lowpass", 160.0) * _env(t, 0.012, 0.1) * 0.7
+    out = _reverb(body + push, 1.4, 0.18, rng)
+    return _norm(_fade(_trim_tail(out)), PEAK_SFX)
+
+
 def make_creature_clicks(rng, pitch: float):
     out = np.zeros(int(0.6 * SAMPLE_RATE))
     at = 0.0
@@ -1583,6 +1595,7 @@ def _preview_list():
         ("sword_impact_heavy", lambda rng: make_impact(rng, 70.0, 0.18, 0.6, 0.8), False),
         ("sword_finisher", make_finisher, False),
         ("pulse_ping", lambda rng: make_sonar(rng, 420.0, [(0.32, 0.5), (0.64, 0.3), (0.96, 0.18), (1.28, 0.1)], 4000.0, 0.0, PEAK_SFX), False),
+        ("pulse_thump", make_pulse_thump, False),
         ("pulse_distress", lambda rng: make_sonar(rng, 330.0, [(0.3, 0.35), (0.6, 0.15)], 900.0, 0.015, PEAK_SFX * 0.55), False),
     ]
     # Creatures: normal, Sentinel (deeper and slower), boss (layered + sub).
