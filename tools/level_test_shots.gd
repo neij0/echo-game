@@ -21,6 +21,8 @@ extends Node
 ## Overview picture: camera view height (units) and ambient light.
 @export var overview_size: float = 80.0
 @export var overview_ambient: float = 2.0
+## Units between the Echo and the creature in the style pictures.
+@export var creature_distance: float = 4.5
 ## Pixels between the players and the rock in the "01_rock" pictures.
 @export var rock_view_distance: float = 180.0
 
@@ -115,16 +117,70 @@ func _run() -> void:
 	pulse.emit_pulse()
 	await _wait(1.2)
 	await _save("04_trails_after_pulse")
+
+	# 5. Each sonar style: a pulse with a creature in reach (held still), the
+	# wave passing, then the fading.
+	var style_before: Sonar.Style = test.sonar.style
+	for style_index: int in Sonar.STYLE_NAMES.size():
+		test.sonar.style = style_index as Sonar.Style
+		var letter: String = Sonar.STYLE_NAMES[style_index].left(1)
+		await _wait(maxf(test.sonar.get_lifetime(pulse.pulse_expand_time), pulse.cooldown_left) + 0.1)
+		var creature: Creature = _show_creature_near(creature_distance)
+		await _wait(0.2)
+		await get_tree().physics_frame
+		pulse.emit_pulse()
+		await _wait(pulse.pulse_expand_time * 0.5)
+		await _save("05_style_%s_wave" % letter)
+		await _wait(pulse.pulse_expand_time * 0.5 + 0.4)
+		await _save("06_style_%s_lit" % letter)
+		await _wait(2.0)
+		await _save("07_style_%s_fading" % letter)
+		if creature:
+			creature.set_physics_process(true)
+			test._freeze(creature)
+	test.sonar.style = style_before
 	test.set_creatures_frozen(false)
 
-	# 5. The benchmark, trails on and off.
+	# 6. The benchmark: every sonar style (trails on), then trails off.
 	if not benchmark:
 		get_tree().quit()
 		return
-	for trails_on: bool in [true, false]:
-		test.trails.enabled = trails_on
-		await _bench(number, trails_on)
+	for style_index: int in Sonar.STYLE_NAMES.size():
+		test.sonar.style = style_index as Sonar.Style
+		await _bench(number, true)
+	test.sonar.style = style_before
+	test.trails.enabled = false
+	await _bench(number, false)
 	get_tree().quit()
+
+
+## Brings one frozen creature back, still (no AI), on open floor about
+## `distance` units from the Echo, so the pictures show its sonar echo.
+func _show_creature_near(distance: float) -> Creature:
+	var creature: Creature = null
+	for candidate: Creature in test._frozen:
+		if is_instance_valid(candidate) and not candidate is Sentinel:
+			creature = candidate
+			break
+	if creature == null:
+		return null
+	var layout: LevelBuilder.Layout = test.builder.get_layout()
+	var center: Vector2 = test.builder.to_plan(test.echo.global_position)
+	var spot: Vector3 = test.echo.global_position + Vector3(distance, 0.0, 0.0)
+	for i: int in 16:
+		var angle: float = TAU * i / 16.0
+		var plan: Vector2 = center + Vector2(cos(angle), sin(angle)) * distance / test.world.units_per_pixel
+		if layout.validator.is_reachable(plan) and not layout.validator.is_near_blocked(plan, 30.0):
+			spot = test.builder.to_world(plan)
+			break
+	for group: String in LevelTest.FROZEN_GROUPS:
+		creature.add_to_group(group)
+	creature.visible = true
+	creature.process_mode = Node.PROCESS_MODE_INHERIT
+	creature.set_physics_process(false)
+	creature.global_position = spot
+	creature.reset_physics_interpolation()
+	return creature
 
 
 ## Puts the players on open floor about rock_view_distance from the nearest
@@ -198,8 +254,8 @@ func _bench(number: int, trails_on: bool) -> void:
 	var seconds: float = float(Time.get_ticks_usec() - started) / 1000000.0
 	var count: float = maxf(float(_frames), 1.0)
 	var size: Vector2i = get_window().size
-	print("LEVEL TEST FPS (vsync off, %dx%d, trails %s, %d creatures, pulsing): average %.0f, worst frame %.1f ms, frames over 16.7 ms: %d" % [
-		size.x, size.y, "ON" if trails_on else "off", get_tree().get_nodes_in_group("creatures").size(),
+	print("LEVEL TEST FPS (vsync off, %dx%d, sonar %s, trails %s, %d creatures, pulsing): average %.0f, worst frame %.1f ms, frames over 16.7 ms: %d" % [
+		size.x, size.y, test.sonar.get_style_name(), "ON" if trails_on else "off", get_tree().get_nodes_in_group("creatures").size(),
 		float(_frames) / seconds, _worst * 1000.0, _slow])
 	print("  per frame: render CPU %.2f ms, GPU %.2f ms; pulse rays up to %.1f ms; trail stamps so far %d, puffs %d" % [
 		_cpu_ms / count, _gpu_ms / count, trace_ms, test.trails.stamps_drawn, test.trails.puffs_thrown])

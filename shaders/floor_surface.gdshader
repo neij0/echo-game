@@ -66,6 +66,14 @@ void fragment() {
 
 	// The normal stays straight up (see the top).
 	vec3 sonar = sonar_at(world_pos, vec3(0.0, 1.0, 0.0));
-	EMISSION = sonar_color * (sonar.x * front_energy + sonar.z * fill_energy * furrow_shade)
-		+ world_ambient(world_pos, albedo);
+	vec3 up = vec3(0.0, 1.0, 0.0);
+	vec3 pulse = vec3(0.0);
+	if (sonar_style == 0) {
+		pulse = albedo * wave_color * wave_energy * sonar_light(world_pos, up);
+	} else if (sonar_style == 1) {
+		pulse = sonar_color * (sonar_dots(world_pos, up) * dot_energy + sonar.z * fill_energy * dot_fill_share * furrow_shade);
+	} else {
+		pulse = sonar_color * (sonar.x * front_energy + sonar.z * fill_energy * furrow_shade);
+	}
+	EMISSION = pulse + world_ambient(world_pos, albedo);
 }

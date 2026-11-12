@@ -68,6 +68,13 @@ void fragment() {
 	float steep = 1.0 - abs(world_normal.y);
 	float band = abs(fract(world_pos.y / contour_spacing + 0.5) - 0.5) * contour_spacing;
 	float contour = (1.0 - smoothstep(0.0, contour_width, band)) * steep;
-	EMISSION = sonar_color * (sonar.x * front_energy + sonar.z * fill_energy + sonar.y * contour * contour_energy)
-		+ cut_rim_color * cut.y * cut_rim_energy + world_ambient(world_pos, albedo);
+	vec3 pulse = vec3(0.0);
+	if (sonar_style == 0) {
+		pulse = albedo * wave_color * wave_energy * sonar_light(world_pos, world_normal);
+	} else if (sonar_style == 1) {
+		pulse = sonar_color * (sonar_dots(world_pos, world_normal) * dot_energy + sonar.z * fill_energy * dot_fill_share);
+	} else {
+		pulse = sonar_color * (sonar.x * front_energy + sonar.z * fill_energy + sonar.y * contour * contour_energy);
+	}
+	EMISSION = pulse + cut_rim_color * cut.y * cut_rim_energy + world_ambient(world_pos, albedo);
 }

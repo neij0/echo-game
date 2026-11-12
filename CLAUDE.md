@@ -67,6 +67,15 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   option. **Brightness**: 1 (100 %) is the look the 3D play-test chose (it was 70 %
   before; the player lights were scaled to match); settings saved before settings
   version 2 are converted (`GameState.OLD_BRIGHTNESS_BASE`).
+- **Sonar styles** (a test, the choice is pending; `Sonar.style`, level test key V):
+  **A light wave** (`sonar_light`: the pulse lights the level surfaces it passes,
+  shaded towards a point `wave_height` above its origin, dark behind rock, then they
+  fade back into the dark over `wave_fade`; no outlines), **B point cloud**
+  (`sonar_dots`: world-anchored glowing dots on the surfaces it passed, each fading
+  after its own time), **C soft outlines** (the edge pass, thinner, paler, shorter
+  afterglow). Same reach, rock blocking (`sonar_pulse`) and gameplay rules in all;
+  creatures always show their own echo (`CreatureBody`). `Sonar` defaults to C, the
+  level test starts on A. Measured the same cost (about 630 FPS on the largest level).
 - **Sonar outlines** (`shaders/sonar_edges.gdshader`, screen space: depth + normal
   buffers) only outline rock, landmarks and creatures: a crease between two up-facing
   surfaces never counts, and the floor shader never tilts its normal (sand trails and
@@ -86,6 +95,10 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   floor shader only darkens the sand (albedo only, never the normal: no outline, no
   glow; the pulse's afterglow lights the groove like any other sand, a little darker),
   so a trail shows only where lit or in a pulse's afterglow. Teleports (> `max_step`) leave no furrow.
+  The Echo floats (`SandTrailMaker` "Floating": depth 0, `stir_speed`,
+  `near_floor_height`, `hover_height` or a parent's `get_hover_height()`): no furrow;
+  only a light stir and faint, small puffs (`puff_strength`) when she swims fast or
+  comes low over the floor.
 - **Tests on this branch**: `tools/test_levels.tscn` (headless: every Ocean level builds in
   3D with every shard and the exit reachable, the level flow, stations, corals, Sentinel
   leash, light hunter, sand trails; prints the quiet-spaces report):
@@ -106,8 +119,10 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player
   blocks; a stand-in level flow (shards -> light -> next level; both down = again). Keys:
   N / P level, 1-9 jump, R again, M mode, F freeze creatures, T trails, C cut-away,
-  I interpolation, O oxygen drain, L world ambient, B brightness 70 / 100 / 130 %. `-- shots <folder> [level]`: pictures (with and without the world
-  ambient) + FPS benchmark (trails on / off) on the largest level. It loads `worlds/ocean.tres` at run time, which
+  I interpolation, O oxygen drain, L world ambient, B brightness 70 / 100 / 130 %,
+  V sonar style (A light wave / B point cloud / C soft outlines). `-- shots <folder> [level] [pictures]`: pictures (with and without
+  the world ambient, each sonar style with a creature in reach) + FPS benchmark (each
+  sonar style, trails on / off) on the largest level. It loads `worlds/ocean.tres` at run time, which
   prints load errors for the scenes whose scripts are still in `legacy2d/` (harmless).
 - **Play-test stage**: `tools/core_test.tscn` (F6): three real Ocean rooms with the real
   classes above, four creatures (one unkillable) that come back after being killed, two test

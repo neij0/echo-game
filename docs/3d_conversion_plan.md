@@ -429,6 +429,12 @@ Updated with every step, so a new session knows where the conversion stands.
   - Measured after these: about 440 FPS on the largest level, GPU 0.9 ms. A single
     frame of ~30 ms sometimes shows on the benchmark's first pass (not the second);
     cause not found yet, render time per frame is unchanged.
+- [ ] **Sonar style choice** (third play-test, waiting for the choice): the neon
+  outlines read as lines drawn over the 3D game. Three switchable looks in the level
+  test (key V): A light wave, B point cloud, C soft outlines (see CLAUDE.md). All keep
+  the same rules, rock blocking and creature echoes; same cost (about 630 FPS on the
+  largest level, GPU 0.65 ms). The style not chosen is removed afterwards.
+- [x] The Echo stirs the sand only lightly (no furrow) when she swims fast or low.
 - [ ] Next: `StageManager` (level fades, retries, counts, the full `Hud`), `game.tscn`
   running in 3D; lockdown, collapse escape, arena door, bubble vents, the placeholder
   boss; skills (stats, the three actives, aiming); the `Game` autoload's worlds and

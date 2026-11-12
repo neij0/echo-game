@@ -40,6 +40,13 @@ energy = 1.1
 
 [node name="SandTrail" type="Node3D" parent="."]
 script = ExtResource("9_sand")
-radius = 0.34
-depth = 0.22
-stir = 1.2
+radius = 0.3
+depth = 0.0
+stir = 0.12
+puff_speed = 4.8
+puff_interval = 0.5
+puff_scale = 0.6
+puff_strength = 0.35
+stir_speed = 4.4
+near_floor_height = 0.15
+hover_height = 0.35

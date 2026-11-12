@@ -222,6 +222,35 @@ func _test_sand_trails() -> void:
 	maker.puff_cooldown_left = 0.0
 	trails._update_maker(maker, maker.get_floor_position(), 1.0 / 60.0)
 	_check(trails.puffs_thrown == puffs + 1, "moving fast (%.0f units/s) throws a puff of sand" % (0.3 * 60.0))
+	# The Echo floats: no furrow; only a light stir when fast or low.
+	var echo_maker := test.echo.get_node("SandTrail") as SandTrailMaker
+	var slow: float = echo_maker.stir_speed * 0.5 / 60.0
+	echo_maker.has_last = true
+	echo_maker.last_floor_position = echo_maker.get_floor_position() - Vector3(slow, 0.0, 0.0)
+	trails._pending.clear()
+	trails._update_maker(echo_maker, echo_maker.get_floor_position(), 1.0 / 60.0)
+	_check(trails._pending.is_empty(), "the Echo floating slowly leaves no trail")
+	var fast: float = (echo_maker.stir_speed + 0.5) / 60.0
+	echo_maker.last_floor_position = echo_maker.get_floor_position() - Vector3(fast, 0.0, 0.0)
+	echo_maker.puff_cooldown_left = 0.0
+	puffs = trails.puffs_thrown
+	trails._update_maker(echo_maker, echo_maker.get_floor_position(), 1.0 / 60.0)
+	var guardian_maker := maker
+	var stirred_only: bool = not trails._pending.is_empty()
+	for stamp: Array in trails._pending:
+		var strength: Vector2 = stamp[2]
+		stirred_only = stirred_only and strength.x == 0.0 and strength.y > 0.0 and strength.y < guardian_maker.stir
+	_check(stirred_only, "moving fast she stirs the sand lightly: no furrow, lighter than the Guardian's")
+	_check(trails.puffs_thrown == puffs + 1 and echo_maker.puff_strength < guardian_maker.puff_strength and echo_maker.puff_scale < guardian_maker.puff_scale,
+		"and throws a fainter, smaller puff")
+	var hover_before: float = echo_maker.hover_height
+	echo_maker.hover_height = echo_maker.near_floor_height
+	echo_maker.last_floor_position = echo_maker.get_floor_position() - Vector3(slow, 0.0, 0.0)
+	trails._pending.clear()
+	trails._update_maker(echo_maker, echo_maker.get_floor_position(), 1.0 / 60.0)
+	_check(not trails._pending.is_empty(), "close to the floor she stirs it even when slow")
+	echo_maker.hover_height = hover_before
+	trails._pending.clear()
 	trails.enabled = false
 	before = trails.stamps_drawn
 	for i: int in 10:

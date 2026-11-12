@@ -16,7 +16,8 @@ extends Node3D
 ## every creature, T = sand trails on / off, C = cut-away on / off,
 ## I = physics interpolation on / off, O = oxygen drain on / off,
 ## L = the world ambient (faint deep-blue light + fog, Darkness) on / off,
-## B = Brightness option 70 / 100 / 130 %.
+## B = Brightness option 70 / 100 / 130 %,
+## V = sonar style A light wave / B point cloud / C soft outlines (Sonar).
 ## "-- shots <folder> [level number] [pictures]" saves pictures and runs the
 ## FPS benchmark on the largest level (LevelTestShots; "pictures" = no
 ## benchmark).
@@ -39,6 +40,8 @@ const FROZEN_GROUPS: Array[String] = ["creatures", "sonar_targets", "cutaway_tar
 ## -1 = a new spawn seed on every build.
 @export var forced_seed: int = -1
 ## Seconds after the ancient light wakes before the next level starts.
+## The sonar style the test starts with (key V cycles).
+@export var sonar_style: Sonar.Style = Sonar.Style.LIGHT_WAVE
 @export var next_level_delay: float = 2.5
 ## Seconds after both players are down before the level starts again.
 @export var retry_delay: float = 2.0
@@ -75,6 +78,7 @@ func _ready() -> void:
 	_add(AudioDirector.new(), "AudioDirector")
 	awareness = _add(DepthAwareness.new(), "DepthAwareness") as DepthAwareness
 	sonar = _add(Sonar.new(), "Sonar") as Sonar
+	sonar.style = sonar_style
 	var sonar_audio := SonarAudio.new()
 	sonar_audio.sonar = sonar
 	sonar_audio.ping_stream = PING_STREAM
@@ -131,6 +135,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			darkness.world_enabled = not darkness.world_enabled
 		KEY_B:
 			_cycle_brightness()
+		KEY_V:
+			sonar.cycle_style()
 		KEY_O:
 			oxygen_drain = not oxygen_drain
 			for player: Player in [echo, guardian]:
@@ -317,7 +323,7 @@ func _info_text() -> String:
 		"FROZEN" if creatures_frozen else "on", "on" if trails.enabled else "OFF", "on" if cutaway.radius > 0.0 else "OFF",
 		"on" if get_tree().physics_interpolation else "OFF", "on" if oxygen_drain else "OFF"])
 	var game := get_node_or_null("/root/Game") as GameState
-	lines.append("[L] world ambient %s  [B] brightness %d%%" % ["on" if darkness.world_enabled else "OFF",
+	lines.append("[V] SONAR STYLE: %s   [L] world ambient %s  [B] brightness %d%%" % [sonar.get_style_name(), "on" if darkness.world_enabled else "OFF",
 		roundi((game.brightness if game else 1.0) * 100.0)])
 	return "\n".join(lines)
 

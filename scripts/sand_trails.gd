@@ -159,12 +159,12 @@ func _update_maker(maker: SandTrailMaker, focus: Vector3, delta: float) -> void:
 	if moved > maker.max_step:
 		return
 	var speed: float = moved / maxf(delta, 0.0001)
-	if moved > 0.0001:
+	if moved > 0.0001 and maker.disturbs_at(speed):
 		_stamp_segment(last, at, maker)
 	maker.puff_cooldown_left = maxf(maker.puff_cooldown_left - delta, 0.0)
 	if puffs_enabled and maker.puff_speed > 0.0 and speed >= maker.puff_speed and maker.puff_cooldown_left <= 0.0:
 		maker.puff_cooldown_left = maker.puff_interval
-		throw_puff(at, maker.puff_scale)
+		throw_puff(at, maker.puff_scale, maker.puff_strength)
 
 
 ## Soft stamps along the segment, spaced so the furrow is continuous.
@@ -175,10 +175,10 @@ func _stamp_segment(from: Vector3, to: Vector3, maker: SandTrailMaker) -> void:
 	var spacing: float = maxf(maker.radius * 0.5, 0.02)
 	var count: int = maxi(1, ceili(length / spacing))
 	# The furrow builds up over about one maker radius of travel.
-	var strength: float = maker.depth * minf(length / count / maxf(maker.radius, 0.01), 1.0)
+	var build: float = minf(length / count / maxf(maker.radius, 0.01), 1.0)
 	for i: int in count:
 		var p: Vector3 = from.lerp(to, float(i + 1) / count)
-		_pending.append([_texel(p), radius, Vector2(strength, maker.stir * strength)])
+		_pending.append([_texel(p), radius, Vector2(maker.depth * build, maker.stir * build)])
 
 
 func _texel(world: Vector3) -> Vector2:
@@ -207,14 +207,16 @@ func _draw_stamps() -> void:
 	_pending.clear()
 
 
-## A small puff of stirred sand at a floor point (lunges, dashes, knockbacks).
-func throw_puff(at: Vector3, scale_factor: float = 1.0) -> void:
+## A small puff of stirred sand at a floor point (lunges, dashes, knockbacks);
+## strength = share of its particles (lower = fainter).
+func throw_puff(at: Vector3, scale_factor: float = 1.0, strength: float = 1.0) -> void:
 	if _puffs.is_empty():
 		return
 	var puff: GPUParticles3D = _puffs[_next_puff]
 	_next_puff = (_next_puff + 1) % _puffs.size()
 	puff.global_position = Vector3(at.x, 0.05, at.z)
 	puff.scale = Vector3.ONE * scale_factor
+	puff.amount_ratio = clampf(strength, 0.05, 1.0)
 	puff.restart()
 	puffs_thrown += 1
 
