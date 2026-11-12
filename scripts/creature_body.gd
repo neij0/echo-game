@@ -47,6 +47,11 @@ const SEE_THROUGH_SHADER: Shader = preload("res://shaders/see_through.gdshader")
 @export var spike_spin_speed: float = 0.4
 ## ARROW fins: flaps per second.
 @export var fin_flap_speed: float = 1.6
+## A crest of spines standing up along the back (the Sentinel: "this one
+## guards"); 0 = none. Length is a share of body_radius, spread in degrees.
+@export var crest_spines: int = 0
+@export var crest_length: float = 0.9
+@export var crest_spread_degrees: float = 140.0
 ## How fast it turns to face where it moves.
 @export var turn_speed: float = 10.0
 
@@ -179,6 +184,28 @@ func _build_shape() -> void:
 		_:
 			# A soft oval, a little longer than wide, pointing where it moves.
 			_add_part(_sphere(radius), Vector3.ZERO, Vector3(0.85, 0.8, 1.15))
+	_add_crest(radius)
+
+
+## Spines fanning up and back over the body (they turn with it).
+func _add_crest(radius: float) -> void:
+	for i: int in crest_spines:
+		var t: float = float(i) / maxf(crest_spines - 1, 1) - 0.5
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = radius * 0.12
+		cone.height = radius * crest_length * (1.0 - absf(t) * 0.5)
+		cone.radial_segments = 5
+		var spine := MeshInstance3D.new()
+		spine.mesh = cone
+		spine.material_override = _material
+		# Up and towards the back (-z), fanned along the back.
+		var tilt: float = deg_to_rad(crest_spread_degrees) * t
+		var direction := Vector3(0.0, cos(tilt), -sin(tilt) - 0.35).normalized()
+		spine.position = direction * radius * 0.7 + direction * cone.height * 0.5
+		# The cone's tip is its +y: point that along direction (z = x cross y).
+		spine.basis = Basis(Vector3.RIGHT, direction, Vector3.RIGHT.cross(direction))
+		_shape.add_child(spine)
 
 
 func _add_part(part_mesh: Mesh, at: Vector3, part_scale: Vector3) -> MeshInstance3D:

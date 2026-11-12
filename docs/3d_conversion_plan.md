@@ -188,6 +188,16 @@ plus or minus half.
 - **Playable:** the whole Ocean, stages 1-3, start to finish from the main menu, with
   placeholder bodies and the placeholder boss in every boss arena.
 - **Tested:** `check_levels`, `test_creatures`, `test_skills`, `test_stuck` all passing.
+- Added after Phase A (decided by play-testing):
+  1. **HUD early**: each player's health segments and oxygen on screen from the first
+     Phase B play-test on, to judge healing and damage.
+  2. **Quiet spaces**: once real levels run, make sure there are calmer rooms between
+     danger zones, so the players get moments to mend; tune alert chains if creatures
+     gang up too much (`tools/test_levels.tscn` prints a report per level).
+  3. **Sand trails**: the floor is sand; players, the Echo, fish and creatures leave a
+     furrow that fades after a set time (`@export`), plus light puffs of sand where
+     something moves fast. Darkness rules hold: seen only where lit or in a pulse's
+     afterglow. Cheap: a trail texture sampled by the floor shader; FPS cost measured.
 
 ### Phase C — asset pipeline and characters (8-12 days)
 - `tools/blender/`: Blender 5.2 run headless with Python (it is installed) to import a
@@ -366,5 +376,36 @@ Updated with every step, so a new session knows where the conversion stands.
   scene); put both back in `scenes/game_state.tscn` once the levels build in 3D.
 - `WorldConfig`: only `pulse_radius` and the marine snow values are in world units so far;
   the room sizes and everything else are still pixels.
-- Rock tops are flat and every rock has one height; the 2D rise and fall along a rock
-  (`height_wave`) comes back with the real `LevelBuilder`.
+- ~~Rock tops are flat and every rock has one height~~: done in Phase B (the
+  `LevelBuilder` gives each rock its rise and fall and drops it near doorways).
+
+### Phase B — room grid and level flow
+- [x] **Step 1 (play-tested next)**: `LevelBuilder` in 3D (ported in place; the plan
+  stays in pixels: `WorldConfig.units_per_pixel`). Rooms, seals, outer rock, rock height
+  rise and fall + doorway clear zones (`RockMesher.subdivide`, per-point heights), one
+  mesh and one collider per room, the landmarks' footprints as plain rock, navigation
+  on both maps (asynchronous map updates turned off: a new mesh is used from the next
+  physics frame, before that paths came from the previous level for up to 5 frames).
+  Ported: `Coral`, `PressureStation`, `EchoShard`, `AncientLight`, `LightHunter`,
+  `Sentinel` (crest = `CreatureBody.crest_spines`, guard ring on the floor),
+  `PlayerStatus` (the HUD's player block: health + oxygen + pulse). New: `SandTrails` +
+  `SandTrailMaker` + `shaders/floor_surface.gdshader` (sand, ripples, furrows).
+  Play-test stage `tools/level_test.tscn` (a stand-in level flow until the
+  `StageManager`); `tools/test_levels.tscn` (67 checks).
+- Measured (RX 7800 XT, 1920x1080, the largest level: 16 rooms, 13 creatures, pulsing,
+  players walking): about 410 FPS, GPU 1.0 ms, render CPU 0.44 ms; no frame over
+  16.7 ms (worst 10-13 ms); pulse rays up to 4-5 ms on the pulse frame. Sand trails:
+  410 FPS on / 405 off, GPU 1.00 / 1.02 ms: no measurable cost. A level builds in
+  0.4-1.0 s, of which the two navigation bakes are about half (hidden by the level fade).
+- Quiet spaces at the start of each level (before anything wakes): 2-7 rooms of 7-16
+  have no creature; the biggest group of creatures within each other's alert radius is
+  1-3. Light hunters sense the Echo through rock from 22 units, so they are the ones
+  that can make a level feel restless: watch them in the play-test.
+- [ ] Next: `StageManager` (level fades, retries, counts, the full `Hud`), `game.tscn`
+  running in 3D; lockdown, collapse escape, arena door, bubble vents, the placeholder
+  boss; skills (stats, the three actives, aiming); the `Game` autoload's worlds and
+  skill catalog; `check_levels`, `test_creatures`, `test_skills`, `test_stuck`.
+- [ ] Boss levels end at an ancient light on the arena's Boss marker until the boss and
+  the arena door are ported.
+- [ ] Fish (harmless life) get a `SandTrailMaker` when they are rebuilt (Phase C/E).
+

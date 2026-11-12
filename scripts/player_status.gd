@@ -91,7 +91,7 @@ func _process(delta: float) -> void:
 	if player == null:
 		return
 	_time += delta
-	var depth: float = level_builder.depth_at(player.global_position.y) if level_builder else 0.0
+	var depth: float = level_builder.depth_at(player.global_position.z) if level_builder else 0.0
 	var pressure: PlayerPressure = player.pressure
 	var ratio: float = pressure.get_ratio()
 	var downed: bool = player.health.is_downed

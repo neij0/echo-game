@@ -3,6 +3,6 @@
 [ext_resource type="Script" path="res://scripts/echo_shard.gd" id="1_script"]
 [ext_resource type="AudioStream" path="res://assets/audio/sfx/world_shard_pickup.wav" id="2_sound"]
 
-[node name="EchoShard" type="Node2D"]
+[node name="EchoShard" type="Node3D"]
 script = ExtResource("1_script")
 pickup_stream = ExtResource("2_sound")

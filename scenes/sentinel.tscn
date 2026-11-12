@@ -5,23 +5,21 @@
 
 [node name="Sentinel" instance=ExtResource("1_base")]
 script = ExtResource("2_script")
-min_speed = 35.0
-wander_radius = 200.0
+min_speed = 0.7
+wander_radius = 4.0
 wander_pause = 2.5
-spot_distance = 240.0
+spot_distance = 4.8
 max_health = 12
-body_radius = 22.0
+body_radius = 0.44
 body_color = Color(0.55, 0.5, 1, 1)
+type_color = Color(0.65, 0.6, 1, 1)
 eye_color = Color(0.85, 0.9, 1, 1)
-tendril_count = 3
 
-[node name="Echo" parent="EchoLayer" index="0"]
-color = Color(0.65, 0.6, 1, 1)
+[node name="Body" parent="."]
+crest_spines = 5
 
-[node name="Eyes" parent="EchoLayer" index="1"]
+[node name="Eyes" parent="."]
 color = Color(0.8, 0.85, 1, 1)
-eye_spacing = 12.0
-eye_radius = 3.0
 
 [node name="Voice" parent="."]
 voice_prefix = "sentinel"

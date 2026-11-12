@@ -35,6 +35,13 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `ViewCutaway` (rock between the camera and a character is cut away) and `GlowLines`
   (glowing rings / arcs / lines on the floor, drawn over rock: the 3D `draw_arc`).
   Shaders are in `shaders/`.
+  Phase B so far: `LevelBuilder` (plans in pixels as in 2D, builds in 3D: rooms, seals,
+  outer rock, rock rise and fall + doorway clear zones, one mesh + collider per room,
+  landmark footprints as plain rock, navigation on both maps with synchronous map
+  updates), `Coral`, `PressureStation`, `EchoShard`, `AncientLight`, `LightHunter`,
+  `Sentinel`, `PlayerStatus` (HUD player block), `SandTrails` + `SandTrailMaker` (sand
+  furrows + puffs; `shaders/floor_surface.gdshader`). Boss levels end at an ancient light
+  in the arena until the boss is ported.
 - **3D rules so far**: everything moves on the floor plane (y = 0) and distances are measured
   there (`Creature._flat_distance`). Physics interpolation is on: a node moved in `_process`
   (camera, markers, the sword) sets `physics_interpolation_mode` OFF and follows
@@ -43,18 +50,35 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `is_in_safe_zone`) until `Coral` is ported; a boss is recognised by `allows_mending`.
 - **Not ported yet**: every script and tool in **`legacy2d/`** (it has a `.gdignore`, so the
   editor never parses it; paths mirror the project; `git mv` a file back when its phase
-  comes, see `legacy2d/README.md`): level builder, stage manager, HUD, shards, lockdown,
-  escape, skills' actives, bosses, life, music, the old scene tests. `scenes/game.tscn` and
+  comes, see `legacy2d/README.md`): stage manager, the full HUD, shard door, lockdown,
+  escape, bubble vents, skills' actives, bosses, life, music, the old scene tests. `scenes/game.tscn` and
   the scenes using those scripts (light hunter, sentinel, bosses) do not run. The `Game`
   autoload has **no world and no skill catalog** for now (`scenes/game_state.tscn`); both come
   back in Phase B. **`tools/check_scripts.tscn`** lists every script outside `legacy2d/` that
   does not parse; it must stay at zero.
-- **Tests on this branch**: `tools/test_core.tscn` (headless: creature senses, chase speeds,
+- **Sand trails** (`SandTrails`, one per level scene): a `SandTrailMaker` child (players,
+  creatures; fish later) stamps a furrow into one texture that wraps over the world
+  (`trail_window`, no scrolling); only makers within `active_radius` of the camera stamp;
+  `fade_time` / `stir_fade_time` (exports); puffs (lit particles) above `puff_speed`. The
+  floor shader only changes how the sand takes light, so a trail shows only where lit or
+  in a pulse's afterglow. Teleports (> `max_step`) leave no furrow.
+- **Tests on this branch**: `tools/test_levels.tscn` (headless: every Ocean level builds in
+  3D with every shard and the exit reachable, the level flow, stations, corals, Sentinel
+  leash, light hunter, sand trails; prints the quiet-spaces report):
+  `godot --headless --path . --fixed-fps 60 res://tools/test_levels.tscn`;
+  `tools/test_core.tscn` (headless: creature senses, chase speeds,
   leash-aware chase speed, lunge, alerting, search, the unkillable creature giving up,
   navigation round a wall, sword reveal rules + Exposed kill, close
   sense, distress pulse, sonar blocked by rock, revive decay, mending, goal arrow):
   `godot --headless --path . --fixed-fps 60 res://tools/test_core.tscn`; `tools/test_save.gd`;
   `tools/check_scripts.tscn`.
+- **Level play-test**: `tools/level_test.tscn` (F6): the real Ocean levels (exports
+  `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player
+  blocks; a stand-in level flow (shards -> light -> next level; both down = again). Keys:
+  N / P level, 1-9 jump, R again, M mode, F freeze creatures, T trails, C cut-away,
+  I interpolation, O oxygen drain. `-- shots <folder> [level]`: pictures + FPS benchmark
+  (trails on / off) on the largest level. It loads `worlds/ocean.tres` at run time, which
+  prints load errors for the scenes whose scripts are still in `legacy2d/` (harmless).
 - **Play-test stage**: `tools/core_test.tscn` (F6): three real Ocean rooms with the real
   classes above, four creatures (one unkillable) that come back after being killed, two test
   shards + a test exit for the goal arrow. Keys: C = cut-away, T = rock height normal / tall,

@@ -31,6 +31,9 @@ extends Resource
 @export var lockdown_room_scene: PackedScene
 
 @export_group("Rooms")
+## The room scenes are 2D floor plans in pixels; the 3D world is in units:
+## a plan point (x, y) is at (x, 0, y) * units_per_pixel (50 px = 1 unit).
+@export var units_per_pixel: float = 0.02
 ## Size of every room chunk (a square, in pixels). All rooms of a world share it.
 @export var room_size: float = 1600.0
 ## Rock band along each room's edges (pixels).

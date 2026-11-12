@@ -1,5 +1,5 @@
 class_name LevelBuilder
-extends Node2D
+extends Node3D
 ## Builds one level from its LevelDefinition: a grid of hand-made rooms, each
 ## turned as the definition says. Neighbouring rooms connect where both have an
 ## opening on the shared side; every other opening is sealed with rock. The
@@ -9,24 +9,29 @@ extends Node2D
 ## rooms, spread as far apart as possible. Every planned level is checked with
 ## the LayoutValidator (BFS) before it is built; if the spawns fail the check,
 ## the next spawn seed is tried.
-## Built levels get: the level's landmarks (LevelDefinition.landmarks, always
-## on the same spot; their footprints are rock for the validation and the
-## navigation), harmless life on open floor (WorldConfig.ambient_life, with
-## the seed), a muted colour accent per room (AreaAccent), the Echo Shards on
-## the planned spots, Sentinels next to some of them, the LockdownRoom in the lockdown cell, a ShardDoor on the boss
-## arena's doorway (boss levels; its ArenaPillars rebake the mesh when they
-## break, BubbleVents on its "Vent*" markers), and a navigation mesh baked
-## from every rock,
-## so creatures can path through doorways and around corners. When a door or a
-## lockdown barrier changes, the mesh is rebaked one frame later, while the
-## camera shake started by that event hides the short hitch. Large creatures
-## (the boss) get their own mesh, baked with a bigger agent radius on a second
-## navigation map (navigation_map_for), so their paths never lead through gaps
-## their body cannot fit through. Known: Godot 4.7 logs "edge error(s)"
-## warnings for that second map on some levels (the same mesh on the default
-## map is silent); the paths themselves test fine.
+##
+## 3D: the planning (rooms, turns, seals, markers, the validator) works on the
+## rooms' 2D floor plans, in pixels ("plan space"). Building turns plan space
+## into the 3D floor: a plan point (x, y) is at (x, 0, y) * units_per_pixel
+## (WorldConfig). Plan-space values below are in pixels, 3D values in units.
+## Every rock outline is pulled up into rock (RockMesher): its height rises and
+## falls along it (rock_middle_*, rock_height_spread, height_wave) and drops
+## near every connected doorway (doorway_clear_*), so no rock top hides a way
+## through. One mesh and one collider per room. Around the level, flat outer
+## rock (no collision, no sonar) hides the void. The navigation mesh is baked
+## from the plans (NavigationBaker) for normal creatures and, on a second map,
+## for large ones (navigation_map_for).
+## Built so far in 3D: rooms, seals, outer rock, the landmarks' solid footprints
+## (plain rock until the landmark models, Phase C), creatures, Sentinels,
+## corals, stations, Echo Shards and the ancient light. Boss levels put the
+## ancient light on the arena's Boss marker until the boss, the arena door and
+## the vents are ported (Phase B, next step); the lockdown, harmless life and
+## floor scatter come later too (their plan is kept).
 
 signal level_built(level_index: int)
+
+const ROCK_SHADER: Shader = preload("res://shaders/rock_surface.gdshader")
+const FLOOR_SHADER: Shader = preload("res://shaders/floor_surface.gdshader")
 
 @export var world: WorldConfig
 ## -1 = a random spawn seed on every attempt. Any other value makes the attempts
@@ -37,59 +42,58 @@ signal level_built(level_index: int)
 ## Seed step between two tries of the same build.
 @export var attempt_seed_step: int = 7919
 
-## Solid rock drawn around the whole level (this many pixels beyond its walls),
-## so outside the playable area looks like rock fading into darkness instead
-## of a hard black edge. Not a wall: no collision, no shadow, no sonar edge.
+## Flat rock around the whole level, this many pixels beyond the grid, so the
+## space outside looks like rock fading into darkness. Not a wall: no
+## collision, no sonar.
 @export var outer_rock_margin: float = 3000.0
-## Draw order of the floors and the outer rock: under everything (flat rocks
-## are at RockWall.flat_z_index, players, creatures and rock faces at 0, y-sorted).
-@export var floor_z_index: int = -4
+## Height of the outer rock's top (units).
+@export var outer_rock_height: float = 1.1
+
+@export_group("Look")
+@export var floor_color: Color = Color(0.15, 0.19, 0.25)
+@export var rock_color: Color = Color(0.24, 0.29, 0.36)
+## The outer rock: the rock colour darkened by this share (it is never lit by
+## the sonar, only by lights near the level's edge).
+@export_range(0.0, 1.0) var outer_rock_darken: float = 0.25
+@export var sonar_color: Color = Color(0.25, 0.85, 1.0)
+## How strongly the pulse lights flat ground and rock.
+@export var floor_fill_energy: float = 0.07
+@export var rock_fill_energy: float = 0.24
+## Corners sharper than this get a hard edge (and a sonar line).
+@export var rock_smooth_degrees: float = 40.0
+## Rock outlines are split into pieces this long (pixels), so the height can
+## rise and fall along them.
+@export var rock_piece_length: float = 20.0
+## Height of a landmark's solid footprint until the landmark models (pixels).
+@export var landmark_rock_height: float = 40.0
 
 @export_group("Navigation")
-## Creature clearance used when baking the navigation mesh (about the radius
-## of a normal creature plus a small margin).
-@export var navigation_agent_radius: float = 26.0
+## Creature clearance of the normal navigation mesh (units; a whole number of
+## cells: the bake rounds it up).
+@export var navigation_agent_radius: float = 0.5
 ## Clearance a creature needs beyond its body radius. A creature whose
 ## body_radius + this is bigger than navigation_agent_radius uses the large mesh.
-@export var navigation_margin: float = 6.0
-## Agent radius of the large mesh (the biggest creature, the boss: 46 + margin).
-@export var large_navigation_agent_radius: float = 52.0
+@export var navigation_margin: float = 0.12
+## Agent radius of the large mesh (the boss; units, whole cells).
+@export var large_navigation_agent_radius: float = 1.0
+@export var navigation_cell_size: float = 0.125
+@export var navigation_cell_height: float = 0.125
 
 @export_group("Sentinels")
 ## A Sentinel's post is this far from its shard, towards the room's centre
-## (falls back to the shard spot if that point cannot be reached).
+## (falls back to the shard spot if that point cannot be reached; pixels).
 @export var sentinel_post_offset: float = 80.0
 
-@export_group("Arena Door")
-## Camera shake when the boss arena door opens (also hides the navigation rebake).
-@export var door_shake_strength: float = 6.0
-@export var door_shake_time: float = 0.5
-
 @export_group("Floor Detail")
-## Subtle sand ripples and pebbles multiplied over every room's floor
-## (SurfaceTextures.floor_detail), low contrast so they never compete with
-## the rocks: how dark the ripples / pebbles get, the ripple spacing, the
-## pebbles per texture, and the texture size (pixels, it repeats).
-@export_range(0.0, 0.5) var floor_ripple_strength: float = 0.07
-@export var floor_ripple_period: float = 26.0
-@export_range(0.0, 0.5) var floor_pebble_strength: float = 0.12
-@export var floor_pebble_count: int = 60
-@export var floor_texture_size: int = 256
-@export var floor_texture_seed: int = 5
-## The same room type looks different in every level: its floor texture is
-## picked from this many seeds and ripple periods (by level and cell), ...
-@export var floor_texture_variants: int = 4
-@export var floor_ripple_period_jitter: float = 6.0
-## ... its rock heights scale by up to this share (+ or -), ...
+## (Plan only for now: the floor scatter comes back with the models.)
+## The same room type looks different in every level: its rock heights scale
+## by up to this share (+ or -), ...
 @export_range(0.0, 0.5) var room_height_jitter: float = 0.2
-## ... and small things lie on its floor (FloorScatter: this many per room).
+## ... and small things lie on its floor (this many per room).
 @export var scatter_min: int = 14
 @export var scatter_max: int = 30
 ## Open floor needed around a scattered thing (pixels).
 @export var scatter_free_radius: float = 12.0
-## The outer rock around the level: the rock colour lightened by this much,
-## so it continues the (lighter) rock tops at the level's edge.
-@export_range(0.0, 1.0) var outer_rock_lift: float = 0.28
 
 @export_group("Seals")
 ## Soft bumps on a seal's edge facing the room (pixels, + or -), one point
@@ -97,18 +101,20 @@ signal level_built(level_index: int)
 @export var seal_bump: float = 10.0
 @export var seal_bump_spacing: float = 30.0
 
-@export_group("Rock Height (3/4 view)")
+@export_group("Rock Height")
 ## A rock's middle height is picked in this share of its room's height range
 ## (0 = rock_height_min, 1 = rock_height_max), by the rock's position.
 @export var rock_middle_low: float = 0.25
 @export var rock_middle_high: float = 0.75
-## How far the height rises and falls along a rock, as a share of the range.
+## How far the height rises and falls along a rock, as a share of the range...
 @export var rock_height_spread: float = 0.4
-## Near a connected doorway the rocks drop to this height, rising back to
-## their own over doorway_clear_distance (so no top hides the way through).
+## ...and over what distance (pixels).
+@export var height_wave: float = 200.0
+## Near a connected doorway the rocks drop to this height (pixels), rising
+## back to their own over doorway_clear_distance (so no top hides the way through).
 @export var doorway_rock_height: float = 10.0
 @export var doorway_clear_distance: float = 150.0
-## Depth of the doorway corridor on each side of the shared room edge.
+## Depth of the doorway corridor on each side of the shared room edge (pixels).
 @export var doorway_clear_depth: float = 200.0
 
 @export_group("Ambient Life")
@@ -121,7 +127,7 @@ signal level_built(level_index: int)
 
 @export_group("Validation")
 @export var validator_cell_size: float = 20.0
-## Free space a player needs (player radius + margin).
+## Free space a player needs (player radius + margin, pixels).
 @export var validator_clearance: float = 16.0
 
 
@@ -192,6 +198,7 @@ class Layout:
 		landmarks.clear()
 
 
+
 ## Level inside the current stage (0-based) and how many the stage has.
 var level_index: int = 0
 var level_count: int = 1
@@ -199,57 +206,61 @@ var level_count: int = 1
 var global_level_index: int = 0
 var spawn_seed: int = 0
 var attempts_used: int = 0
+## Height of the level's grid (pixels, plan space).
 var level_height: float = 1.0
+## Seconds the last build and its navigation bakes took (benchmark).
+var build_seconds: float = 0.0
+var bake_seconds: float = 0.0
 var _builds: int = 0
 var _definition: LevelDefinition
-var _level: Node2D
+var _level: Node3D
 var _goal: AncientLight
-var _boss: Creature
 var _player_spawns: Array[Vector2] = []
-## Planned Echo Shard spots of the current level (spawned in a later step).
+## Planned Echo Shard spots of the current level (plan space).
 var shard_spots: Array[Vector2] = []
 var _creatures: Array[Creature] = []
-## Where this level's creatures were spawned (global positions).
-var creature_spots: Array[Vector2] = []
+## Where this level's creatures were spawned (3D).
+var creature_spots: Array[Vector3] = []
 var _shards: Array[EchoShard] = []
-var _landmarks: Array[Landmark] = []
-var _door: ShardDoor
-var _lockdown: LockdownRoom
-var _navigation: NavigationRegion2D
-var _navigation_large: NavigationRegion2D
+var _layout: Layout
+var _navigation: NavigationRegion3D
+var _navigation_large: NavigationRegion3D
 var _large_map: RID
-var _rebake_pending: bool = false
-## Rock outlines of the current level (navigation obstructions, door excluded).
-var _nav_obstacles: Array[PackedVector2Array] = []
-var _nav_bounds := Rect2()
+var _floor_material: ShaderMaterial
+var _rock_material: ShaderMaterial
+var _outer_material: ShaderMaterial
+var _materials_registered: bool = false
 
 
 func _ready() -> void:
 	add_to_group("level")
-	var falloff := TopLightFalloff.new()
-	falloff.name = "TopLightFalloff"
-	add_child(falloff)
-	_large_map = NavigationServer2D.map_create()
-	var default_map: RID = get_world_2d().navigation_map
-	NavigationServer2D.map_set_cell_size(_large_map, NavigationServer2D.map_get_cell_size(default_map))
-	NavigationServer2D.map_set_edge_connection_margin(_large_map, NavigationServer2D.map_get_edge_connection_margin(default_map))
-	NavigationServer2D.map_set_merge_rasterizer_cell_scale(_large_map, NavigationServer2D.map_get_merge_rasterizer_cell_scale(default_map))
-	NavigationServer2D.map_set_use_edge_connections(_large_map, NavigationServer2D.map_get_use_edge_connections(default_map))
-	NavigationServer2D.map_set_link_connection_radius(_large_map, NavigationServer2D.map_get_link_connection_radius(default_map))
-	NavigationServer2D.map_set_active(_large_map, true)
+	_large_map = NavigationServer3D.map_create()
+	NavigationBaker.apply_to_map(_large_map, navigation_cell_size, navigation_cell_height)
+	NavigationServer3D.map_set_active(_large_map, true)
+	# A new level's mesh must be used from the next physics frame on: with the
+	# (default) asynchronous map updates, paths came from the previous level's
+	# mesh for up to ~5 frames after a build.
+	NavigationServer3D.map_set_use_async_iterations(_large_map, false)
+	NavigationServer3D.map_set_use_async_iterations(get_world_3d().navigation_map, false)
+	_floor_material = _surface_material(FLOOR_SHADER, floor_color, floor_fill_energy)
+	_rock_material = _surface_material(ROCK_SHADER, rock_color, rock_fill_energy)
+	_rock_material.set_shader_parameter("cut_enabled", true)
+	_outer_material = _surface_material(ROCK_SHADER, rock_color.darkened(outer_rock_darken), 0.0)
+	_outer_material.set_shader_parameter("cut_enabled", true)
+	_outer_material.set_shader_parameter("sonar_color", Color.BLACK)
 
 
 func _exit_tree() -> void:
 	if _large_map.is_valid():
-		NavigationServer2D.free_rid(_large_map)
+		NavigationServer3D.free_rid(_large_map)
 		_large_map = RID()
 
 
-## The navigation map a creature of this body radius paths on.
+## The navigation map a creature of this body radius (units) paths on.
 func navigation_map_for(body_radius: float) -> RID:
 	if body_radius + navigation_margin > navigation_agent_radius and _large_map.is_valid():
 		return _large_map
-	return get_world_2d().navigation_map
+	return get_world_3d().navigation_map
 
 
 ## A fresh spawn seed for the next build (random, or derived from forced_seed).
@@ -263,6 +274,7 @@ func next_spawn_seed() -> int:
 ## Plans the level with a new spawn seed until the plan passes validation,
 ## then builds it. Returns false if no seed worked within max_attempts.
 func build_level(definition: LevelDefinition, index: int, count: int, global_index: int) -> bool:
+	var started: int = Time.get_ticks_usec()
 	level_index = index
 	level_count = count
 	global_level_index = global_index
@@ -273,6 +285,7 @@ func build_level(definition: LevelDefinition, index: int, count: int, global_ind
 		return false
 	_clear()
 	_instantiate(layout)
+	build_seconds = float(Time.get_ticks_usec() - started) / 1000000.0
 	level_built.emit(index)
 	return true
 
@@ -290,7 +303,6 @@ func find_valid_layout(definition: LevelDefinition, base_seed: int) -> Layout:
 	return null
 
 
-## Plans (but does not build) the level with one spawn seed and validates it.
 func plan_layout(definition: LevelDefinition, layout_seed: int) -> Layout:
 	var layout := Layout.new()
 	layout.layout_seed = layout_seed
@@ -598,369 +610,322 @@ static func _nearest(points: Array[Vector2], to: Vector2) -> Vector2:
 
 
 func _instantiate(layout: Layout) -> void:
-	_level = Node2D.new()
+	_register_materials()
+	_layout = layout
+	_level = Node3D.new()
 	_level.name = "Level"
-	# Players (siblings of the LevelBuilder), creatures, shards and the faces of
-	# tall rocks are drawn in y order.
-	_level.y_sort_enabled = true
 	add_child(_level)
 	level_height = layout.height
-	var progress: float = (level_index + 0.5) / maxf(level_count, 1.0)
-	var floor_color: Color = world.floor_color_shallow.lerp(world.floor_color_deep, progress)
-	for chunk: LevelChunk in layout.chunks:
-		_apply_palette(chunk, floor_color)
-	_add_outer_rock(layout, floor_color.lightened(world.rock_fill_lift).lightened(outer_rock_lift))
-	# Floors first (all chunks), so pocket floors never cover a neighbour's walls.
-	for chunk: LevelChunk in layout.chunks:
-		_level.add_child(chunk)
-	for i: int in layout.seals.size():
-		var seal := RockWall.new()
-		seal.name = "Seal"
-		seal.polygon = layout.seals[i]
-		seal.color = floor_color.lightened(world.rock_fill_lift)
-		var seal_room := layout.rooms[layout.seal_cells[i]] as LevelChunk
-		seal.height = lerpf(seal_room.rock_height_min, seal_room.rock_height_max, 0.5)
-		seal.height_spread = (seal_room.rock_height_max - seal_room.rock_height_min) * rock_height_spread
-		_level.add_child(seal)
-	_add_glow_layer()
-	_landmarks.clear()
-	for landmark: Landmark in layout.landmarks:
-		landmark.rock_color = floor_color.lightened(world.rock_fill_lift)
-		_level.add_child(landmark)
-		_landmarks.append(landmark)
-	_add_accents(layout)
-	_add_scatter(layout, floor_color)
-	_build_rock_faces(layout)
+	var doorways: Array[Rect2] = _doorway_corridors(layout)
+
+	# Floors and rock, one mesh and one collider per room.
+	var size: float = world.room_size
+	for cell: Vector2i in layout.rooms:
+		var chunk: LevelChunk = layout.rooms[cell]
+		var room := Node3D.new()
+		room.name = "Room_%d_%d" % [cell.x, cell.y]
+		_level.add_child(room)
+		var floor_mesh := PlaneMesh.new()
+		floor_mesh.size = Vector2.ONE * size * _units()
+		var floor_instance := MeshInstance3D.new()
+		floor_instance.name = "Floor"
+		floor_instance.mesh = floor_mesh
+		floor_instance.material_override = _floor_material
+		floor_instance.position = to_world((Vector2(cell) + Vector2(0.5, 0.5)) * size)
+		room.add_child(floor_instance)
+		var rocks: Array[Dictionary] = []
+		var room_scale: float = 1.0 + (_room_pick(cell, "height") - 0.5) * 2.0 * room_height_jitter
+		var height_range: float = chunk.rock_height_max - chunk.rock_height_min
+		for polygon: PackedVector2Array in chunk.get_wall_polygons():
+			var pick: float = _position_pick(_middle_of(polygon))
+			var middle: float = lerpf(chunk.rock_height_min, chunk.rock_height_max, lerpf(rock_middle_low, rock_middle_high, pick)) * room_scale
+			rocks.append({"outline": polygon, "height": middle, "spread": height_range * rock_height_spread * room_scale})
+		for i: int in layout.seals.size():
+			if layout.seal_cells[i] == cell:
+				rocks.append({"outline": layout.seals[i], "height": lerpf(chunk.rock_height_min, chunk.rock_height_max, 0.5),
+					"spread": height_range * rock_height_spread})
+		for i: int in layout.landmarks.size():
+			if layout.landmark_cells[i] != cell:
+				continue
+			for polygon: PackedVector2Array in layout.landmarks[i].get_placed_footprints():
+				rocks.append({"outline": polygon, "height": landmark_rock_height, "spread": 0.0})
+		room.add_child(_room_rock(rocks, doorways))
+	_add_outer_rock(layout)
+
 	_player_spawns = layout.player_spawns
 	shard_spots = layout.shards
-
 	_shards.clear()
-	for position_value: Vector2 in layout.shards:
-		var shard := _spawn(world.shard_scene, position_value) as EchoShard
+	for spot: Vector2 in layout.shards:
+		var shard := _spawn(world.shard_scene, spot) as EchoShard
 		if shard:
 			_shards.append(shard)
-	for position_value: Vector2 in layout.corals:
-		_spawn(world.coral_scene, position_value)
-	for position_value: Vector2 in layout.stations:
-		_spawn(world.station_scene, position_value)
+	for spot: Vector2 in layout.corals:
+		_spawn(world.coral_scene, spot)
+	for spot: Vector2 in layout.stations:
+		_spawn(world.station_scene, spot)
 	_creatures.clear()
 	creature_spots.clear()
 	for i: int in layout.creature_scenes.size():
-		creature_spots.append(to_global(layout.creature_positions[i]))
 		var creature := _spawn(layout.creature_scenes[i], layout.creature_positions[i]) as Creature
 		if creature:
+			creature_spots.append(creature.position)
 			_creatures.append(creature)
-	for i: int in layout.life_scenes.size():
-		_spawn(layout.life_scenes[i], layout.life_positions[i])
 	for post: Vector2 in layout.sentinel_posts:
-		creature_spots.append(to_global(post))
 		var sentinel := _spawn(world.sentinel_scene, post) as Creature
 		if sentinel:
+			creature_spots.append(sentinel.position)
 			_creatures.append(sentinel)
-	_goal = null
-	_boss = null
-	_door = null
-	if layout.has_boss:
-		_boss = _spawn_boss(layout.goal)
-		_add_door(layout.door_polygon, floor_color.lightened(world.rock_fill_lift))
-		for vent: Vector2 in layout.vents:
-			_spawn(world.bubble_vent_scene, vent)
-	else:
-		_goal = _spawn(world.goal_scene, layout.goal) as AncientLight
-	_add_lockdown(layout, floor_color.lightened(world.rock_fill_lift))
+	# Until the boss is ported, a boss level ends at an ancient light on the
+	# arena's Boss marker.
+	_goal = _spawn(world.goal_scene, layout.goal) as AncientLight
 	_add_navigation(layout)
-	# The sonar overlay samples the new rock outlines.
-	get_tree().call_group("sonar_overlay", "rebuild_samples")
 
 
-func _add_scatter(layout: Layout, floor_color: Color) -> void:
-	for cell: Vector2i in layout.scatter:
-		var scatter := FloorScatter.new()
-		scatter.name = "FloorScatter"
-		scatter.spots = layout.scatter[cell]
-		scatter.floor_color = floor_color
-		scatter.scatter_seed = absi(hash([global_level_index, cell, "kinds"]))
-		_level.add_child(scatter)
+## The materials of this level's surfaces join the sonar, the cut-away and the
+## sand trails (once: the materials are shared by every level).
+func _register_materials() -> void:
+	if _materials_registered:
+		return
+	var sonar: Sonar = Sonar.find(get_tree())
+	var cutaway: ViewCutaway = ViewCutaway.find(get_tree())
+	var trails: SandTrails = SandTrails.find(get_tree())
+	if sonar == null:
+		return
+	_materials_registered = true
+	for material: ShaderMaterial in [_floor_material, _rock_material, _outer_material]:
+		sonar.register_material(material)
+	if cutaway:
+		cutaway.register_material(_rock_material)
+		cutaway.register_material(_outer_material)
+	if trails:
+		trails.register_material(_floor_material)
 
 
-## One shared unlit layer for the small glows of landmarks and harmless life.
-func _add_glow_layer() -> void:
-	var glow := GlowLayer.new()
-	glow.name = "GlowLayer"
-	_level.add_child(glow)
+func _surface_material(shader: Shader, color: Color, fill_energy: float) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	material.set_shader_parameter("base_color", color)
+	material.set_shader_parameter("sonar_color", sonar_color)
+	material.set_shader_parameter("fill_energy", fill_energy)
+	return material
 
 
-## A muted colour accent per room (WorldConfig.area_accents, picked by the
-## cell and the level), or the accent of a landmark standing in the room.
-func _add_accents(layout: Layout) -> void:
+## The rocks of one room as one mesh and one collider. rocks: outline (plan
+## space), middle height and spread (pixels).
+func _room_rock(rocks: Array[Dictionary], doorways: Array[Rect2]) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = "Rock"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var units: float = _units()
+	for rock: Dictionary in rocks:
+		var outline: PackedVector2Array = RockMesher.subdivide(rock["outline"] as PackedVector2Array, rock_piece_length)
+		var reach: Rect2 = _bounds_of(outline).grow(doorway_clear_distance)
+		var zones: Array[Rect2] = []
+		for doorway: Rect2 in doorways:
+			if reach.intersects(doorway):
+				zones.append(doorway)
+		var middle: float = rock["height"]
+		var spread: float = rock["spread"]
+		var height_at: Callable = func(point: Vector2) -> float:
+			return rock_height_at(point / units, middle, spread, zones) * units
+		var mesh: ArrayMesh = RockMesher.rock_mesh(_to_units(outline), middle * units, rock_smooth_degrees, height_at)
+		if mesh.get_surface_count() > 0:
+			tool.append_from(mesh, 0, Transform3D.IDENTITY)
+	var merged: ArrayMesh = tool.commit()
+	var instance := MeshInstance3D.new()
+	instance.name = "Mesh"
+	instance.mesh = merged
+	instance.material_override = _rock_material
+	body.add_child(instance)
+	if merged.get_surface_count() > 0:
+		var shape: ConcavePolygonShape3D = merged.create_trimesh_shape()
+		shape.backface_collision = true
+		var collider := CollisionShape3D.new()
+		collider.shape = shape
+		body.add_child(collider)
+	return body
+
+
+## Height of a rock at plan point p (pixels): its middle height with a slow
+## rise and fall along the rock, dropping to doorway_rock_height near a
+## doorway corridor.
+func rock_height_at(p: Vector2, middle: float, spread: float, zones: Array[Rect2]) -> float:
+	var h: float = middle + spread * _noise2(p / maxf(height_wave, 1.0))
+	if not zones.is_empty():
+		var distance: float = INF
+		for zone: Rect2 in zones:
+			var dx: float = maxf(maxf(zone.position.x - p.x, p.x - zone.end.x), 0.0)
+			var dy: float = maxf(maxf(zone.position.y - p.y, p.y - zone.end.y), 0.0)
+			distance = minf(distance, Vector2(dx, dy).length())
+		var f: float = clampf(distance / maxf(doorway_clear_distance, 1.0), 0.0, 1.0)
+		h = lerpf(minf(doorway_rock_height, h), h, f * f * (3.0 - 2.0 * f))
+	return maxf(h, 1.0)
+
+
+## Flat rock tops round the level: every empty cell of the grid's bounds plus
+## a frame outer_rock_margin wide. Lit only by lights near the level's edge.
+func _add_outer_rock(layout: Layout) -> void:
+	var size: float = world.room_size
+	var cells := Rect2i()
+	var first: bool = true
+	for cell: Vector2i in layout.rooms:
+		cells = Rect2i(cell, Vector2i.ONE) if first else cells.merge(Rect2i(cell, Vector2i.ONE))
+		first = false
+	var slabs: Array[Rect2] = []
+	for x: int in range(cells.position.x, cells.end.x):
+		for y: int in range(cells.position.y, cells.end.y):
+			if not layout.rooms.has(Vector2i(x, y)):
+				slabs.append(Rect2(Vector2(x, y) * size, Vector2.ONE * size))
+	var grid := Rect2(Vector2(cells.position) * size, Vector2(cells.size) * size)
+	var outer: Rect2 = grid.grow(outer_rock_margin)
+	slabs.append(Rect2(outer.position, Vector2(outer.size.x, grid.position.y - outer.position.y)))
+	slabs.append(Rect2(Vector2(outer.position.x, grid.end.y), Vector2(outer.size.x, outer.end.y - grid.end.y)))
+	slabs.append(Rect2(Vector2(outer.position.x, grid.position.y), Vector2(grid.position.x - outer.position.x, grid.size.y)))
+	slabs.append(Rect2(Vector2(grid.end.x, grid.position.y), Vector2(outer.end.x - grid.end.x, grid.size.y)))
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	tool.set_normal(Vector3.UP)
+	for slab: Rect2 in slabs:
+		var a: Vector3 = to_world(slab.position) + Vector3.UP * outer_rock_height
+		var b: Vector3 = to_world(Vector2(slab.end.x, slab.position.y)) + Vector3.UP * outer_rock_height
+		var c: Vector3 = to_world(slab.end) + Vector3.UP * outer_rock_height
+		var d: Vector3 = to_world(Vector2(slab.position.x, slab.end.y)) + Vector3.UP * outer_rock_height
+		# Clockwise seen from above: Godot's front face.
+		for corner: Vector3 in [a, b, c, a, c, d]:
+			tool.add_vertex(corner)
+	var instance := MeshInstance3D.new()
+	instance.name = "OuterRock"
+	instance.mesh = tool.commit()
+	instance.material_override = _outer_material
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_level.add_child(instance)
+
+
+## Bakes the creatures' navigation meshes from the plans: every room's square
+## is walkable except its rock (walls, seals, landmark footprints).
+func _add_navigation(layout: Layout) -> void:
+	var started: int = Time.get_ticks_usec()
+	var floors: Array[PackedVector2Array] = []
+	var rocks: Array[Dictionary] = []
 	var size: float = world.room_size
 	for cell: Vector2i in layout.rooms:
-		var accent := AreaAccent.new()
-		accent.name = "AreaAccent"
-		var landmark_index: int = -1
-		for i: int in layout.landmarks.size():
-			if layout.landmark_cells[i] == cell and layout.landmarks[i].accent_color.a > 0.0:
-				landmark_index = i
-		if landmark_index >= 0:
-			var landmark: Landmark = layout.landmarks[landmark_index]
-			accent.accent = landmark.accent_color
-			accent.radius = landmark.accent_radius
-			accent.position = landmark.position
-		elif not world.area_accents.is_empty():
-			var pick: int = absi(hash([cell, global_level_index])) % world.area_accents.size()
-			accent.accent = world.area_accents[pick]
-			accent.radius = world.area_accent_radius
-			accent.position = (Vector2(cell) + Vector2(0.5, 0.5)) * size
-		else:
-			continue
-		_level.add_child(accent)
-
-
-func _add_outer_rock(layout: Layout, rock_color: Color) -> void:
-	var bounds := Rect2()
-	var first: bool = true
+		var corner: Vector2 = Vector2(cell) * size
+		floors.append(_to_units(PackedVector2Array([corner, corner + Vector2(size, 0.0),
+			corner + Vector2(size, size), corner + Vector2(0.0, size)])))
+	var obstacles: Array[PackedVector2Array] = []
 	for chunk: LevelChunk in layout.chunks:
-		for polygon: PackedVector2Array in chunk.get_wall_polygons():
-			for point: Vector2 in polygon:
-				bounds = Rect2(point, Vector2.ZERO) if first else bounds.expand(point)
-				first = false
-	bounds = bounds.grow(outer_rock_margin)
-	var rock := Polygon2D.new()
-	rock.name = "OuterRock"
-	rock.color = rock_color
-	rock.polygon = PackedVector2Array([bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end, Vector2(bounds.position.x, bounds.end.y)])
-	rock.z_index = floor_z_index
-	# Lighter than the floor only near a light, like the rock tops.
-	rock.material = TopLightFalloff.material()
-	# First child = drawn under every chunk.
-	_level.add_child(rock)
-
-
-func _add_lockdown(layout: Layout, rock_color: Color) -> void:
-	_lockdown = null
-	if not layout.has_lockdown or world.lockdown_room_scene == null:
-		return
-	_lockdown = world.lockdown_room_scene.instantiate() as LockdownRoom
-	_lockdown.room_rect = layout.lockdown_rect
-	_lockdown.barrier_polygons = layout.lockdown_barriers
-	_lockdown.barrier_color = rock_color
-	_lockdown.spawn_points = layout.lockdown_spawns
-	_lockdown.creature_scene = world.lockdown_creature_scene
-	_lockdown.wave_calm = _definition.lockdown_wave_calm if _definition else 0
-	_lockdown.wave_challenge = _definition.lockdown_wave_challenge if _definition else 0
-	_lockdown.navigation_changed.connect(_rebake_navigation_soon)
-	# Its wave creatures join the level's y-sort.
-	_lockdown.y_sort_enabled = true
-	_level.add_child(_lockdown)
-
-
-func _add_door(door_polygon: PackedVector2Array, rock_color: Color) -> void:
-	if door_polygon.is_empty() or world.shard_door_scene == null:
-		return
-	_door = world.shard_door_scene.instantiate() as ShardDoor
-	# Before _ready: RockWall builds its shapes from these.
-	_door.polygon = door_polygon
-	_door.color = rock_color
-	_level.add_child(_door)
-
-
-## Bakes the creatures' navigation mesh: the whole grid is walkable except the
-## rock (room walls, seals and the closed arena door), shrunk by the agent radius.
-func _add_navigation(layout: Layout) -> void:
-	_nav_obstacles.clear()
-	for chunk: LevelChunk in layout.chunks:
-		_nav_obstacles.append_array(chunk.get_wall_polygons())
-	_nav_obstacles.append_array(layout.seals)
-	_nav_obstacles.append_array(layout.landmark_polygons)
-	_nav_bounds = Rect2()
-	for chunk: LevelChunk in layout.chunks:
-		var room := Rect2(chunk.position, Vector2.ONE * world.room_size)
-		_nav_bounds = room if not _nav_bounds.has_area() else _nav_bounds.merge(room)
-	_navigation = NavigationRegion2D.new()
+		obstacles.append_array(chunk.get_wall_polygons())
+	obstacles.append_array(layout.seals)
+	obstacles.append_array(layout.landmark_polygons)
+	for polygon: PackedVector2Array in obstacles:
+		rocks.append({"outline": _to_units(polygon), "height": 1.0})
+	NavigationBaker.apply_to_map(get_world_3d().navigation_map, navigation_cell_size, navigation_cell_height)
+	_navigation = NavigationRegion3D.new()
 	_navigation.name = "Navigation"
-	_navigation.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _changing_obstacles())
+	_navigation.navigation_mesh = NavigationBaker.bake(floors, rocks, navigation_agent_radius, navigation_cell_size, navigation_cell_height)
 	_level.add_child(_navigation)
-	_navigation_large = NavigationRegion2D.new()
+	_navigation_large = NavigationRegion3D.new()
 	_navigation_large.name = "NavigationLarge"
-	_navigation_large.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _changing_obstacles(), large_navigation_agent_radius)
+	_navigation_large.navigation_mesh = NavigationBaker.bake(floors, rocks, large_navigation_agent_radius, navigation_cell_size, navigation_cell_height)
 	# Before it enters the tree, so it never sits on the default map.
 	_navigation_large.set_navigation_map(_large_map)
 	_level.add_child(_navigation_large)
-	# A boss arena's pillar that breaks is no obstacle any more.
-	for node: Node in get_tree().get_nodes_in_group("arena_pillars"):
-		var pillar := node as ArenaPillar
-		if pillar and _level.is_ancestor_of(pillar):
-			pillar.broken.connect(_on_pillar_broken.bind(pillar.get_polygon_in(self)))
+	bake_seconds = float(Time.get_ticks_usec() - started) / 1000000.0
 
 
-func _on_pillar_broken(polygon: PackedVector2Array) -> void:
-	for i: int in range(_nav_obstacles.size() - 1, -1, -1):
-		if _nav_obstacles[i].size() == polygon.size() and _nav_obstacles[i][0].distance_to(polygon[0]) < 1.0:
-			_nav_obstacles.remove_at(i)
-	_rebake_navigation_soon()
-
-
-## Rock that can open or close: the closed arena door, closed lockdown barriers.
-func _changing_obstacles() -> Array[PackedVector2Array]:
-	var result: Array[PackedVector2Array] = []
-	if _door and not _door.is_open:
-		result.append(_door.polygon)
-	if is_instance_valid(_lockdown):
-		result.append_array(_lockdown.get_obstacles())
-	return result
-
-
-## Rebakes the navigation on the next frame (the event that asked for it has
-## just started a camera shake, which hides the short hitch).
-func _rebake_navigation_soon() -> void:
-	if _rebake_pending:
-		return
-	_rebake_pending = true
-	await get_tree().process_frame
-	_rebake_pending = false
-	if is_instance_valid(_navigation):
-		_navigation.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _changing_obstacles())
-	if is_instance_valid(_navigation_large):
-		_navigation_large.navigation_polygon = bake_navigation(_nav_obstacles, _nav_bounds, _changing_obstacles(), large_navigation_agent_radius)
-
-
-## A navigation mesh over bounds with every obstacle cut out (extras = rock
-## that can open or close; may be empty). agent_radius < 0 = navigation_agent_radius.
-func bake_navigation(obstacles: Array[PackedVector2Array], bounds: Rect2, extras: Array[PackedVector2Array], agent_radius: float = -1.0) -> NavigationPolygon:
-	var source := NavigationMeshSourceGeometryData2D.new()
-	source.add_traversable_outline(PackedVector2Array([bounds.position, Vector2(bounds.end.x, bounds.position.y),
-		bounds.end, Vector2(bounds.position.x, bounds.end.y)]))
-	for polygon: PackedVector2Array in obstacles:
-		source.add_obstruction_outline(polygon)
-	for polygon: PackedVector2Array in extras:
-		source.add_obstruction_outline(polygon)
-	var navigation := NavigationPolygon.new()
-	navigation.agent_radius = agent_radius if agent_radius >= 0.0 else navigation_agent_radius
-	NavigationServer2D.bake_from_source_geometry_data(navigation, source)
-	return navigation
-
-
-## All shards collected: unlock the ancient light, or open the arena door (and
-## let the creatures path through it).
+## All shards collected: unlock the ancient light.
 func open_exit() -> void:
 	if _goal:
 		_goal.set_shard_progress(_goal.shards_needed, _goal.shards_needed)
-	if _door and not _door.is_open:
-		_door.open()
-		get_tree().call_group("shared_camera", "shake_with", door_shake_strength, door_shake_time)
-		_rebake_navigation_soon()
-
-
-func _spawn_boss(at: Vector2) -> Creature:
-	var boss := _definition.boss.instantiate() as Creature
-	if boss == null:
-		push_error("LevelBuilder: the boss scene must be a Creature")
-		return null
-	# Before _ready, so the creature starts with the overridden health.
-	if _definition.boss_max_health > 0:
-		boss.max_health = _definition.boss_max_health
-	if _definition.boss_challenge_health_scale > 0.0 and boss is Boss:
-		(boss as Boss).challenge_health_scale = _definition.boss_challenge_health_scale
-	boss.position = at
-	# The Echo's echo points to it once the arena door is open.
-	boss.add_to_group("level_exit")
-	_level.add_child(boss)
-	return boss
 
 
 func _clear() -> void:
 	if _level:
-		# Out of the tree right away, so groups (rock_walls, creatures...) only
+		# Out of the tree right away, so groups (creatures, corals...) only
 		# contain the new level from now on.
 		remove_child(_level)
 		_level.queue_free()
 		_level = null
+	if _layout:
+		_layout.free_chunks()
+		_layout = null
 
 
-func _spawn(scene: PackedScene, at: Vector2) -> Node2D:
+## An instance of scene on a plan point (null if the scene is missing or not 3D).
+func _spawn(scene: PackedScene, at: Vector2) -> Node3D:
 	if scene == null:
 		return null
-	var node := scene.instantiate() as Node2D
-	node.position = at
+	var instance: Node = scene.instantiate()
+	var node := instance as Node3D
+	if node == null:
+		push_warning("LevelBuilder: %s is not a 3D scene yet; skipped" % scene.resource_path)
+		instance.free()
+		return null
+	node.position = to_world(at)
 	_level.add_child(node)
 	return node
 
 
-## Colours, rock height and draw order of a chunk (before it enters the tree).
-func _apply_palette(chunk: LevelChunk, floor_color: Color) -> void:
-	# Its tall rocks' faces join the level's y-sort through the chunk.
-	chunk.y_sort_enabled = true
-	var cell := Vector2i((chunk.position / world.room_size).round())
-	var texture_seed: int = floor_texture_seed + int(_room_pick(cell, "floor") * floor_texture_variants)
-	var ripple_period: float = floor_ripple_period + roundf((_room_pick(cell, "ripple") - 0.5) * 2.0) * floor_ripple_period_jitter
-	for node: Node in chunk.find_children("*", "", true, false):
-		if node is RockWall:
-			var wall := node as RockWall
-			wall.color = floor_color.lightened(world.rock_fill_lift)
-			_apply_height(wall, chunk, cell)
-		elif node is Polygon2D:
-			var floor_shape := node as Polygon2D
-			floor_shape.color = floor_color
-			floor_shape.z_index = floor_z_index
-			floor_shape.texture = SurfaceTextures.floor_detail(floor_texture_size, floor_ripple_strength, ripple_period, floor_pebble_strength, floor_pebble_count, texture_seed)
-			floor_shape.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+# --- Plan space and 3D ----------------------------------------------------------
+
+func _units() -> float:
+	return world.units_per_pixel if world else 0.02
 
 
-## A rock's middle height and spread from its room's range (the same rock
-## gets the same height on every attempt of a level, but other heights in
-## another level, and the whole room is a little taller or lower there).
-func _apply_height(wall: RockWall, chunk: LevelChunk, cell: Vector2i) -> void:
+## A plan point (pixels) on the 3D floor.
+func to_world(point: Vector2) -> Vector3:
+	return Vector3(point.x, 0.0, point.y) * _units()
+
+
+## A 3D point back to plan space (pixels).
+func to_plan(point: Vector3) -> Vector2:
+	return Vector2(point.x, point.z) / _units()
+
+
+func _to_units(points: PackedVector2Array) -> PackedVector2Array:
+	var result := PackedVector2Array()
+	var units: float = _units()
+	for point: Vector2 in points:
+		result.append(point * units)
+	return result
+
+
+## Same value for the same rock position and level, in [0, 1).
+func _position_pick(middle: Vector2) -> float:
+	return fposmod(sin(middle.x * 0.0173 + middle.y * 0.0291 + global_level_index * 1.618) * 43758.5453, 1.0)
+
+
+static func _middle_of(points: PackedVector2Array) -> Vector2:
 	var middle := Vector2.ZERO
-	for point: Vector2 in wall.polygon:
-		middle += point / wall.polygon.size()
-	middle += chunk.position
-	var pick: float = fposmod(sin(middle.x * 0.0173 + middle.y * 0.0291 + global_level_index * 1.618) * 43758.5453, 1.0)
-	var share: float = lerpf(rock_middle_low, rock_middle_high, pick)
-	var room_scale: float = 1.0 + (_room_pick(cell, "height") - 0.5) * 2.0 * room_height_jitter
-	wall.height = lerpf(chunk.rock_height_min, chunk.rock_height_max, share) * room_scale
-	wall.height_spread = (chunk.rock_height_max - chunk.rock_height_min) * rock_height_spread * room_scale
+	for point: Vector2 in points:
+		middle += point / points.size()
+	return middle
 
 
-## Top surfaces and front faces of the tall rocks (rooms with a rock height range).
-## Overlapping rocks need no cutting: every piece sorts by its own base, so
-## the rock in front covers the one behind. Every base of the level is passed
-## on, so touching rocks cast no shadow on each other.
-func _build_rock_faces(layout: Layout) -> void:
-	var walls: Array[RockWall] = []
-	for node: Node in _level.find_children("*", "", true, false):
-		var wall := node as RockWall
-		if wall and wall.height > 0.0:
-			walls.append(wall)
-	if walls.is_empty():
-		return
-	var bases: Array[PackedVector2Array] = []
-	for chunk: LevelChunk in layout.chunks:
-		for polygon: PackedVector2Array in chunk.get_wall_polygons():
-			bases.append(global_transform * polygon)
-	for polygon: PackedVector2Array in layout.seals:
-		bases.append(global_transform * polygon)
-	for polygon: PackedVector2Array in layout.landmark_polygons:
-		bases.append(global_transform * polygon)
-	var rooms: Array[Rect2] = []
-	for chunk: LevelChunk in layout.chunks:
-		rooms.append(global_transform * Rect2(chunk.position, Vector2.ONE * world.room_size))
-	var doorways: Array[Rect2] = _doorway_corridors(layout)
-	var base_bounds: Array[Rect2] = []
-	for base: PackedVector2Array in bases:
-		base_bounds.append(_bounds_of(base))
-	for wall: RockWall in walls:
-		var reach: Rect2 = _bounds_of(wall.get_global_outline()).grow(doorway_clear_distance)
-		wall.clear_zones.clear()
-		for doorway: Rect2 in doorways:
-			if reach.intersects(doorway):
-				wall.clear_zones.append(doorway)
-		wall.clear_height = doorway_rock_height
-		wall.clear_distance = doorway_clear_distance
-		wall.build_faces(bases, _room_of(wall, rooms), base_bounds)
+static func _bounds_of(points: PackedVector2Array) -> Rect2:
+	var bounds := Rect2(points[0], Vector2.ZERO)
+	for point: Vector2 in points:
+		bounds = bounds.expand(point)
+	return bounds
 
 
-## The corridor of every connected doorway (global): door wide, reaching
-## doorway_clear_depth into both rooms.
+## Smooth value noise in [-1, 1].
+static func _noise2(p: Vector2) -> float:
+	var cell := Vector2(floorf(p.x), floorf(p.y))
+	var f: Vector2 = p - cell
+	f = f * f * (Vector2(3.0, 3.0) - 2.0 * f)
+	var top_row: float = lerpf(_hash(cell.x * 57.0 + cell.y * 113.0), _hash((cell.x + 1.0) * 57.0 + cell.y * 113.0), f.x)
+	var bottom_row: float = lerpf(_hash(cell.x * 57.0 + (cell.y + 1.0) * 113.0), _hash((cell.x + 1.0) * 57.0 + (cell.y + 1.0) * 113.0), f.x)
+	return lerpf(top_row, bottom_row, f.y) * 2.0 - 1.0
+
+
+static func _hash(n: float) -> float:
+	return fposmod(sin(n) * 43758.5453, 1.0)
+
+
 func _doorway_corridors(layout: Layout) -> Array[Rect2]:
 	var size: float = world.room_size
 	var result: Array[Rect2] = []
@@ -973,27 +938,8 @@ func _doorway_corridors(layout: Layout) -> Array[Rect2]:
 			var across: float = world.room_door_width
 			var along: float = doorway_clear_depth * 2.0
 			var extent := Vector2(along, across) if other.x != cell.x else Vector2(across, along)
-			result.append(global_transform * Rect2(middle - extent * 0.5, extent))
+			result.append(Rect2(middle - extent * 0.5, extent))
 	return result
-
-
-static func _bounds_of(points: PackedVector2Array) -> Rect2:
-	var bounds := Rect2(points[0], Vector2.ZERO)
-	for point: Vector2 in points:
-		bounds = bounds.expand(point)
-	return bounds
-
-
-## The room rect (global) holding the middle of the wall's base, or an empty rect.
-static func _room_of(wall: RockWall, rooms: Array[Rect2]) -> Rect2:
-	var middle := Vector2.ZERO
-	var outline: PackedVector2Array = wall.get_global_outline()
-	for point: Vector2 in outline:
-		middle += point / outline.size()
-	for room: Rect2 in rooms:
-		if room.has_point(middle):
-			return room
-	return Rect2()
 
 
 func _marker_positions(chunk: LevelChunk, prefix: String) -> Array[Vector2]:
@@ -1024,46 +970,34 @@ static func _shuffle_any(values: Array, rng: RandomNumberGenerator) -> void:
 		values[j] = swap
 
 
-# --- Queries used by the HUD, Darkness, StageManager ------------------------
-
-func depth_at(world_y: float) -> float:
-	return world.surface_depth_m + global_level_index * world.level_depth_step_m + maxf(world_y, 0.0) * world.meters_per_pixel
 
 
-## 0 at the top of the current level, 1 at its bottom.
-func depth_ratio_at(world_y: float) -> float:
-	return clampf(world_y / level_height, 0.0, 1.0)
+# --- Queries used by the HUD, Darkness, the level flow ---------------------------
+
+## Depth in metres at a 3D point's z (the HUD's depth readout).
+func depth_at(world_z: float) -> float:
+	return world.surface_depth_m + global_level_index * world.level_depth_step_m + maxf(world_z / _units(), 0.0) * world.meters_per_pixel
+
+
+## 0 at the top of the current level, 1 at its bottom (3D z).
+func depth_ratio_at(world_z: float) -> float:
+	return clampf(world_z / _units() / level_height, 0.0, 1.0)
 
 
 ## 0 at the top of the stage's first level, 1 at the bottom of its last level.
-func stage_progress_at(world_y: float) -> float:
-	return (level_index + depth_ratio_at(world_y)) / maxf(level_count, 1.0)
+func stage_progress_at(world_z: float) -> float:
+	return (level_index + depth_ratio_at(world_z)) / maxf(level_count, 1.0)
 
 
-func get_spawn_position(player_number: int) -> Vector2:
+func get_spawn_position(player_number: int) -> Vector3:
 	if _player_spawns.is_empty():
 		return global_position
-	return to_global(_player_spawns[clampi(player_number - 1, 0, _player_spawns.size() - 1)])
+	return to_world(_player_spawns[clampi(player_number - 1, 0, _player_spawns.size() - 1)])
 
 
-## The ancient light (null in a boss level).
+## The ancient light (the exit; on a boss level, for now, in the arena).
 func get_goal() -> AncientLight:
 	return _goal
-
-
-## The boss (null in a normal level).
-func get_boss() -> Creature:
-	return _boss
-
-
-## The lockdown event of the current level (null if it has none).
-func get_lockdown() -> LockdownRoom:
-	return _lockdown if is_instance_valid(_lockdown) else null
-
-
-## The boss arena's door (null in a normal level).
-func get_exit_door() -> ShardDoor:
-	return _door
 
 
 ## The Echo Shards of the current level (collected ones are freed).
@@ -1071,10 +1005,14 @@ func get_shards() -> Array[EchoShard]:
 	return _shards
 
 
-## The landmarks of the current level.
-func get_landmarks() -> Array[Landmark]:
-	return _landmarks
-
-
 func get_creatures() -> Array[Creature]:
-	return _creatures
+	var alive: Array[Creature] = []
+	for creature: Creature in _creatures:
+		if is_instance_valid(creature):
+			alive.append(creature)
+	return alive
+
+
+## The plan of the current level (rooms, links, spawns; plan space).
+func get_layout() -> Layout:
+	return _layout

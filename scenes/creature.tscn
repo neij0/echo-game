@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/creature.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/creature_body.gd" id="2_body"]
@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scripts/exposed_mark.gd" id="7_mark"]
 [ext_resource type="Script" path="res://scripts/creature_voice.gd" id="8_voice"]
 [ext_resource type="Script" path="res://scripts/creature_stuck_watch.gd" id="9_stuck"]
+[ext_resource type="Script" path="res://scripts/sand_trail_maker.gd" id="10_sand"]
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_body"]
 radius = 0.4
@@ -61,3 +62,9 @@ creature = NodePath("..")
 [node name="Voice" type="Node" parent="." node_paths=PackedStringArray("creature")]
 script = ExtResource("8_voice")
 creature = NodePath("..")
+
+[node name="SandTrail" type="Node3D" parent="."]
+script = ExtResource("10_sand")
+radius = 0.26
+depth = 0.6
+puff_speed = 7.0

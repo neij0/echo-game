@@ -8,8 +8,8 @@ extends Creature
 ## alerts do not interest it.
 
 @export_group("Light Hunter")
-## The hunter senses the Echo from this far (through rocks: it follows light).
-@export var sense_range: float = 1100.0
+## The hunter senses the Echo from this far (units; through rock: it follows light).
+@export var sense_range: float = 22.0
 ## Speed towards the Echo while she stays in the dark, as a share of the
 ## chase speed (while she is lit or just pulsed it uses the full chase speed).
 @export_range(0.0, 1.0) var dark_speed_ratio: float = 0.4
@@ -51,14 +51,16 @@ func is_echo_lit() -> bool:
 	return false
 
 
-func hear_pulse(_origin: Vector2, player: Player) -> void:
+func hear_pulse(_origin: Vector3, player: Player) -> void:
 	# Pulses are light to it: only the Echo's own pulses matter, and they make
 	# it rush at her.
-	if player and player == _find_echo() and global_position.distance_to(player.global_position) <= sense_range:
+	if is_resting():
+		return
+	if player and player == _find_echo() and _flat_distance(global_position, player.global_position) <= sense_range:
 		_frenzy_left = pulse_frenzy_time
 
 
-func hear_noise(_origin: Vector2, _radius: float) -> void:
+func hear_noise(_origin: Vector3, _radius: float) -> void:
 	# Sound does not interest it.
 	pass
 
@@ -68,10 +70,12 @@ func hear_alert(_source: Creature) -> void:
 
 
 func _look_for_players(_delta: float) -> void:
+	if is_resting():
+		return
 	var prey: Player = _provoked_by if _provoked_by and _can_chase(_provoked_by) else null
 	if prey == null:
 		var echo: Player = _find_echo()
-		if echo and _can_chase(echo) and global_position.distance_to(echo.global_position) <= sense_range:
+		if echo and _can_chase(echo) and _flat_distance(global_position, echo.global_position) <= sense_range:
 			prey = echo
 	if prey == null:
 		return
