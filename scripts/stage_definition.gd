@@ -14,9 +14,9 @@ extends Resource
 ## Base darkness at the bottom of the stage's last level (it fades towards
 ## this as the players go down).
 @export var deep_ambient_color: Color = Color(0.16, 0.23, 0.28)
-## 3D: share of the world's near ambient (WorldConfig.near_ambient_*) in this
-## stage; deeper stages a little darker.
-@export_range(0.0, 2.0) var near_ambient_scale: float = 1.0
+## 3D: share of the world ambient (WorldConfig.world_ambient_*) in this stage;
+## deeper stages a little darker.
+@export_range(0.0, 2.0) var world_ambient_scale: float = 1.0
 ## 0 = no light shafts from above. 1 = the world's full shaft brightness.
 @export_range(0.0, 1.0) var light_shaft_strength: float = 0.0
 

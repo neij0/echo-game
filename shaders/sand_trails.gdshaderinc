@@ -14,7 +14,8 @@ vec2 trail_uv(vec3 world) {
 }
 
 // x = furrow depth (0-1), y = stirred sand (0-1), zw = slope of the furrow
-// along x and z (for the shading).
+// along x and z (never used to tilt the floor's normal: a tilted normal
+// would get sonar outlines).
 vec4 trail_at(vec3 world) {
 	vec2 uv = trail_uv(world);
 	float step_uv = trail_texel / trail_window;

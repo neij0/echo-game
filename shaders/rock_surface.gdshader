@@ -1,5 +1,6 @@
 shader_type spatial;
-// Room surfaces (floor, rocks, walls): dark lit rock with a little grain, plus
+// Room surfaces (floor, rocks, walls): dark lit rock with a little grain, the
+// world's faint ambient (world_ambient.gdshaderinc), plus
 // the sonar in world space (the wave front crossing the surface, a faint
 // afterglow shaded towards the pulse, contour lines on steep faces) and the
 // cut-away (rock between the camera and a character is removed; turned on
@@ -7,6 +8,7 @@ shader_type spatial;
 
 #include "res://shaders/sonar.gdshaderinc"
 #include "res://shaders/cutaway.gdshaderinc"
+#include "res://shaders/world_ambient.gdshaderinc"
 
 uniform vec3 base_color : source_color = vec3(0.1, 0.12, 0.16);
 uniform float grain_scale = 1.6;
@@ -56,7 +58,8 @@ void fragment() {
 	}
 
 	float grain = noise(world_pos * grain_scale) * 0.65 + noise(world_pos * grain_scale * 3.7) * 0.35;
-	ALBEDO = base_color * (1.0 + (grain - 0.5) * 2.0 * grain_strength);
+	vec3 albedo = base_color * (1.0 + (grain - 0.5) * 2.0 * grain_strength);
+	ALBEDO = albedo;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.1;
 
@@ -66,5 +69,5 @@ void fragment() {
 	float band = abs(fract(world_pos.y / contour_spacing + 0.5) - 0.5) * contour_spacing;
 	float contour = (1.0 - smoothstep(0.0, contour_width, band)) * steep;
 	EMISSION = sonar_color * (sonar.x * front_energy + sonar.z * fill_energy + sonar.y * contour * contour_energy)
-		+ cut_rim_color * cut.y * cut_rim_energy;
+		+ cut_rim_color * cut.y * cut_rim_energy + world_ambient(world_pos, albedo);
 }

@@ -705,6 +705,10 @@ func _register_materials() -> void:
 		cutaway.register_material(_outer_material)
 	if trails:
 		trails.register_material(_floor_material)
+	var darkness: Darkness = Darkness.find(get_tree())
+	if darkness:
+		for material: ShaderMaterial in [_floor_material, _rock_material, _outer_material]:
+			darkness.register_material(material)
 
 
 func _surface_material(shader: Shader, color: Color, fill_energy: float) -> ShaderMaterial:

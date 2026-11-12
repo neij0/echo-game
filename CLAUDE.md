@@ -54,13 +54,23 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   above it, so a rounded body never slides up onto a low rock (doorway rock is only
   0.2 high). Convex prisms were tried and fail (a concave outline splits into slivers
   that push a body deeper in). `tools/test_walls.tscn` checks it.
-- **Darkness** (3D): the far ambient (`Environment`, the stage's colour x 0.06) stays
-  near zero; a faint deep-blue **near ambient** round each player (`Darkness`: one
-  shadowless light high above each player, fading out by `near_ambient_radius`) makes
-  the nearby floor and rock silhouettes faintly readable, never far ones. Colour,
-  energy and radius in `WorldConfig` (`near_ambient_*`), a share per stage
-  (`StageDefinition.near_ambient_scale`: Ocean 1 / 0.85 / 0.7), times the Brightness
-  option.
+- **Darkness** (3D): the ambient on everything (`Environment`, the stage's colour x
+  0.042) stays near zero. The **world ambient** (`Darkness`,
+  `shaders/world_ambient.gdshaderinc`) is the world's own faint deep-blue light from the
+  far surface: uniform on the level surfaces (floor, rock, outer rock: materials
+  registered with `Darkness.register_material`), sinking into darkness like fog with
+  distance from the camera's focus (`world_ambient_fog_begin` / `_end`), so rock
+  silhouettes on screen read faintly and the far layout still needs the pulse. No light
+  follows a player (a follow light read as a lamp). Colour, energy and fog in
+  `WorldConfig` (`world_ambient_*`), a share per stage
+  (`StageDefinition.world_ambient_scale`: Ocean 1 / 0.85 / 0.7), times the Brightness
+  option. **Brightness**: 1 (100 %) is the look the 3D play-test chose (it was 70 %
+  before; the player lights were scaled to match); settings saved before settings
+  version 2 are converted (`GameState.OLD_BRIGHTNESS_BASE`).
+- **Sonar outlines** (`shaders/sonar_edges.gdshader`, screen space: depth + normal
+  buffers) only outline rock, landmarks and creatures: a crease between two up-facing
+  surfaces never counts, and the floor shader never tilts its normal (sand trails and
+  floor detail are albedo only), or every groove would glow.
 - **Not ported yet**: every script and tool in **`legacy2d/`** (it has a `.gdignore`, so the
   editor never parses it; paths mirror the project; `git mv` a file back when its phase
   comes, see `legacy2d/README.md`): stage manager, the full HUD, shard door, lockdown,
@@ -73,9 +83,9 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   creatures; fish later) stamps a furrow into one texture that wraps over the world
   (`trail_window`, no scrolling); only makers within `active_radius` of the camera stamp;
   `fade_time` / `stir_fade_time` (exports); puffs (lit particles) above `puff_speed`. The
-  floor shader only changes how the sand takes light (no glow of its own: the pulse's
-  afterglow lights the groove like any other sand, a little darker), so a trail shows
-  only where lit or in a pulse's afterglow. Teleports (> `max_step`) leave no furrow.
+  floor shader only darkens the sand (albedo only, never the normal: no outline, no
+  glow; the pulse's afterglow lights the groove like any other sand, a little darker),
+  so a trail shows only where lit or in a pulse's afterglow. Teleports (> `max_step`) leave no furrow.
 - **Tests on this branch**: `tools/test_levels.tscn` (headless: every Ocean level builds in
   3D with every shard and the exit reachable, the level flow, stations, corals, Sentinel
   leash, light hunter, sand trails; prints the quiet-spaces report):
@@ -96,7 +106,7 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player
   blocks; a stand-in level flow (shards -> light -> next level; both down = again). Keys:
   N / P level, 1-9 jump, R again, M mode, F freeze creatures, T trails, C cut-away,
-  I interpolation, O oxygen drain, L near ambient, B brightness 70 / 100 / 130 %. `-- shots <folder> [level]`: pictures (with and without the near
+  I interpolation, O oxygen drain, L world ambient, B brightness 70 / 100 / 130 %. `-- shots <folder> [level]`: pictures (with and without the world
   ambient) + FPS benchmark (trails on / off) on the largest level. It loads `worlds/ocean.tres` at run time, which
   prints load errors for the scenes whose scripts are still in `legacy2d/` (harmless).
 - **Play-test stage**: `tools/core_test.tscn` (F6): three real Ocean rooms with the real

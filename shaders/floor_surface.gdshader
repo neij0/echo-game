@@ -1,14 +1,16 @@
 shader_type spatial;
-// The sea floor: dark sand, lit only by real lights, with faint ripples and
-// the sand trails (furrows behind players and creatures, stirred puffs). A
-// furrow only changes how the sand takes light (darker groove, a tilted
-// slope), so it shows only where something lights it: a player's light, a
-// lit coral, or the pulse, which reveals it like any other sand (no glow of
-// its own: the groove takes the pulse's afterglow a little darker, so the
-// Echo can follow a creature's track). Plus the sonar in world space.
+// The sea floor: dark sand, lit by real lights and the world's faint ambient,
+// with faint ripples and the sand trails (furrows behind players and
+// creatures, stirred puffs). A furrow is only a darker groove: it shows where
+// something lights the sand (a player's light, a lit coral, the pulse's
+// afterglow, which shows it like any other sand). It never tilts the
+// surface's normal: the sonar's outline pass finds creases in the normal
+// buffer, and would draw glowing lines along every groove. Plus the sonar in
+// world space.
 
 #include "res://shaders/sonar.gdshaderinc"
 #include "res://shaders/sand_trails.gdshaderinc"
+#include "res://shaders/world_ambient.gdshaderinc"
 
 uniform vec3 base_color : source_color = vec3(0.15, 0.19, 0.25);
 uniform float grain_scale = 3.0;
@@ -20,10 +22,8 @@ uniform float ripple_strength = 0.08;
 uniform vec3 sonar_color : source_color = vec3(0.25, 0.85, 1.0);
 uniform float front_energy = 0.9;
 uniform float fill_energy = 0.07;
-// Furrows: how much darker the groove is and how steep its sides look to the
-// light.
+// Furrows: how much darker the groove is.
 uniform float furrow_darken = 0.6;
-uniform float furrow_slope = 6.0;
 // Stirred sand: a little lighter for a moment.
 uniform float stirred_lighten = 0.35;
 
@@ -56,18 +56,16 @@ void fragment() {
 
 	vec4 trail = trail_at(world_pos);
 	vec3 albedo = base_color * (1.0 + (grain - 0.5) * 2.0 * grain_strength) * (1.0 - ripple * ripple_strength);
-	// The furrow's shade (and its tilted sides, through the normal) also
-	// shades the pulse's afterglow, so the pulse shows the groove as it is.
+	// The furrow's shade also shades the pulse's afterglow, so the pulse
+	// shows the groove as it is.
 	float furrow_shade = (1.0 - trail.x * furrow_darken) * (1.0 + trail.y * stirred_lighten);
 	albedo *= furrow_shade;
 	ALBEDO = albedo;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.05;
 
-	// The furrow's slope tilts the normal (world space -> view space).
-	vec3 world_normal = normalize(vec3(trail.z * furrow_slope, 1.0, trail.w * furrow_slope));
-	NORMAL = normalize((VIEW_MATRIX * vec4(world_normal, 0.0)).xyz);
-
-	vec3 sonar = sonar_at(world_pos, world_normal);
-	EMISSION = sonar_color * (sonar.x * front_energy + sonar.z * fill_energy * furrow_shade);
+	// The normal stays straight up (see the top).
+	vec3 sonar = sonar_at(world_pos, vec3(0.0, 1.0, 0.0));
+	EMISSION = sonar_color * (sonar.x * front_energy + sonar.z * fill_energy * furrow_shade)
+		+ world_ambient(world_pos, albedo);
 }

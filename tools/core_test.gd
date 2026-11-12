@@ -350,6 +350,9 @@ func _surface_material(color: Color, fill_energy: float) -> ShaderMaterial:
 	material.set_shader_parameter("sonar_color", sonar_color)
 	material.set_shader_parameter("fill_energy", fill_energy)
 	sonar.register_material(material)
+	var darkness: Darkness = Darkness.find(get_tree())
+	if darkness:
+		darkness.register_material(material)
 	return material
 
 

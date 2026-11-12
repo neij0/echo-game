@@ -9,7 +9,7 @@ extends OmniLight3D
 
 ## Distance in world units where the light has faded to nothing.
 @export var radius: float = 5.6
-@export var base_energy: float = 8.0
+@export var base_energy: float = 5.6
 @export var light_color_tint: Color = Color(1.0, 0.86, 0.62)
 ## How fast the light falls off with distance (1 = natural, higher = tighter).
 @export var falloff: float = 1.0

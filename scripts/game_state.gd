@@ -41,7 +41,9 @@ signal language_changed
 @export_group("Brightness")
 ## Brightness setting: scales the ambient darkness and the players' lights a
 ## little (never the pulse or any other gameplay reveal). The range is kept
-## narrow so even the maximum cannot make the far level readable. 1 = as designed.
+## narrow so even the maximum cannot make the far level readable. 1 = as designed
+## (the lights were tuned so that 1 is what the 3D play-test liked best; before
+## settings version 2, that look was saved as 0.7).
 @export var default_brightness: float = 1.0
 @export var min_brightness: float = 0.7
 @export var max_brightness: float = 1.3
@@ -412,6 +414,12 @@ func _fresh_save() -> SaveData:
 	return fresh
 
 
+## Settings saved before this version kept the brightness on the old scale
+## (where OLD_BRIGHTNESS_BASE looked like today's 1).
+const SETTINGS_VERSION: int = 2
+const OLD_BRIGHTNESS_BASE: float = 0.7
+
+
 func _load_settings() -> void:
 	if not FileAccess.file_exists(settings_path):
 		return
@@ -423,7 +431,10 @@ func _load_settings() -> void:
 	if saved_language in UiText.LANGUAGES:
 		language = saved_language
 	preferred_mode = SaveData.Mode.CHALLENGE if str(data.get("mode", "calm")) == "challenge" else SaveData.Mode.CALM
-	brightness = clampf(float(data.get("brightness", brightness)), min_brightness, max_brightness)
+	var saved_brightness: float = float(data.get("brightness", brightness))
+	if data.has("brightness") and int(data.get("version", 1)) < SETTINGS_VERSION:
+		saved_brightness /= OLD_BRIGHTNESS_BASE
+	brightness = clampf(saved_brightness, min_brightness, max_brightness)
 	var saved_volumes: Variant = data.get("volumes", {})
 	if saved_volumes is Dictionary:
 		for bus: String in volume_buses:
@@ -436,6 +447,7 @@ func _save_settings() -> void:
 	if file == null:
 		return
 	var data: Dictionary = {
+		"version": SETTINGS_VERSION,
 		"language": language,
 		"mode": "challenge" if preferred_mode == SaveData.Mode.CHALLENGE else "calm",
 		"brightness": brightness,

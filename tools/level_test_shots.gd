@@ -3,7 +3,7 @@ extends Node
 ## Pictures and the FPS benchmark of the level test (needs a window):
 ## godot --path . res://tools/level_test.tscn -- shots <folder> [level number]
 ## Saves, for the largest level (or the one asked for): an overview with the
-## lights up, the start with and without the near ambient (Darkness), the
+## lights up, the start with and without the world ambient (Darkness), the
 ## same near rock, a pulse, sand trails in the Echo's light and in a pulse's
 ## afterglow. Then measures the frame rate (vsync off, 1920x1080) on
 ## that level while the players run about, the creatures hunt and the Echo
@@ -80,19 +80,19 @@ func _run() -> void:
 	test.darkness.ambient_energy = ambient_before
 	await _wait(0.5)
 
-	# 1. The start and beside rock, with the near ambient and without it.
+	# 1. The start and beside rock, with the world ambient and without it.
 	await _save("01_start")
-	test.darkness.near_enabled = false
+	test.darkness.world_enabled = false
 	await _wait(0.1)
-	await _save("01_start_no_near_ambient")
-	test.darkness.near_enabled = true
+	await _save("01_start_no_world_ambient")
+	test.darkness.world_enabled = true
 	_move_players_near_rock()
 	await _wait(0.6)
 	await _save("01_rock")
-	test.darkness.near_enabled = false
+	test.darkness.world_enabled = false
 	await _wait(0.1)
-	await _save("01_rock_no_near_ambient")
-	test.darkness.near_enabled = true
+	await _save("01_rock_no_world_ambient")
+	test.darkness.world_enabled = true
 	for player: Player in [test.echo, test.guardian]:
 		player.global_position = test.builder.get_spawn_position(player.player_number)
 		player.reset_physics_interpolation()

@@ -416,9 +416,19 @@ Updated with every step, so a new session knows where the conversion stands.
     about 17 % of pushes ended on top of rock, now none.
   - **Sand trails**: no sonar-coloured glow of their own any more; a groove takes light
     and the pulse's afterglow like the rest of the sand, a little darker.
-  - **Darkness**: a faint deep-blue near ambient round each player (`Darkness`, values
-    in `WorldConfig.near_ambient_*`, a share per stage, times Brightness); the far
-    ambient stays near zero, so far rock is still only seen by the pulse.
+  - **Darkness**: first a faint light following each player; it read as a lamp.
+    Replaced (second play-test) by a uniform deep-blue world ambient on the level
+    surfaces that sinks into darkness like fog away from the camera's focus
+    (`Darkness` + `shaders/world_ambient.gdshaderinc`, `WorldConfig.world_ambient_*`,
+    a share per stage, times Brightness). Far rock is still only seen by the pulse.
+  - **Trail outlines** (second play-test): the sonar's screen-space outline pass found
+    the furrows' tilted normals as creases. The floor no longer tilts its normal and
+    the pass ignores creases between two up-facing surfaces.
+  - **Brightness**: the play-test liked 70 %, so that look is the new 100 % (player
+    lights x 0.7; old settings files converted). Same 70-130 % range around it.
+  - Measured after these: about 440 FPS on the largest level, GPU 0.9 ms. A single
+    frame of ~30 ms sometimes shows on the benchmark's first pass (not the second);
+    cause not found yet, render time per frame is unchanged.
 - [ ] Next: `StageManager` (level fades, retries, counts, the full `Hud`), `game.tscn`
   running in 3D; lockdown, collapse escape, arena door, bubble vents, the placeholder
   boss; skills (stats, the three actives, aiming); the `Game` autoload's worlds and

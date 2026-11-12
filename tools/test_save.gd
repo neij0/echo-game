@@ -111,6 +111,11 @@ func _test_world_progress() -> void:
 	_expect(is_equal_approx(game.brightness, 1.2), "the brightness setting is saved and loaded")
 	game.set_brightness(99.0)
 	_expect(is_equal_approx(game.brightness, game.max_brightness), "the brightness is clamped to its range")
+	var old_settings := FileAccess.open(game.settings_path, FileAccess.WRITE)
+	old_settings.store_string(JSON.stringify({"language": "en", "brightness": 0.7}))
+	old_settings.close()
+	game._load_settings()
+	_expect(is_equal_approx(game.brightness, 1.0), "an old settings file's 70 %% brightness becomes the new 100 %% (got %.2f)" % game.brightness)
 	game.set_volume("Music", 0.35)
 	game.volumes["Music"] = game.default_volume
 	game._load_settings()

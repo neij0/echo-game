@@ -1,7 +1,9 @@
 shader_type spatial;
 // Full-screen pass (a quad glued to the camera): finds the edges of the opaque
 // world in the depth + normal buffers (silhouettes and creases) and lights
-// them where a pulse has passed. Characters are drawn in the transparent pass,
+// them where a pulse has passed. Only rock, landmarks and creatures get
+// outlines: a crease between two surfaces that both face up (floor detail,
+// sand trails, a gentle bump on a rock top) is never one. Characters are drawn in the transparent pass,
 // so they are not in these buffers and get their own outlines instead.
 render_mode unshaded, blend_add, depth_test_disabled, depth_draw_never, cull_disabled, fog_disabled, shadows_disabled;
 
@@ -17,6 +19,8 @@ uniform float edge_width = 1.4;
 // Depth curvature (world units) that counts as a silhouette.
 uniform float depth_threshold = 0.12;
 uniform float normal_threshold = 0.1;
+// A surface whose world normal points up more than this counts as floor-like.
+uniform float up_facing = 0.8;
 
 void vertex() {
 	POSITION = vec4(VERTEX.xy, 1.0, 1.0);
@@ -30,6 +34,17 @@ vec3 view_at(vec2 uv, mat4 inv_projection) {
 
 vec3 normal_at(vec2 uv) {
 	return normalize(texture(normal_tex, uv).xyz * 2.0 - 1.0);
+}
+
+// How sharply two neighbouring view-space normals bend; 0 when both face up
+// (floor-like surfaces never get an outline).
+float crease(vec3 a, vec3 b, mat4 inv_view) {
+	float a_up = (inv_view * vec4(a, 0.0)).y;
+	float b_up = (inv_view * vec4(b, 0.0)).y;
+	if (min(a_up, b_up) > up_facing) {
+		return 0.0;
+	}
+	return 1.0 - dot(a, b);
 }
 
 void fragment() {
@@ -48,10 +63,10 @@ void fragment() {
 
 	vec3 normal = normal_at(uv);
 	float bend = 0.0;
-	bend = max(bend, 1.0 - dot(normal, normal_at(uv - vec2(px.x, 0.0))));
-	bend = max(bend, 1.0 - dot(normal, normal_at(uv + vec2(px.x, 0.0))));
-	bend = max(bend, 1.0 - dot(normal, normal_at(uv - vec2(0.0, px.y))));
-	bend = max(bend, 1.0 - dot(normal, normal_at(uv + vec2(0.0, px.y))));
+	bend = max(bend, crease(normal, normal_at(uv - vec2(px.x, 0.0)), INV_VIEW_MATRIX));
+	bend = max(bend, crease(normal, normal_at(uv + vec2(px.x, 0.0)), INV_VIEW_MATRIX));
+	bend = max(bend, crease(normal, normal_at(uv - vec2(0.0, px.y)), INV_VIEW_MATRIX));
+	bend = max(bend, crease(normal, normal_at(uv + vec2(0.0, px.y)), INV_VIEW_MATRIX));
 	float normal_edge = smoothstep(normal_threshold, normal_threshold * 3.0, bend);
 
 	float edge = max(depth_edge, normal_edge);

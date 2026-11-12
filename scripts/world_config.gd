@@ -57,14 +57,16 @@ extends Resource
 @export var level_depth_step_m: float = 400.0
 
 @export_group("Darkness")
-## 3D: a faint fill round each player (Darkness, "near ambient"), so the floor
-## and rock silhouettes near the players are faintly readable while far areas
-## stay dark (the pulse shows the layout). Colour, strength and reach (world
-## units, where it has faded to nothing). Each stage scales it
-## (StageDefinition.near_ambient_scale); the Brightness option too.
-@export var near_ambient_color: Color = Color(0.14, 0.26, 0.62)
-@export var near_ambient_energy: float = 4.5
-@export var near_ambient_radius: float = 9.0
+## 3D: the world's own faint light from the far surface (Darkness, "world
+## ambient"): a uniform colour on every level surface, sinking into darkness
+## with distance from the camera's focus like fog (begin / end, world units),
+## so the floor and rock silhouettes on screen read faintly while the far
+## layout stays dark (the pulse shows it). Each stage scales the energy
+## (StageDefinition.world_ambient_scale); the Brightness option too.
+@export var world_ambient_color: Color = Color(0.14, 0.26, 0.62)
+@export var world_ambient_energy: float = 0.6
+@export var world_ambient_fog_begin: float = 9.0
+@export var world_ambient_fog_end: float = 22.0
 
 @export_group("Palette")
 ## The base darkness (ambient colour) is set per stage, in each StageDefinition.
