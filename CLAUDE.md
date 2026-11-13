@@ -40,8 +40,26 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   landmark footprints as plain rock, navigation on both maps with synchronous map
   updates), `Coral`, `PressureStation`, `EchoShard`, `AncientLight`, `LightHunter`,
   `Sentinel`, `PlayerStatus` (HUD player block), `SandTrails` + `SandTrailMaker` (sand
-  furrows + puffs; `shaders/floor_surface.gdshader`). Boss levels end at an ancient light
-  in the arena until the boss is ported.
+  furrows + puffs; `shaders/floor_surface.gdshader`).
+  Phase B step 2 (**`scenes/game.tscn` runs in 3D, from the main menu through the whole
+  Ocean**): `StageManager` (level fades, retries, counts, the skill choice; F6 loads
+  `test_world_path` at run time), the full `Hud` + `HurtVignette`, `PauseMenu`,
+  `EscapeEvent` (falling rock + dust round the camera's focus), `LockdownRoom` +
+  `LockdownBarrier`, `ShardDoor` (both a `RockGate`: a slab of rock that rises out of
+  the floor / sinks into it, solid only while risen), `BubbleVent`, the three actives
+  `LurePulseSkill` / `ShieldSkill` / `DashSkill` (marks drawn with `GlowLines`; skill
+  values with lengths are world units now), `MusicDirector`, `AmbiencePlayer`,
+  `ArenaPillar` (plan data only: pillars are plain rock until Phase D). The `Game`
+  autoload has the skill catalog again and loads its worlds by path the first time one
+  is asked for (`world_paths`).
+  **Boss levels**: the arena is sealed by its door until every shard is in, has its
+  pillars and vents, and **ends at an ancient light on the Boss marker** (the stage
+  completes there) until the boss framework and the Angler are ported in Phase D.
+  **Navigation rebakes** (a lockdown closing / opening, the arena door opening) run on
+  a thread (`NavigationBaker.bake_async`, `LevelBuilder._rebake_navigation_soon`,
+  `navigation_rebaked`, `is_rebaking`): no hitch, the new mesh is used a moment later.
+  **Additive marks** (`GlowLines`) are linear light: an alpha of 0.03-0.12 already
+  reads clearly; higher ones turn white.
 - **3D rules so far**: everything moves on the floor plane (y = 0) and distances are measured
   there (`Creature._flat_distance`). Physics interpolation is on: a node moved in `_process`
   (camera, markers, the sword) sets `physics_interpolation_mode` OFF and follows
@@ -86,12 +104,13 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   trails are albedo only).
 - **Not ported yet**: every script and tool in **`legacy2d/`** (it has a `.gdignore`, so the
   editor never parses it; paths mirror the project; `git mv` a file back when its phase
-  comes, see `legacy2d/README.md`): stage manager, the full HUD, shard door, lockdown,
-  escape, bubble vents, skills' actives, bosses, life, music, the old scene tests. `scenes/game.tscn` and
-  the scenes using those scripts (light hunter, sentinel, bosses) do not run. The `Game`
-  autoload has **no world and no skill catalog** for now (`scenes/game_state.tscn`); both come
-  back in Phase B. **`tools/check_scripts.tscn`** lists every script outside `legacy2d/` that
-  does not parse; it must stay at zero.
+  comes, see `legacy2d/README.md`): the boss framework and the bosses (Phase D), harmless
+  life, light shafts, the debug draws (F2 / F3), the drop shadows, the level generator and
+  the old scene tests / tools (`check_levels`, `test_creatures`, `test_skills`,
+  `test_stuck`, `test_audio`, `test_boss`, `sim_boss_fight`, `ui_capture`, `sound_test`).
+  Loading a world prints load errors for the scenes whose scripts are still there (life,
+  bosses): harmless. **`tools/check_scripts.tscn`** lists every script outside `legacy2d/`
+  that does not parse; it must stay at zero.
 - **Sand trails** (`SandTrails`, one per level scene): a `SandTrailMaker` child (players,
   creatures; fish later) stamps a furrow into one texture that wraps over the world
   (`trail_window`, no scrolling); only makers within `active_radius` of the camera stamp;
@@ -103,7 +122,15 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `near_floor_height`, `hover_height` or a parent's `get_hover_height()`): no furrow;
   only a light stir and faint, small puffs (`puff_strength`) when she swims fast or
   comes low over the floor.
-- **Tests on this branch**: `tools/test_levels.tscn` (headless: every Ocean level builds in
+- **Tests on this branch**: `tools/test_game.tscn` (headless, the real `game.tscn` through
+  `GameSceneLoader`: start + full HUD, level flow with the fade and the skill choice,
+  defeat and retries per mode, lockdown (doorways, wave, oxygen, navigation), collapse
+  escape, a boss level (door, vents, the stand-in light ends the stage), the three
+  active skills, pause, started from the menus):
+  `godot --headless --path . --fixed-fps 60 res://tools/test_game.tscn`;
+  `tools/game_shots.tscn` (needs a window: pictures of those parts,
+  `godot --path . res://tools/game_shots.tscn -- <folder>`);
+  `tools/test_levels.tscn` (headless: every Ocean level builds in
   3D with every shard and the exit reachable, the level flow, stations, corals, Sentinel
   leash, light hunter, sand trails; prints the quiet-spaces report):
   `godot --headless --path . --fixed-fps 60 res://tools/test_levels.tscn`;
@@ -476,8 +503,7 @@ numbered variant) replaces one without code changes.
 `assets/audio/preview/` (same names as the files they would replace; the game never reads
 that folder); the Sound Test lists them first, each beside the current version. Once approved
 they are copied over the files in `sfx/` (`music/` for music) and deleted from `preview/`
-(pending now: `pulse_thump`, the pulse's deep thump; until it is approved only the
-level test plays it, straight from `preview/`). The Journey themes `music_map_<world id>` are in `music/` (the
+(nothing is pending now). The Journey themes `music_map_<world id>` are in `music/` (the
 Ocean's own theme and placeholders for the other four worlds).
 - **Buses** (`default_bus_layout.tres`): Master, Music (a "Duck" amplify), SFX and Ambience
   (a "Gate" amplify + the world's underwater low-pass + reverb), UI. Volumes: `Game.volumes`

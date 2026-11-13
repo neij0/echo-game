@@ -1,5 +1,5 @@
 class_name EscapeEvent
-extends Node2D
+extends Node3D
 ## The collapse escape (each stage's level-2 twist, LevelDefinition.escape_event):
 ## after the last Echo Shard the cave starts to fall in. Falling rock and dust
 ## around the camera, a rolling rumble, repeated camera shakes, every creature
@@ -7,18 +7,19 @@ extends Node2D
 ## and the Echo's arrow points to the exit at once and stays on. A timer runs
 ## (per mode, from the LevelDefinition); at zero every player is downed by the
 ## collapse (the normal restart rules follow). Reaching the ancient light in
-## time stops it (StageManager). Lives on a CanvasLayer with
-## follow_viewport_enabled (the debris is unlit, so it reads in the dark).
+## time stops it (StageManager). The falling rock and the dust follow the
+## camera's focus and are unlit, so they read in the dark.
 
 signal started(time: float)
 signal stopped
 signal timed_out
 
 @export_group("Shake")
-@export var start_shake_strength: float = 10.0
+## World units.
+@export var start_shake_strength: float = 0.2
 @export var start_shake_time: float = 0.8
 ## A smaller shake every few seconds (random between the two).
-@export var shake_strength: float = 4.0
+@export var shake_strength: float = 0.08
 @export var shake_time: float = 0.4
 @export var shake_interval_min: float = 1.5
 @export var shake_interval_max: float = 3.0
@@ -30,21 +31,21 @@ signal timed_out
 @export var rock_fall_sound: String = "world_rock_fall"
 @export var rock_fall_interval_min: float = 0.4
 @export var rock_fall_interval_max: float = 1.4
-@export var rock_fall_radius: float = 650.0
+@export var rock_fall_radius: float = 13.0
 
 @export_group("Falling Rock")
 @export var debris_amount: int = 70
 @export var debris_lifetime: float = 1.1
-@export var debris_color: Color = Color(0.55, 0.5, 0.45, 0.8)
-## Size at the start of the fall (near the camera) and at the floor.
-@export var debris_size_start: float = 7.0
-@export var debris_size_end: float = 2.0
+@export var debris_color: Color = Color(0.3, 0.28, 0.26, 0.9)
+## Size of a piece (units) and the height it falls from.
+@export var debris_size: float = 0.11
+@export var debris_height: float = 7.0
 @export var dust_amount: int = 24
 @export var dust_lifetime: float = 2.2
-@export var dust_color: Color = Color(0.7, 0.65, 0.6, 0.12)
-@export var dust_size: float = 40.0
-## Particles fall over the screen plus this margin (pixels, world space).
-@export var spawn_margin: float = 100.0
+@export var dust_color: Color = Color(0.5, 0.47, 0.43, 0.1)
+@export var dust_size: float = 1.6
+## Half size of the area round the camera's focus where it falls (units).
+@export var fall_area: Vector2 = Vector2(16.0, 11.0)
 
 var is_active: bool = false
 var time_left: float = 0.0
@@ -52,8 +53,8 @@ var total_time: float = 0.0
 var _shake_left: float = 0.0
 var _rock_left: float = 0.0
 var _rumble: AudioStreamPlayer
-var _debris: CPUParticles2D
-var _dust: CPUParticles2D
+var _debris: GPUParticles3D
+var _dust: GPUParticles3D
 
 
 func _ready() -> void:
@@ -63,38 +64,54 @@ func _ready() -> void:
 	_rumble.bus = &"SFX"
 	_rumble.finished.connect(_on_rumble_finished)
 	add_child(_rumble)
-	_debris = _make_particles(debris_amount, debris_lifetime, debris_color, null)
-	var shrink := Curve.new()
-	shrink.add_point(Vector2(0.0, 1.0))
-	shrink.add_point(Vector2(1.0, debris_size_end / maxf(debris_size_start, 0.01)))
-	_debris.scale_amount_min = debris_size_start * 0.6
-	_debris.scale_amount_max = debris_size_start
-	_debris.scale_amount_curve = shrink
-	_dust = _make_particles(dust_amount, dust_lifetime, dust_color, LightTextures.radial(64, 0.0))
-	var grow := Curve.new()
-	grow.add_point(Vector2(0.0, 0.4))
-	grow.add_point(Vector2(1.0, 1.0))
-	_dust.scale_amount_min = dust_size / 64.0 * 0.6
-	_dust.scale_amount_max = dust_size / 64.0
-	_dust.scale_amount_curve = grow
+	# Rock pieces fall from above to the floor; dust drifts just over it.
+	_debris = _make_particles(debris_amount, debris_lifetime, debris_color, debris_size, LightTextures.radial(32, 0.75),
+		Vector3(fall_area.x, 0.5, fall_area.y), debris_height, Vector3(0.0, -2.0 * debris_height / (debris_lifetime * debris_lifetime), 0.0))
+	_dust = _make_particles(dust_amount, dust_lifetime, dust_color, dust_size, LightTextures.radial(64, 0.0),
+		Vector3(fall_area.x, 0.3, fall_area.y), 0.6, Vector3(0.0, 0.15, 0.0))
 
 
-func _make_particles(amount: int, lifetime: float, color: Color, texture: Texture2D) -> CPUParticles2D:
-	var particles := CPUParticles2D.new()
+func _make_particles(amount: int, lifetime: float, color: Color, size: float, texture: Texture2D,
+		area: Vector3, height: float, gravity: Vector3) -> GPUParticles3D:
+	var process := ParticleProcessMaterial.new()
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	process.emission_box_extents = area
+	process.direction = Vector3.DOWN
+	process.spread = 180.0
+	process.initial_velocity_min = 0.1
+	process.initial_velocity_max = 0.5
+	process.gravity = gravity
+	process.scale_min = 0.6
+	process.scale_max = 1.0
+	var fade := Gradient.new()
+	fade.set_color(0, Color(1.0, 1.0, 1.0, 0.0))
+	fade.add_point(0.15, Color.WHITE)
+	fade.set_color(fade.get_point_count() - 1, Color(1.0, 1.0, 1.0, 0.0))
+	var ramp := GradientTexture1D.new()
+	ramp.gradient = fade
+	process.color_ramp = ramp
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	material.vertex_color_use_as_albedo = true
+	material.albedo_color = color
+	material.albedo_texture = texture
+	material.disable_fog = true
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE * size
+	quad.material = material
+	var particles := GPUParticles3D.new()
 	particles.amount = maxi(amount, 1)
 	particles.lifetime = lifetime
 	particles.emitting = false
-	particles.texture = texture
-	particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	particles.direction = Vector2.DOWN
-	particles.spread = 180.0
-	particles.gravity = Vector2.ZERO
-	particles.initial_velocity_min = 5.0
-	particles.initial_velocity_max = 25.0
-	var fade := Gradient.new()
-	fade.set_color(0, color)
-	fade.set_color(1, Color(color, 0.0))
-	particles.color_ramp = fade
+	particles.process_material = process
+	particles.draw_pass_1 = quad
+	particles.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	particles.visibility_aabb = AABB(Vector3(-area.x - 2.0, -height - 2.0, -area.z - 2.0), Vector3(area.x * 2.0 + 4.0, height + 4.0, area.z * 2.0 + 4.0))
+	particles.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	particles.position.y = height
+	particles.set_meta("height", height)
 	add_child(particles)
 	return particles
 
@@ -155,22 +172,22 @@ func _time_out() -> void:
 
 
 func _follow_camera() -> void:
-	var camera: Camera2D = get_viewport().get_camera_2d()
+	var camera: SharedCamera = SharedCamera.find(get_tree())
 	if camera == null:
 		return
-	var half: Vector2 = get_viewport_rect().size / camera.zoom * 0.5 + Vector2.ONE * spawn_margin
-	for particles: CPUParticles2D in [_debris, _dust]:
-		particles.global_position = camera.get_screen_center_position()
-		particles.emission_rect_extents = half
+	var focus: Vector3 = camera.get_focus()
+	for particles: GPUParticles3D in [_debris, _dust]:
+		particles.global_position = Vector3(focus.x, float(particles.get_meta("height")), focus.z)
 
 
 func _play_rock_fall() -> void:
 	var audio: AudioDirector = AudioDirector.find(get_tree())
-	var camera: Camera2D = get_viewport().get_camera_2d()
+	var camera: SharedCamera = SharedCamera.find(get_tree())
 	if audio == null or camera == null:
 		return
-	var at: Vector2 = camera.get_screen_center_position() + Vector2.from_angle(randf() * TAU) * randf_range(0.2, 1.0) * rock_fall_radius
-	audio.play(rock_fall_sound, at)
+	var angle: float = randf() * TAU
+	var at: Vector3 = camera.get_focus() + Vector3(cos(angle), 0.0, sin(angle)) * randf_range(0.2, 1.0) * rock_fall_radius
+	audio.play(rock_fall_sound, Vector3(at.x, 0.0, at.z))
 
 
 func _on_rumble_finished() -> void:

@@ -48,9 +48,12 @@ signal skills_chosen(picks: Dictionary)
 ## back in and the game runs again.
 signal transition_finished
 
-## Used when game.tscn runs on its own (F6). Started from the menus, the Game
-## autoload's current world and stage are used instead.
+## The world played. Started from the menus: the Game autoload's current
+## world. On its own (F6): loaded from test_world_path when the scene starts
+## (not a resource of the scene: a world still references scenes whose scripts
+## are in legacy2d/, which would show as broken dependencies in the editor).
 @export var world: WorldConfig
+@export_file("*.tres") var test_world_path: String = "res://worlds/ocean.tres"
 ## Stage played when game.tscn runs on its own (0-based).
 @export var test_stage_index: int = 0
 ## Mode used when game.tscn runs on its own.
@@ -63,9 +66,12 @@ signal transition_finished
 ## ARENA_DOOR = every shard counted, the door open, the players just outside
 ## it; IN_ARENA = the same, the players already inside (the boss wakes).
 @export var test_start_at: TestStart = TestStart.LEVEL_START
-## How far from the arena door's middle the players are put (outside / inside).
-@export var test_door_outside_distance: float = 150.0
-@export var test_door_inside_distance: float = 230.0
+## How far from the arena door's middle the players are put (outside / inside;
+## world units).
+@export var test_door_outside_distance: float = 3.0
+@export var test_door_inside_distance: float = 4.6
+## Each player stands this far to one side of that spot.
+@export var test_door_side_distance: float = 0.6
 @export var level_builder: LevelBuilder
 @export var awareness: DepthAwareness
 @export var end_screen: EndScreen
@@ -143,6 +149,8 @@ func _ready() -> void:
 	else:
 		stage_index = test_stage_index
 		mode = test_mode
+		if world == null and test_world_path != "":
+			world = load(test_world_path) as WorldConfig
 	if level_builder:
 		level_builder.world = world
 		level_builder.level_built.connect(_on_level_built)
@@ -213,7 +221,8 @@ func _start_level(index: int) -> void:
 			world.get_global_level_index(stage_index, index))
 	for player: Player in players:
 		player.global_position = level_builder.get_spawn_position(player.player_number) if level_builder else player.global_position
-		player.velocity = Vector2.ZERO
+		player.velocity = Vector3.ZERO
+		player.reset_physics_interpolation()
 		if player.health.is_downed:
 			player.health.revive()
 		_level_start_pressure[player] = player.pressure.get_ratio()
@@ -225,7 +234,7 @@ func _start_level(index: int) -> void:
 	if escape_event:
 		escape_event.stop()
 	_apply_test_start()
-	var camera := get_viewport().get_camera_2d() as SharedCamera
+	var camera: SharedCamera = SharedCamera.find(get_tree())
 	if camera:
 		camera.snap_to_players()
 	level_started.emit(index)
@@ -239,8 +248,9 @@ func _apply_test_start() -> void:
 	if level_index != _first_level_index() or not is_boss_level():
 		return
 	var door: ShardDoor = level_builder.get_exit_door()
-	var boss: Creature = level_builder.get_boss()
-	if door == null or boss == null:
+	# The boss, or the light standing in for it until the boss is ported.
+	var inside: Node3D = level_builder.get_boss() if level_builder.get_boss() else level_builder.get_goal()
+	if door == null or inside == null:
 		return
 	for shard: EchoShard in level_builder.get_shards():
 		if is_instance_valid(shard):
@@ -248,14 +258,18 @@ func _apply_test_start() -> void:
 	shards_collected = shards_total
 	level_builder.open_exit()
 	_update_exit_lock()
-	var door_center: Vector2 = door.to_global(door._center)
-	var inward: Vector2 = door_center.direction_to(boss.global_position)
+	var door_center: Vector3 = door.global_position + door.center
+	# Straight through the door (across its long side), towards the arena.
+	var inward: Vector3 = door.along.cross(Vector3.UP)
+	if inward.dot(inside.global_position - door_center) < 0.0:
+		inward = -inward
 	var distance: float = test_door_inside_distance if test_start_at == TestStart.IN_ARENA else -test_door_outside_distance
-	var spot: Vector2 = door_center + inward * distance
+	var spot: Vector3 = door_center + inward * distance
 	for player: Player in players:
 		var side: float = -1.0 if player.player_number == 1 else 1.0
-		player.global_position = spot + inward.orthogonal() * side * 30.0
-		player.velocity = Vector2.ZERO
+		player.global_position = spot + door.along * side * test_door_side_distance
+		player.velocity = Vector3.ZERO
+		player.reset_physics_interpolation()
 
 
 func _on_level_built(_index: int) -> void:
@@ -311,7 +325,7 @@ func _update_exit_lock() -> void:
 	shards_changed.emit(shards_collected, shards_total)
 
 
-func _on_pulse_emitted(origin: Vector2, player: Player) -> void:
+func _on_pulse_emitted(origin: Vector3, player: Player) -> void:
 	pulses_used += 1
 	if awareness:
 		awareness.add_pulse()
@@ -561,7 +575,18 @@ func _offer_skills() -> void:
 		var offer: Array[SkillDefinition] = SkillOffer.build(catalog, loadout, player.get_character_key(), world_index, size.x, _skill_rng)
 		offers[player] = offer
 		pick_counts[player] = mini(size.y, offer.size())
+	# The HUD hides behind the choice (its texts would show through the cards).
+	var huds: Array[Node] = get_tree().get_nodes_in_group("hud")
+	var shown: Array[CanvasLayer] = []
+	for node: Node in huds:
+		var hud := node as CanvasLayer
+		if hud and hud.visible:
+			hud.visible = false
+			shown.append(hud)
 	var picks: Dictionary = await skill_choice_screen.choose(players, offers, pick_counts, world)
+	for hud: CanvasLayer in shown:
+		if is_instance_valid(hud):
+			hud.visible = true
 	apply_picks(picks)
 
 

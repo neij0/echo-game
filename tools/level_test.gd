@@ -25,8 +25,7 @@ const ECHO_SCENE: PackedScene = preload("res://scenes/echo.tscn")
 const GUARDIAN_SCENE: PackedScene = preload("res://scenes/guardian.tscn")
 const PING_STREAM: AudioStream = preload("res://assets/audio/sfx/pulse_ping.wav")
 const TICK_STREAM: AudioStream = preload("res://assets/audio/sonar_tick.wav")
-const THUMP_PATH: String = "res://assets/audio/sfx/pulse_thump.wav"
-const THUMP_PREVIEW_PATH: String = "res://assets/audio/preview/pulse_thump.wav"
+const THUMP_STREAM: AudioStream = preload("res://assets/audio/sfx/pulse_thump.wav")
 ## The groups a frozen creature leaves (key F).
 const FROZEN_GROUPS: Array[String] = ["creatures", "sonar_targets", "cutaway_targets"]
 
@@ -81,7 +80,7 @@ func _ready() -> void:
 	sonar_audio.sonar = sonar
 	sonar_audio.ping_stream = PING_STREAM
 	sonar_audio.tick_stream = TICK_STREAM
-	sonar_audio.thump_stream = _thump_stream()
+	sonar_audio.thump_stream = THUMP_STREAM
 	_add(sonar_audio, "SonarAudio")
 	camera = _add(SharedCamera.new(), "SharedCamera") as SharedCamera
 	cutaway = _add(ViewCutaway.new(), "ViewCutaway") as ViewCutaway
@@ -144,15 +143,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				start_level(number / 3, number % 3)
 
 
-## The pulse's thump: the approved sound, else (this test only) the one waiting
-## for approval in assets/audio/preview/, so it can be judged in the level.
-func _thump_stream() -> AudioStream:
-	for path: String in [THUMP_PATH, THUMP_PREVIEW_PATH]:
-		if ResourceLoader.exists(path):
-			return load(path) as AudioStream
-	return null
-
-
 ## The Brightness option: 70 % -> 100 % -> 130 % -> 70 %.
 func _cycle_brightness() -> void:
 	var game := get_node_or_null("/root/Game") as GameState
@@ -210,6 +200,9 @@ func start_level(stage: int, level: int, is_retry: bool = false) -> bool:
 	if goal:
 		goal.set_shard_progress(0, shards_total)
 		goal.activated.connect(_on_goal_activated)
+	var door: ShardDoor = builder.get_exit_door()
+	if door:
+		door.set_shard_progress(0, shards_total)
 	set_challenge_mode(challenge_mode)
 	if frozen:
 		set_creatures_frozen.call_deferred(true)
@@ -279,6 +272,11 @@ func _on_shard_collected(_shard: EchoShard) -> void:
 	var goal: AncientLight = builder.get_goal()
 	if goal:
 		goal.set_shard_progress(shards_collected, shards_total)
+	var door: ShardDoor = builder.get_exit_door()
+	if door:
+		door.set_shard_progress(shards_collected, shards_total)
+	if shards_collected >= shards_total:
+		builder.open_exit()
 
 
 func _on_goal_activated() -> void:

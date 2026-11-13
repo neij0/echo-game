@@ -16,6 +16,11 @@ signal language_changed
 ## The WorldConfig of each world that exists so far. A world id without a
 ## config shows "coming soon" on the Journey screen.
 @export var worlds: Array[WorldConfig] = []
+## Worlds loaded by path the first time one is asked for (get_world_config),
+## not resources of the autoload's scene: a world still references scenes
+## whose scripts are in legacy2d/ (life, bosses), which would print load
+## errors at every start and show as broken dependencies in the editor.
+@export var world_paths: PackedStringArray = PackedStringArray()
 ## Every skill of the game (offered between levels, see SkillOffer).
 @export var skill_catalog: SkillCatalog
 
@@ -87,6 +92,7 @@ var fader: ScreenFader
 ## The menus' focus / press sounds.
 var ui_audio: UiAudio
 var _changing_scene: bool = false
+var _worlds_loaded: bool = false
 
 
 func _ready() -> void:
@@ -264,10 +270,22 @@ func complete_stage(skills: SkillLoadout = null) -> bool:
 
 
 func get_world_config(world_id: String) -> WorldConfig:
+	_load_worlds()
 	for world: WorldConfig in worlds:
 		if world and world.world_id == world_id:
 			return world
 	return null
+
+
+## Loads the worlds of world_paths the first time a world is asked for.
+func _load_worlds() -> void:
+	if _worlds_loaded:
+		return
+	_worlds_loaded = true
+	for path: String in world_paths:
+		var world := load(path) as WorldConfig if ResourceLoader.exists(path) else null
+		if world and not world in worlds:
+			worlds.append(world)
 
 
 func get_current_world() -> WorldConfig:

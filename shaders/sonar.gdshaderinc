@@ -85,9 +85,13 @@ bool sonar_pulse(int i, vec3 world, out float visible, out float behind, out flo
 		min(sonar_blocker(angle - widest, row, world.y), sonar_blocker(angle + widest, row, world.y)));
 	behind = max(dist - nearest, 0.0);
 	float spread = min(penumbra_rate * behind / max(dist, 0.5), penumbra_max) / TAU;
+	// The taps are shifted by a noise fixed to the world (a different shift
+	// for every point), so the penumbra is a smooth gradient with a fine grain
+	// instead of seven copies of the shadow's edge (radial streaks).
+	float jitter = fract(sin(dot(world.xz, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
 	float seen = 0.0;
 	for (int k = -3; k <= 3; k++) {
-		float blocker = sonar_blocker(angle + float(k) * spread / 3.0, row, world.y);
+		float blocker = sonar_blocker(angle + (float(k) + jitter) * spread / 3.0, row, world.y);
 		seen += 1.0 - smoothstep(blocker, blocker + occlusion_soft, dist);
 	}
 	seen /= 7.0;

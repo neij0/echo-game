@@ -1,135 +1,101 @@
 [gd_scene format=3 uid="uid://bneoqles2aqj7"]
 
-[ext_resource type="Script" uid="uid://ddvhutml5xxh5" path="res://scripts/level_builder.gd" id="1_level"]
-[ext_resource type="Resource" uid="uid://qp2rgn1walox" path="res://worlds/ocean.tres" id="2_world"]
+[ext_resource type="Script" path="res://scripts/level_builder.gd" id="1_level"]
 [ext_resource type="PackedScene" path="res://scenes/echo.tscn" id="3_echo"]
 [ext_resource type="PackedScene" path="res://scenes/guardian.tscn" id="4_guardian"]
-[ext_resource type="Script" uid="uid://c4pm0e3pr1yx0" path="res://scripts/depth_awareness.gd" id="6_awareness"]
-[ext_resource type="Script" uid="uid://dk8ttv0bfmp6c" path="res://scripts/hud.gd" id="7_hud"]
-[ext_resource type="Script" uid="uid://bg4pyblya7q43" path="res://scripts/sonar_overlay.gd" id="8_sonar"]
-[ext_resource type="Script" uid="uid://dautx3a8ovd5r" path="res://scripts/glow_environment.gd" id="9_glow"]
-[ext_resource type="Script" uid="uid://casdoedh1ghqy" path="res://scripts/sonar_audio.gd" id="10_audio"]
-[ext_resource type="AudioStream" uid="uid://bv5inlyoxsh7u" path="res://assets/audio/sfx/pulse_ping.wav" id="11_ping"]
-[ext_resource type="AudioStream" uid="uid://bwx74q7o8tkdu" path="res://assets/audio/sonar_tick.wav" id="12_tick"]
-[ext_resource type="Script" uid="uid://0r4hba8i0xt8" path="res://scripts/darkness.gd" id="13_darkness"]
-[ext_resource type="Script" uid="uid://ijtsle2hpfcq" path="res://scripts/hurt_vignette.gd" id="14_vignette"]
-[ext_resource type="Script" uid="uid://cwlwbrh8k7clw" path="res://scripts/stage_manager.gd" id="15_stage"]
-[ext_resource type="Script" uid="uid://cwlc8x2en2rnp" path="res://scripts/end_screen.gd" id="16_end"]
-[ext_resource type="Script" uid="uid://cgldbnyjtk5f7" path="res://scripts/shared_camera.gd" id="17_camera"]
-[ext_resource type="Script" uid="uid://cyho1b4p7oa4e" path="res://scripts/marine_snow.gd" id="18_snow"]
-[ext_resource type="Script" uid="uid://glk28oapu3f8" path="res://scripts/light_shafts.gd" id="19_shafts"]
-[ext_resource type="Script" uid="uid://dtko40dscyv6s" path="res://scripts/partner_mending.gd" id="20_mending"]
-[ext_resource type="AudioStream" uid="uid://dqjcl3rsm4cgq" path="res://assets/audio/sfx/player_low_health.wav" id="21_heartbeat"]
-[ext_resource type="Script" uid="uid://c8bgspb7fd55o" path="res://scripts/escape_event.gd" id="22_escape"]
-[ext_resource type="AudioStream" uid="uid://bmb5v14y77ycq" path="res://assets/audio/sfx/world_collapse_rumble.wav" id="23_rumble"]
-[ext_resource type="Script" uid="uid://cjnf85nw1xvx" path="res://scripts/nav_debug_draw.gd" id="24_navdebug"]
-[ext_resource type="Script" path="res://scripts/hitbox_debug_draw.gd" id="24_hitboxdebug"]
-[ext_resource type="Script" uid="uid://chq4ph6hxqiel" path="res://scripts/audio_director.gd" id="25_audio"]
-[ext_resource type="Script" uid="uid://nuqg4pe4wf6k" path="res://scripts/ambience_player.gd" id="26_ambience"]
-[ext_resource type="Script" uid="uid://drd3ulb5uei57" path="res://scripts/music_director.gd" id="27_music"]
-[ext_resource type="AudioStream" uid="uid://c4ufh6i4egyb4" path="res://assets/audio/music/music_tension.wav" id="28_tension"]
-[ext_resource type="AudioStream" uid="uid://bt4hihw60g8oi" path="res://assets/audio/music/music_chase.wav" id="29_chase"]
-[ext_resource type="AudioStream" uid="uid://be6h44ncyecgj" path="res://assets/audio/music/music_intense.wav" id="30_intense"]
-[ext_resource type="AudioStream" uid="uid://bljo0604yux6n" path="res://assets/audio/music/music_boss.wav" id="31_boss"]
-[ext_resource type="Script" uid="uid://cyq4yrhi0gu4b" path="res://scripts/skill_choice_screen.gd" id="32_skills"]
-[ext_resource type="Script" uid="uid://cjgaujeadsw45" path="res://scripts/pause_menu.gd" id="33_pause"]
+[ext_resource type="Script" path="res://scripts/depth_awareness.gd" id="6_awareness"]
+[ext_resource type="Script" path="res://scripts/hud.gd" id="7_hud"]
+[ext_resource type="Script" path="res://scripts/sonar.gd" id="8_sonar"]
+[ext_resource type="Script" path="res://scripts/sonar_audio.gd" id="10_audio"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/pulse_ping.wav" id="11_ping"]
+[ext_resource type="AudioStream" path="res://assets/audio/sonar_tick.wav" id="12_tick"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/pulse_thump.wav" id="12_thump"]
+[ext_resource type="Script" path="res://scripts/darkness.gd" id="13_darkness"]
+[ext_resource type="Script" path="res://scripts/hurt_vignette.gd" id="14_vignette"]
+[ext_resource type="Script" path="res://scripts/stage_manager.gd" id="15_stage"]
+[ext_resource type="Script" path="res://scripts/end_screen.gd" id="16_end"]
+[ext_resource type="Script" path="res://scripts/shared_camera.gd" id="17_camera"]
+[ext_resource type="Script" path="res://scripts/marine_snow.gd" id="18_snow"]
+[ext_resource type="Script" path="res://scripts/view_cutaway.gd" id="19_cutaway"]
+[ext_resource type="Script" path="res://scripts/partner_mending.gd" id="20_mending"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/player_low_health.wav" id="21_heartbeat"]
+[ext_resource type="Script" path="res://scripts/escape_event.gd" id="22_escape"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/world_collapse_rumble.wav" id="23_rumble"]
+[ext_resource type="Script" path="res://scripts/sand_trails.gd" id="24_trails"]
+[ext_resource type="Script" path="res://scripts/audio_director.gd" id="25_audio"]
+[ext_resource type="Script" path="res://scripts/ambience_player.gd" id="26_ambience"]
+[ext_resource type="Script" path="res://scripts/music_director.gd" id="27_music"]
+[ext_resource type="AudioStream" path="res://assets/audio/music/music_tension.wav" id="28_tension"]
+[ext_resource type="AudioStream" path="res://assets/audio/music/music_chase.wav" id="29_chase"]
+[ext_resource type="AudioStream" path="res://assets/audio/music/music_intense.wav" id="30_intense"]
+[ext_resource type="AudioStream" path="res://assets/audio/music/music_boss.wav" id="31_boss"]
+[ext_resource type="Script" path="res://scripts/skill_choice_screen.gd" id="32_skills"]
+[ext_resource type="Script" path="res://scripts/pause_menu.gd" id="33_pause"]
 
-[node name="Game" type="Node2D" unique_id=1530035868]
-y_sort_enabled = true
+[node name="Game" type="Node3D"]
 
-[node name="Darkness" type="CanvasModulate" parent="." unique_id=1388595865 node_paths=PackedStringArray("level_builder")]
-color = Color(0.06, 0.08, 0.14, 1)
+[node name="Darkness" type="WorldEnvironment" parent="."]
 script = ExtResource("13_darkness")
-level_builder = NodePath("../LevelBuilder")
 
-[node name="LevelBuilder" type="Node2D" parent="." unique_id=2070319476]
-y_sort_enabled = true
-script = ExtResource("1_level")
-world = ExtResource("2_world")
+[node name="AudioDirector" type="Node" parent="."]
+script = ExtResource("25_audio")
 
-[node name="EnvironmentLayer" type="CanvasLayer" parent="." unique_id=1235120223]
-follow_viewport_enabled = true
+[node name="DepthAwareness" type="Node" parent="."]
+script = ExtResource("6_awareness")
 
-[node name="MarineSnow" type="Node2D" parent="EnvironmentLayer" unique_id=1601316235]
+[node name="Sonar" type="Node3D" parent="."]
+script = ExtResource("8_sonar")
+
+[node name="SonarAudio" type="Node" parent="." node_paths=PackedStringArray("sonar")]
+script = ExtResource("10_audio")
+sonar = NodePath("../Sonar")
+ping_stream = ExtResource("11_ping")
+thump_stream = ExtResource("12_thump")
+tick_stream = ExtResource("12_tick")
+
+[node name="SharedCamera" type="Camera3D" parent="."]
+script = ExtResource("17_camera")
+
+[node name="ViewCutaway" type="Node" parent="."]
+script = ExtResource("19_cutaway")
+
+[node name="MarineSnow" type="GPUParticles3D" parent="."]
 script = ExtResource("18_snow")
 
-[node name="EscapeEvent" type="Node2D" parent="EnvironmentLayer" unique_id=442006935]
+[node name="SandTrails" type="Node3D" parent="."]
+script = ExtResource("24_trails")
+
+[node name="PartnerMending" type="Node3D" parent="."]
+script = ExtResource("20_mending")
+
+[node name="EscapeEvent" type="Node3D" parent="."]
 script = ExtResource("22_escape")
 rumble_stream = ExtResource("23_rumble")
 
-[node name="LightShaftLayer" type="CanvasLayer" parent="." unique_id=125226410]
+[node name="LevelBuilder" type="Node3D" parent="."]
+script = ExtResource("1_level")
 
-[node name="LightShafts" type="Node2D" parent="LightShaftLayer" unique_id=973586035 node_paths=PackedStringArray("level_builder")]
-script = ExtResource("19_shafts")
-level_builder = NodePath("../../LevelBuilder")
+[node name="Echo" parent="." instance=ExtResource("3_echo")]
 
-[node name="Echo" parent="." unique_id=843061631 instance=ExtResource("3_echo")]
-position = Vector2(1200, 200)
+[node name="Guardian" parent="." instance=ExtResource("4_guardian")]
 
-[node name="Guardian" parent="." unique_id=1450932478 instance=ExtResource("4_guardian")]
-position = Vector2(1300, 200)
-
-[node name="MendLayer" type="CanvasLayer" parent="." unique_id=353698275]
-follow_viewport_enabled = true
-
-[node name="PartnerMending" type="Node2D" parent="MendLayer" unique_id=476719092 node_paths=PackedStringArray("stage_manager")]
-script = ExtResource("20_mending")
-stage_manager = NodePath("../../StageManager")
-
-[node name="DebugLayer" type="CanvasLayer" parent="." unique_id=1414519453]
-follow_viewport_enabled = true
-
-[node name="NavDebugDraw" type="Node2D" parent="DebugLayer" unique_id=871310969]
-script = ExtResource("24_navdebug")
-
-[node name="HitboxDebugDraw" type="Node2D" parent="DebugLayer"]
-script = ExtResource("24_hitboxdebug")
-
-[node name="SharedCamera" type="Camera2D" parent="." unique_id=1332892929 node_paths=PackedStringArray("stage_manager")]
-position = Vector2(1250, 200)
-script = ExtResource("17_camera")
-stage_manager = NodePath("../StageManager")
-
-[node name="DepthAwareness" type="Node" parent="." unique_id=1845912242]
-script = ExtResource("6_awareness")
-
-[node name="SonarLayer" type="CanvasLayer" parent="." unique_id=526952876]
-follow_viewport_enabled = true
-
-[node name="SonarOverlay" type="Node2D" parent="SonarLayer" unique_id=1735416526]
-script = ExtResource("8_sonar")
-
-[node name="GlowEnvironment" type="WorldEnvironment" parent="." unique_id=731275266]
-script = ExtResource("9_glow")
-
-[node name="StageManager" type="Node" parent="." unique_id=1761008208 node_paths=PackedStringArray("level_builder", "awareness", "end_screen", "escape_event", "skill_choice_screen")]
+[node name="StageManager" type="Node" parent="." node_paths=PackedStringArray("level_builder", "awareness", "end_screen", "escape_event", "skill_choice_screen")]
 script = ExtResource("15_stage")
-world = ExtResource("2_world")
-test_level_index = 2
-test_start_at = 1
 level_builder = NodePath("../LevelBuilder")
 awareness = NodePath("../DepthAwareness")
 end_screen = NodePath("../EndScreen")
-escape_event = NodePath("../EnvironmentLayer/EscapeEvent")
+escape_event = NodePath("../EscapeEvent")
 skill_choice_screen = NodePath("../SkillChoiceScreen")
-test_skills = PackedStringArray("shield", "lure_pulse")
 
-[node name="SonarAudio" type="Node" parent="." unique_id=1295128793 node_paths=PackedStringArray("stage_manager", "sonar_overlay")]
-script = ExtResource("10_audio")
-stage_manager = NodePath("../StageManager")
-sonar_overlay = NodePath("../SonarLayer/SonarOverlay")
-ping_stream = ExtResource("11_ping")
-tick_stream = ExtResource("12_tick")
-
-[node name="Hud" type="CanvasLayer" parent="." unique_id=1213244721 node_paths=PackedStringArray("stage_manager", "awareness", "level_builder", "escape_event")]
+[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("stage_manager", "awareness", "level_builder", "escape_event")]
 layer = 2
 script = ExtResource("7_hud")
 stage_manager = NodePath("../StageManager")
 awareness = NodePath("../DepthAwareness")
 level_builder = NodePath("../LevelBuilder")
-escape_event = NodePath("../EnvironmentLayer/EscapeEvent")
+escape_event = NodePath("../EscapeEvent")
 
-[node name="HurtVignette" type="Control" parent="Hud" unique_id=1005108115 node_paths=PackedStringArray("stage_manager")]
+[node name="HurtVignette" type="Control" parent="Hud" node_paths=PackedStringArray("stage_manager")]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -141,13 +107,13 @@ script = ExtResource("14_vignette")
 stage_manager = NodePath("../../StageManager")
 heartbeat_stream = ExtResource("21_heartbeat")
 
-[node name="DebugLabel" type="Label" parent="Hud" unique_id=1349969437]
+[node name="DebugLabel" type="Label" parent="Hud"]
 offset_left = 20.0
 offset_top = 52.0
 offset_right = 620.0
 offset_bottom = 240.0
 
-[node name="PlayerStatuses" type="Control" parent="Hud" unique_id=889088265]
+[node name="PlayerStatuses" type="Control" parent="Hud"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -156,34 +122,31 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="AudioDirector" type="Node" parent="." unique_id=826433191]
-script = ExtResource("25_audio")
-
-[node name="AmbiencePlayer" type="Node" parent="." unique_id=1088629626 node_paths=PackedStringArray("audio_director")]
+[node name="AmbiencePlayer" type="Node" parent="." node_paths=PackedStringArray("audio_director")]
 script = ExtResource("26_ambience")
 audio_director = NodePath("../AudioDirector")
 
-[node name="MusicDirector" type="Node" parent="." unique_id=540016390 node_paths=PackedStringArray("audio_director", "ambience", "stage_manager", "level_builder", "escape_event")]
+[node name="MusicDirector" type="Node" parent="." node_paths=PackedStringArray("audio_director", "ambience", "stage_manager", "level_builder", "escape_event")]
 script = ExtResource("27_music")
 audio_director = NodePath("../AudioDirector")
 ambience = NodePath("../AmbiencePlayer")
 stage_manager = NodePath("../StageManager")
 level_builder = NodePath("../LevelBuilder")
-escape_event = NodePath("../EnvironmentLayer/EscapeEvent")
+escape_event = NodePath("../EscapeEvent")
 tension_stream = ExtResource("28_tension")
 chase_stream = ExtResource("29_chase")
 intense_stream = ExtResource("30_intense")
 boss_stream = ExtResource("31_boss")
 
-[node name="EndScreen" type="CanvasLayer" parent="." unique_id=830531060]
+[node name="EndScreen" type="CanvasLayer" parent="."]
 layer = 3
 script = ExtResource("16_end")
 
-[node name="SkillChoiceScreen" type="CanvasLayer" parent="." unique_id=156474747]
+[node name="SkillChoiceScreen" type="CanvasLayer" parent="."]
 layer = 4
 script = ExtResource("32_skills")
 
-[node name="PauseMenu" type="CanvasLayer" parent="." unique_id=1550588346 node_paths=PackedStringArray("stage_manager")]
+[node name="PauseMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("stage_manager")]
 layer = 5
 script = ExtResource("33_pause")
 stage_manager = NodePath("../StageManager")

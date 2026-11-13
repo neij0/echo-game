@@ -29,6 +29,8 @@ extends Node3D
 ## floor scatter come later too (their plan is kept).
 
 signal level_built(level_index: int)
+## A navigation rebake (lockdown barriers, the arena door) is in use.
+signal navigation_rebaked
 
 const ROCK_SHADER: Shader = preload("res://shaders/rock_surface.gdshader")
 const FLOOR_SHADER: Shader = preload("res://shaders/floor_surface.gdshader")
@@ -62,6 +64,13 @@ const FLOOR_SHADER: Shader = preload("res://shaders/floor_surface.gdshader")
 @export var rock_piece_length: float = 20.0
 ## Height of a landmark's solid footprint until the landmark models (pixels).
 @export var landmark_rock_height: float = 40.0
+
+@export_group("Gates")
+## Lowest height (units) of a lockdown barrier or the arena door.
+@export var gate_min_height: float = 0.9
+## Camera shake when the boss arena door opens (units, seconds).
+@export var door_shake_strength: float = 0.12
+@export var door_shake_time: float = 0.5
 
 @export_group("Collision")
 ## Every rock's colliders reach from collider_depth below the floor to
@@ -225,6 +234,15 @@ var _creatures: Array[Creature] = []
 var creature_spots: Array[Vector3] = []
 var _shards: Array[EchoShard] = []
 var _layout: Layout
+## Boss levels: the arena's door. The boss itself comes in Phase D (null).
+var _door: ShardDoor
+var _boss: Creature
+var _lockdown: LockdownRoom
+## The navigation bake's inputs (world units), kept for rebakes.
+var _nav_floors: Array[PackedVector2Array] = []
+var _nav_rocks: Array[Dictionary] = []
+var _rebakes_running: int = 0
+var _rebake_wanted: bool = false
 var _navigation: NavigationRegion3D
 var _navigation_large: NavigationRegion3D
 var _large_map: RID
@@ -681,6 +699,13 @@ func _instantiate(layout: Layout) -> void:
 	# Until the boss is ported, a boss level ends at an ancient light on the
 	# arena's Boss marker.
 	_goal = _spawn(world.goal_scene, layout.goal) as AncientLight
+	_door = null
+	_boss = null
+	if layout.has_boss:
+		_add_door(layout)
+		for vent: Vector2 in layout.vents:
+			_spawn(world.bubble_vent_scene, vent)
+	_add_lockdown(layout)
 	_add_navigation(layout)
 
 
@@ -807,16 +832,65 @@ func _add_outer_rock(layout: Layout) -> void:
 	_level.add_child(instance)
 
 
+## The lockdown event of the level's lockdown room (LockdownRoom).
+func _add_lockdown(layout: Layout) -> void:
+	_lockdown = null
+	if not layout.has_lockdown or world.lockdown_room_scene == null:
+		return
+	_lockdown = world.lockdown_room_scene.instantiate() as LockdownRoom
+	if _lockdown == null:
+		push_warning("LevelBuilder: the lockdown room scene is not a LockdownRoom")
+		return
+	var units: float = _units()
+	_lockdown.room_rect = Rect2(layout.lockdown_rect.position * units, layout.lockdown_rect.size * units)
+	for polygon: PackedVector2Array in layout.lockdown_barriers:
+		_lockdown.barrier_polygons.append(_to_units(polygon))
+	_lockdown.barrier_height = _gate_height(_definition.lockdown_cell if _definition else Vector2i.ZERO, layout)
+	_lockdown.barrier_material = _rock_material
+	for spot: Vector2 in layout.lockdown_spawns:
+		_lockdown.spawn_points.append(to_world(spot))
+	_lockdown.creature_scene = world.lockdown_creature_scene
+	_lockdown.wave_calm = _definition.lockdown_wave_calm if _definition else 0
+	_lockdown.wave_challenge = _definition.lockdown_wave_challenge if _definition else 0
+	_lockdown.navigation_changed.connect(_rebake_navigation_soon)
+	_lockdown.name = "LockdownRoom"
+	_level.add_child(_lockdown)
+
+
+## The boss arena's door (ShardDoor) on its only doorway.
+func _add_door(layout: Layout) -> void:
+	if layout.door_polygon.is_empty() or world.shard_door_scene == null:
+		return
+	_door = world.shard_door_scene.instantiate() as ShardDoor
+	if _door == null:
+		push_warning("LevelBuilder: the shard door scene is not a ShardDoor")
+		return
+	_door.name = "ArenaDoor"
+	_door.outline = _to_units(layout.door_polygon)
+	_door.height = _gate_height(_definition.exit_cell if _definition else Vector2i.ZERO, layout)
+	_door.material = _rock_material
+	_level.add_child(_door)
+
+
+## Height (units) of a rock that closes a doorway of this room: the middle of
+## the room's rock heights, never lower than gate_min_height.
+func _gate_height(cell: Vector2i, layout: Layout) -> float:
+	var chunk := layout.rooms.get(cell) as LevelChunk
+	var middle: float = lerpf(chunk.rock_height_min, chunk.rock_height_max, 0.5) * _units() if chunk else 0.0
+	return maxf(middle, gate_min_height)
+
+
 ## Bakes the creatures' navigation meshes from the plans: every room's square
-## is walkable except its rock (walls, seals, landmark footprints).
+## is walkable except its rock (walls, seals, landmark footprints, the closed
+## arena door, closed lockdown barriers).
 func _add_navigation(layout: Layout) -> void:
 	var started: int = Time.get_ticks_usec()
-	var floors: Array[PackedVector2Array] = []
-	var rocks: Array[Dictionary] = []
+	_nav_floors.clear()
+	_nav_rocks.clear()
 	var size: float = world.room_size
 	for cell: Vector2i in layout.rooms:
 		var corner: Vector2 = Vector2(cell) * size
-		floors.append(_to_units(PackedVector2Array([corner, corner + Vector2(size, 0.0),
+		_nav_floors.append(_to_units(PackedVector2Array([corner, corner + Vector2(size, 0.0),
 			corner + Vector2(size, size), corner + Vector2(0.0, size)])))
 	var obstacles: Array[PackedVector2Array] = []
 	for chunk: LevelChunk in layout.chunks:
@@ -824,25 +898,77 @@ func _add_navigation(layout: Layout) -> void:
 	obstacles.append_array(layout.seals)
 	obstacles.append_array(layout.landmark_polygons)
 	for polygon: PackedVector2Array in obstacles:
-		rocks.append({"outline": _to_units(polygon), "height": 1.0})
+		_nav_rocks.append({"outline": _to_units(polygon), "height": 1.0})
+	var rocks: Array[Dictionary] = _navigation_rocks()
 	NavigationBaker.apply_to_map(get_world_3d().navigation_map, navigation_cell_size, navigation_cell_height)
 	_navigation = NavigationRegion3D.new()
 	_navigation.name = "Navigation"
-	_navigation.navigation_mesh = NavigationBaker.bake(floors, rocks, navigation_agent_radius, navigation_cell_size, navigation_cell_height)
+	_navigation.navigation_mesh = NavigationBaker.bake(_nav_floors, rocks, navigation_agent_radius, navigation_cell_size, navigation_cell_height)
 	_level.add_child(_navigation)
 	_navigation_large = NavigationRegion3D.new()
 	_navigation_large.name = "NavigationLarge"
-	_navigation_large.navigation_mesh = NavigationBaker.bake(floors, rocks, large_navigation_agent_radius, navigation_cell_size, navigation_cell_height)
+	_navigation_large.navigation_mesh = NavigationBaker.bake(_nav_floors, rocks, large_navigation_agent_radius, navigation_cell_size, navigation_cell_height)
 	# Before it enters the tree, so it never sits on the default map.
 	_navigation_large.set_navigation_map(_large_map)
 	_level.add_child(_navigation_large)
 	bake_seconds = float(Time.get_ticks_usec() - started) / 1000000.0
 
 
-## All shards collected: unlock the ancient light.
+## The level's fixed rock plus the rock that can open or close right now
+## (the closed arena door, closed lockdown barriers).
+func _navigation_rocks() -> Array[Dictionary]:
+	var rocks: Array[Dictionary] = _nav_rocks.duplicate()
+	if is_instance_valid(_door) and not _door.is_open:
+		rocks.append({"outline": _door.outline, "height": 1.0})
+	if is_instance_valid(_lockdown):
+		for outline: PackedVector2Array in _lockdown.get_obstacles():
+			rocks.append({"outline": outline, "height": 1.0})
+	return rocks
+
+
+## Rebakes both navigation meshes on a thread (a lockdown barrier or the
+## arena door changed): no hitch; the creatures use the new mesh a moment
+## later (navigation_rebaked). A change during a bake starts another after it.
+func _rebake_navigation_soon() -> void:
+	if _level == null:
+		return
+	if _rebakes_running > 0:
+		_rebake_wanted = true
+		return
+	_rebake_wanted = false
+	_rebakes_running = 2
+	var rocks: Array[Dictionary] = _navigation_rocks()
+	NavigationBaker.bake_async(_nav_floors, rocks, navigation_agent_radius, navigation_cell_size, navigation_cell_height,
+		_on_rebaked.bind(_level, _navigation))
+	NavigationBaker.bake_async(_nav_floors, rocks, large_navigation_agent_radius, navigation_cell_size, navigation_cell_height,
+		_on_rebaked.bind(_level, _navigation_large))
+
+
+func _on_rebaked(navigation_mesh: NavigationMesh, level: Node3D, region: NavigationRegion3D) -> void:
+	# A level built meanwhile has its own fresh meshes.
+	if level == _level and is_instance_valid(region):
+		region.navigation_mesh = navigation_mesh
+	_rebakes_running -= 1
+	if _rebakes_running > 0:
+		return
+	navigation_rebaked.emit()
+	if _rebake_wanted:
+		_rebake_navigation_soon()
+
+
+## True while a navigation rebake runs (tests wait for navigation_rebaked).
+func is_rebaking() -> bool:
+	return _rebakes_running > 0
+
+
+## All shards collected: unlock the ancient light and open the arena door.
 func open_exit() -> void:
 	if _goal:
 		_goal.set_shard_progress(_goal.shards_needed, _goal.shards_needed)
+	if is_instance_valid(_door) and not _door.is_open:
+		_door.open()
+		get_tree().call_group("shared_camera", "shake_with", door_shake_strength, door_shake_time)
+		_rebake_navigation_soon()
 
 
 func _clear() -> void:
@@ -855,6 +981,10 @@ func _clear() -> void:
 	if _layout:
 		_layout.free_chunks()
 		_layout = null
+	_door = null
+	_boss = null
+	_lockdown = null
+	_rebake_wanted = false
 
 
 ## An instance of scene on a plan point (null if the scene is missing or not 3D).
@@ -1004,6 +1134,21 @@ func get_goal() -> AncientLight:
 
 
 ## The Echo Shards of the current level (collected ones are freed).
+## The boss (null in a normal level; null in every level until Phase D).
+func get_boss() -> Creature:
+	return _boss
+
+
+## The lockdown event of the current level (null if it has none).
+func get_lockdown() -> LockdownRoom:
+	return _lockdown if is_instance_valid(_lockdown) else null
+
+
+## The boss arena's door (null in a normal level).
+func get_exit_door() -> ShardDoor:
+	return _door if is_instance_valid(_door) else null
+
+
 func get_shards() -> Array[EchoShard]:
 	return _shards
 

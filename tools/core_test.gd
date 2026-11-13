@@ -22,6 +22,7 @@ const UNKILLABLE_SCENE: PackedScene = preload("res://scenes/creature_unkillable.
 const SURFACE_SHADER: Shader = preload("res://shaders/rock_surface.gdshader")
 const PING_STREAM: AudioStream = preload("res://assets/audio/sfx/pulse_ping.wav")
 const TICK_STREAM: AudioStream = preload("res://assets/audio/sonar_tick.wav")
+const THUMP_STREAM: AudioStream = preload("res://assets/audio/sfx/pulse_thump.wav")
 
 ## Room scene, grid cell, clockwise quarter turns.
 const PLACEMENTS: Array[Array] = [
@@ -119,6 +120,7 @@ func _ready() -> void:
 	sonar_audio.sonar = sonar
 	sonar_audio.ping_stream = PING_STREAM
 	sonar_audio.tick_stream = TICK_STREAM
+	sonar_audio.thump_stream = THUMP_STREAM
 	_add(sonar_audio, "SonarAudio")
 	camera = _add(SharedCamera.new(), "SharedCamera") as SharedCamera
 	cutaway = _add(ViewCutaway.new(), "ViewCutaway") as ViewCutaway

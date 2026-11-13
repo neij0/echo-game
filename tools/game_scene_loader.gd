@@ -10,8 +10,8 @@ extends RefCounted
 const GAME_SCENE: String = "res://scenes/game.tscn"
 
 
-static func instantiate(mode: SaveData.Mode) -> Node2D:
-	var game := (load(GAME_SCENE) as PackedScene).instantiate() as Node2D
+static func instantiate(mode: SaveData.Mode) -> Node3D:
+	var game := (load(GAME_SCENE) as PackedScene).instantiate() as Node3D
 	var stage := game.get_node("StageManager") as StageManager
 	stage.test_stage_index = 0
 	stage.test_level_index = 0

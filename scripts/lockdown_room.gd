@@ -1,5 +1,5 @@
 class_name LockdownRoom
-extends Node2D
+extends Node3D
 ## The lockdown event of one level. When every player is inside the lockdown
 ## room (deeper than trigger_inset from its edges, so nobody stands in a
 ## doorway), each connected doorway is sealed with a LockdownBarrier (rumble,
@@ -8,12 +8,13 @@ extends Node2D
 ## once every wave creature is dead (a chord, a warm light in each doorway).
 ## Happens once per attempt (a retry rebuilds the level). The creatures'
 ## navigation is rebaked when the doorways close and open (navigation_changed,
-## LevelBuilder), behind the camera shake. Wave sizes come from the
+## LevelBuilder: a bake on a thread, no hitch). Wave sizes come from the
 ## LevelDefinition per mode; the StageManager sets the mode ("mode_listeners").
 ## While locked, the players' passive oxygen drain is scaled (per mode; pulses
 ## still cost as usual). Clearing the wave gives every player back a share of
 ## the meter, with a refill sound and a ring around each player.
-## Built and set up by the LevelBuilder (all positions in its space).
+## Built and set up by the LevelBuilder (all positions in world units on the
+## floor plane).
 
 signal locked
 signal wave_spawned(creature: Creature)
@@ -24,9 +25,11 @@ signal navigation_changed
 enum Phase { WAITING, LOCKED, CLEARED }
 
 ## Players must be at least this far inside the room's edges to trigger it.
-@export var trigger_inset: float = 260.0
+@export var trigger_inset: float = 5.2
 ## Seconds between the doorways closing and the wave waking.
 @export var wake_delay: float = 0.8
+## Several wave creatures on one marker are spread by this (units).
+@export var wave_spread: float = 0.8
 
 @export_group("Oxygen")
 ## Share of the passive pressure drain while locked (0 = paused).
@@ -39,14 +42,15 @@ enum Phase { WAITING, LOCKED, CLEARED }
 ## Ring that grows around each player when the meter is refilled.
 @export var refill_ring_color: Color = Color(0.35, 0.8, 1.0)
 @export var refill_ring_energy: float = 2.5
-@export var refill_ring_radius: float = 90.0
-@export var refill_ring_width: float = 3.0
+@export var refill_ring_radius: float = 1.8
+@export var refill_ring_width: float = 0.06
 @export var refill_ring_time: float = 0.9
 
 @export_group("Feedback")
-@export var close_shake_strength: float = 9.0
+## World units.
+@export var close_shake_strength: float = 0.18
 @export var close_shake_time: float = 0.6
-@export var open_shake_strength: float = 4.0
+@export var open_shake_strength: float = 0.08
 @export var open_shake_time: float = 0.35
 @export var rumble_stream: AudioStream
 @export var rumble_volume_db: float = -2.0
@@ -55,11 +59,14 @@ enum Phase { WAITING, LOCKED, CLEARED }
 @export var clear_stream: AudioStream
 @export var clear_volume_db: float = -3.0
 
-## Set by the LevelBuilder before the node enters the tree.
+## Set by the LevelBuilder before the node enters the tree: the room's square
+## on the floor plane (x, z), the rock of each connected doorway (outlines on
+## the floor plane), its height and material, and where the wave wakes.
 var room_rect := Rect2()
 var barrier_polygons: Array[PackedVector2Array] = []
-var barrier_color: Color = Color(0.3, 0.3, 0.3)
-var spawn_points: Array[Vector2] = []
+var barrier_height: float = 1.0
+var barrier_material: Material
+var spawn_points: Array[Vector3] = []
 var creature_scene: PackedScene
 var wave_calm: int = 2
 var wave_challenge: int = 3
@@ -76,7 +83,7 @@ var _slam: AudioStreamPlayer
 var _clear: AudioStreamPlayer
 var _refill: AudioStreamPlayer
 var _ring_left: float = 0.0
-var _ring: Node2D
+var _ring: GlowLines
 
 
 func _ready() -> void:
@@ -85,20 +92,18 @@ func _ready() -> void:
 	for polygon: PackedVector2Array in barrier_polygons:
 		var barrier := LockdownBarrier.new()
 		barrier.name = "Barrier"
-		barrier.polygon = polygon
-		barrier.color = barrier_color
+		barrier.outline = polygon
+		barrier.height = barrier_height
+		barrier.material = barrier_material
 		add_child(barrier)
 		_barriers.append(barrier)
 	_rumble = _make_player(rumble_stream, rumble_volume_db)
 	_slam = _make_player(slam_stream, slam_volume_db)
 	_clear = _make_player(clear_stream, clear_volume_db)
 	_refill = _make_player(refill_stream, refill_volume_db)
-	var layer := CanvasLayer.new()
-	layer.follow_viewport_enabled = true
-	add_child(layer)
-	_ring = Node2D.new()
-	layer.add_child(_ring)
-	_ring.draw.connect(_draw_refill_rings)
+	_ring = GlowLines.new()
+	_ring.energy = refill_ring_energy
+	add_child(_ring)
 
 
 func _exit_tree() -> void:
@@ -123,24 +128,25 @@ func is_locked() -> bool:
 	return phase == Phase.LOCKED
 
 
-## Doorway rocks that block the navigation right now (closed barriers).
+## Doorway rocks that block the navigation right now (closed barriers), as
+## outlines on the floor plane (world units).
 func get_obstacles() -> Array[PackedVector2Array]:
 	var result: Array[PackedVector2Array] = []
 	for barrier: LockdownBarrier in _barriers:
 		if barrier.is_closed:
-			result.append(barrier.polygon)
+			result.append(barrier.outline)
 	return result
 
 
-## True when the point (this node's space) is deep enough inside the room.
-func contains(point: Vector2) -> bool:
-	return room_rect.grow(-trigger_inset).has_point(point)
+## True when the world point is deep enough inside the room.
+func contains(point: Vector3) -> bool:
+	return room_rect.grow(-trigger_inset).has_point(Vector2(point.x, point.z))
 
 
 func _process(delta: float) -> void:
 	if _ring_left > 0.0:
 		_ring_left = maxf(_ring_left - delta, 0.0)
-		_ring.queue_redraw()
+		_draw_refill_rings()
 
 
 func _physics_process(delta: float) -> void:
@@ -162,7 +168,7 @@ func _everyone_inside() -> bool:
 	if players.is_empty():
 		return false
 	for player: Player in players:
-		if not contains(to_local(player.global_position)):
+		if not contains(player.global_position):
 			return false
 	return true
 
@@ -179,7 +185,6 @@ func lock() -> void:
 	_shake(close_shake_strength, close_shake_time)
 	_wake_left = wake_delay
 	_set_drain_scale(get_drain_scale())
-	get_tree().call_group("sonar_overlay", "rebuild_samples")
 	navigation_changed.emit()
 	locked.emit()
 
@@ -198,7 +203,6 @@ func unlock(rewarded: bool = false) -> void:
 		barrier.open()
 	_play(_clear)
 	_shake(open_shake_strength, open_shake_time)
-	get_tree().call_group("sonar_overlay", "rebuild_samples")
 	navigation_changed.emit()
 	cleared.emit()
 
@@ -215,16 +219,18 @@ func _spawn_wave() -> void:
 		unlock(true)
 		return
 	# Markers farthest from the players first, so nothing wakes on top of them.
-	var points: Array[Vector2] = spawn_points.duplicate()
-	points.sort_custom(func(a: Vector2, b: Vector2) -> bool: return _player_distance(a) > _player_distance(b))
+	var points: Array[Vector3] = spawn_points.duplicate()
+	points.sort_custom(func(a: Vector3, b: Vector3) -> bool: return _player_distance(a) > _player_distance(b))
 	for i: int in get_wave_size():
 		var creature := creature_scene.instantiate() as Creature
 		if creature == null:
 			continue
-		var at: Vector2 = points[i % points.size()]
+		var at: Vector3 = points[i % points.size()]
 		# Several on one marker: spread them a little.
-		creature.position = at + Vector2.from_angle(TAU * i / maxf(get_wave_size(), 1.0)) * 40.0 * floorf(float(i) / points.size())
+		var angle: float = TAU * i / maxf(get_wave_size(), 1.0)
+		creature.position = at + Vector3(cos(angle), 0.0, sin(angle)) * wave_spread * floorf(float(i) / points.size())
 		get_parent().add_child(creature)
+		creature.reset_physics_interpolation()
 		creature.set_challenge_mode(challenge_mode)
 		var prey: Player = Players.nearest(get_tree(), creature.global_position)
 		if prey:
@@ -233,10 +239,10 @@ func _spawn_wave() -> void:
 		wave_spawned.emit(creature)
 
 
-func _player_distance(point: Vector2) -> float:
+func _player_distance(point: Vector3) -> float:
 	var best: float = INF
 	for player: Player in Players.all(get_tree()):
-		best = minf(best, to_global(point).distance_to(player.global_position))
+		best = minf(best, Creature._flat_distance(point, player.global_position))
 	return best
 
 
@@ -260,13 +266,13 @@ func _refill_players() -> void:
 
 
 func _draw_refill_rings() -> void:
-	if _ring_left <= 0.0:
-		return
-	var t: float = 1.0 - _ring_left / maxf(refill_ring_time, 0.01)
-	var color := Color(refill_ring_color.r * refill_ring_energy, refill_ring_color.g * refill_ring_energy,
-		refill_ring_color.b * refill_ring_energy, 1.0 - t)
-	for player: Player in Players.all(get_tree()):
-		_ring.draw_arc(player.global_position, refill_ring_radius * (0.3 + 0.7 * t), 0.0, TAU, 40, color, refill_ring_width * (1.0 - t) + 1.0, true)
+	_ring.clear()
+	if _ring_left > 0.0:
+		var t: float = 1.0 - _ring_left / maxf(refill_ring_time, 0.01)
+		for player: Player in Players.all(get_tree()):
+			_ring.add_ring(player.get_global_transform_interpolated().origin, refill_ring_radius * (0.3 + 0.7 * t),
+				refill_ring_width * (1.0 - t) + 0.02, Color(refill_ring_color, 1.0 - t))
+	_ring.commit()
 
 
 func get_wave() -> Array[Creature]:

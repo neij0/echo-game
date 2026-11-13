@@ -13,6 +13,20 @@ extends RefCounted
 ## navigation map must use the same, see apply_to_map).
 static func bake(floors: Array[PackedVector2Array], rocks: Array[Dictionary], agent_radius: float,
 		cell_size: float, cell_height: float, agent_height: float = 1.0) -> NavigationMesh:
+	var navigation_mesh: NavigationMesh = _new_mesh(agent_radius, cell_size, cell_height, agent_height)
+	NavigationServer3D.bake_from_source_geometry_data(navigation_mesh, _source(floors, rocks))
+	return navigation_mesh
+
+
+## The same bake on a thread (no hitch while the game runs: a lockdown closing,
+## the arena door opening): done(navigation_mesh) is called when it is ready.
+static func bake_async(floors: Array[PackedVector2Array], rocks: Array[Dictionary], agent_radius: float,
+		cell_size: float, cell_height: float, done: Callable, agent_height: float = 1.0) -> void:
+	var navigation_mesh: NavigationMesh = _new_mesh(agent_radius, cell_size, cell_height, agent_height)
+	NavigationServer3D.bake_from_source_geometry_data_async(navigation_mesh, _source(floors, rocks), done.bind(navigation_mesh))
+
+
+static func _new_mesh(agent_radius: float, cell_size: float, cell_height: float, agent_height: float) -> NavigationMesh:
 	var navigation_mesh := NavigationMesh.new()
 	navigation_mesh.cell_size = cell_size
 	navigation_mesh.cell_height = cell_height
@@ -22,7 +36,10 @@ static func bake(floors: Array[PackedVector2Array], rocks: Array[Dictionary], ag
 	navigation_mesh.agent_max_climb = cell_height
 	navigation_mesh.agent_max_slope = 10.0
 	navigation_mesh.region_min_size = 1.0
+	return navigation_mesh
 
+
+static func _source(floors: Array[PackedVector2Array], rocks: Array[Dictionary]) -> NavigationMeshSourceGeometryData3D:
 	var source := NavigationMeshSourceGeometryData3D.new()
 	for outline: PackedVector2Array in floors:
 		source.add_faces(_floor_faces(outline), Transform3D.IDENTITY)
@@ -33,8 +50,7 @@ static func bake(floors: Array[PackedVector2Array], rocks: Array[Dictionary], ag
 			points.append(Vector3(point.x, 0.0, point.y))
 		# From below the floor to the top, so it cuts through the floor.
 		source.add_projected_obstruction(points, -1.0, float(rock["height"]) + 1.0, false)
-	NavigationServer3D.bake_from_source_geometry_data(navigation_mesh, source)
-	return navigation_mesh
+	return source
 
 
 ## The world's navigation map must use the bake's cell size.

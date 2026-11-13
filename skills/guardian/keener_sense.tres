@@ -10,12 +10,12 @@ category = 0
 kind = 0
 max_rank = 2
 values = Dictionary[String, PackedFloat32Array]({
-"close_sense_add": PackedFloat32Array(40, 70)
+"close_sense_add": PackedFloat32Array(0.8, 1.4)
 })
 name_en = "Keener Sense"
 name_ar = "حسّ أدق"
-description_en = "Your close sense reaches further: 90 -> 130 px (rank 2: 160 px)."
-description_ar = "حسّك القريب يصل أبعد: من 90 إلى 130 بكسل (المستوى 2: 160 بكسل)."
+description_en = "Your close sense reaches further (rank 2: further still)."
+description_ar = "حسّك القريب يصل أبعد (المستوى 2: أبعد أكثر)."
 tip_en = "You notice creatures sooner in the dark: warn the Echo before they reach her."
 tip_ar = "تلاحظ المخلوقات في الظلام أسرع: نبّه إيكو قبل أن تصل إليها."
 icon_shape = 7

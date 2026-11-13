@@ -6,7 +6,7 @@
 [ext_resource type="AudioStream" path="res://assets/audio/sfx/world_barrier_open.wav" id="4_clear"]
 [ext_resource type="AudioStream" path="res://assets/audio/station_refill.wav" id="5_refill"]
 
-[node name="LockdownRoom" type="Node2D"]
+[node name="LockdownRoom" type="Node3D"]
 script = ExtResource("1_script")
 rumble_stream = ExtResource("2_rumble")
 slam_stream = ExtResource("3_slam")

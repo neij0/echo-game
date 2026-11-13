@@ -283,12 +283,12 @@ func _debug_text() -> String:
 			lines.append("P%d %s: %s" % [player.player_number, player.display_name, _ability_text(player)])
 			var nearest: Creature = _nearest_creature(creatures, player.global_position)
 			if nearest:
-				lines.append("P%d nearest creature: %s (%d px), chase %d px/s vs player %d px/s" % [
+				lines.append("P%d nearest creature: %s (%.1f units), chase %.1f units/s vs player %.1f units/s" % [
 					player.player_number,
 					nearest.get_state_name(),
-					roundi(nearest.global_position.distance_to(player.global_position)),
-					roundi(player.max_speed * nearest.get_chase_ratio()),
-					roundi(player.max_speed),
+					Creature._flat_distance(nearest.global_position, player.global_position),
+					nearest.get_chase_speed(),
+					player.max_speed,
 				])
 	lines.append("Creatures: " + " / ".join(state_counts))
 	return "\n".join(lines)
@@ -302,14 +302,14 @@ func _ability_text(player: Player) -> String:
 	var pulse := player.get_node_or_null("Pulse") as PulseAbility
 	if pulse:
 		return "pulse READY" if pulse.is_ready() else "pulse %.1fs" % pulse.cooldown_left
-	var sword := player.get_node_or_null("UnlitLayer/Sword") as SwordAbility
+	var sword := player.get_node_or_null("Sword") as SwordAbility
 	if sword:
 		var light: String = "in light" if sword.is_in_echo_light() else "in dark"
 		return "combo hit %d (%s)" % [sword.hit_index + 1, light] if sword.is_attacking() else "sword ready (%s)" % light
 	return ""
 
 
-func _nearest_creature(creatures: Array[Node], from: Vector2) -> Creature:
+func _nearest_creature(creatures: Array[Node], from: Vector3) -> Creature:
 	var best: Creature = null
 	var best_distance: float = INF
 	for node: Node in creatures:

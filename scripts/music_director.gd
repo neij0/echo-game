@@ -48,9 +48,9 @@ signal stinger_played(sound_name: String)
 
 @export_group("Situations")
 ## A creature INVESTIGATing / SEARCHing this close to a standing player = TENSION.
-@export var tension_radius: float = 800.0
+@export var tension_radius: float = 16.0
 ## The boss fight: the boss is awake (not wandering) or a player is this close.
-@export var boss_radius: float = 900.0
+@export var boss_radius: float = 18.0
 
 @export_group("Stingers")
 @export var spotted_stinger: String = "sting_spotted"

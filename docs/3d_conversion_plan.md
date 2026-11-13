@@ -220,7 +220,8 @@ scripts in `tools/blender/`).
 3. **Creatures**: clearly different silhouettes per type; procedural animation
    (springs, chains, sine motion) plus key animations made by Blender scripts.
 4. **Combat-feel pass**: anticipation, hit-stop, flash, knockback, particles, layered
-   sound; creature hit reactions, armour cracks and deaths.
+   sound; creature hit reactions, armour cracks and deaths. Also: tone down the gold
+   Exposed ring on creatures (very bright, it dominates the screen).
 5. **Bosses**: full rigs, intro and death scenes, arenas that change with the phases.
 
 ### Phase C — asset pipeline and characters (8-12 days)
@@ -366,7 +367,8 @@ Updated with every step, so a new session knows where the conversion stands.
   (about a quarter of this GPU) that is roughly 5 ms of GPU per frame. Still to measure
   at level scale (Phase B), where most of the cost will be.
 - [x] `proto3d/` deleted.
-- [ ] HUD glow over the 3D world (risk 4): moved to Phase B, where the HUD is ported.
+- [x] HUD glow over the 3D world (risk 4): the HUD is ported without its own glow (see
+  Phase B step 2).
 - [x] Play-test fix: the unkillable creature could not be escaped. The 3D sight rays were
   checked against the 2D floor plans (519 random pairs in the three rooms: none sees through
   rock, none is blocked in the open) and the chase / search / give-up rules are the 2D ones.
@@ -461,11 +463,25 @@ Updated with every step, so a new session knows where the conversion stands.
   About 640 FPS on the largest level (GPU 0.78 ms, +0.13 ms for the new layers).
 - [x] Brightness: the 70 % look is the new 100 % (a second time; settings version 3).
 - [x] The Echo stirs the sand only lightly (no furrow) when she swims fast or low.
-- [ ] Next: `StageManager` (level fades, retries, counts, the full `Hud`), `game.tscn`
-  running in 3D; lockdown, collapse escape, arena door, bubble vents, the placeholder
-  boss; skills (stats, the three actives, aiming); the `Game` autoload's worlds and
-  skill catalog; `check_levels`, `test_creatures`, `test_skills`, `test_stuck`.
-- [ ] Boss levels end at an ancient light on the arena's Boss marker until the boss and
-  the arena door are ported.
+- [x] **Step 2 (play-tested next): `game.tscn` runs in 3D from the main menu through
+  the whole Ocean.** `StageManager` (level fades, retries, counts, skill choice), the
+  full `Hud` (shard count, awareness meter, skill icons, escape timer), `HurtVignette`,
+  `PauseMenu`, lockdown rooms (the doorway rock rises out of the floor and sinks back:
+  `RockGate`), the collapse escape, the three active skills, boss levels (arena door
+  with a socket per shard, pillars as rock, bubble vents), `MusicDirector`,
+  `AmbiencePlayer`, the `Game` autoload's worlds and skill catalog. Navigation rebakes
+  (lockdown, door) run on a thread: no hitch. `tools/test_game.tscn` (73 checks),
+  `tools/game_shots.tscn`. The pulse's thump is approved and in `sfx/`; the shadow
+  fan's radial streaks are dithered away (same 7 taps).
+- [ ] Boss levels end at an ancient light on the arena's Boss marker (the stage
+  completes there) until the boss framework, the placeholder boss and the Angler are
+  ported in Phase D.
+- [ ] Still to port in Phase B's scope: the old big tests (`check_levels`,
+  `test_creatures`, `test_skills`, `test_stuck`); their main rules are covered by
+  `test_game`, `test_levels`, `test_core` and `test_walls` meanwhile.
+- [ ] The HUD does not bloom over the 3D world (the glow is the 3D environment's); it
+  reads well without it. Decide in Phase E whether it needs its own glow.
+- [ ] **For the combat-feel pass** (noted in the pulse play-test): the gold Exposed
+  ring on creatures is very bright and dominates the screen; tone it down then.
 - [ ] Fish (harmless life) get a `SandTrailMaker` when they are rebuilt (Phase C/E).
 

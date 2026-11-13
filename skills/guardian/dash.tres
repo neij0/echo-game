@@ -11,7 +11,7 @@ category = 0
 kind = 1
 max_rank = 1
 values = Dictionary[String, PackedFloat32Array]({
-"speed": PackedFloat32Array(900),
+"speed": PackedFloat32Array(18),
 "time": PackedFloat32Array(0.16),
 "invulnerable_time": PackedFloat32Array(0.3),
 "cooldown": PackedFloat32Array(4)

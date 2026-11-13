@@ -13,8 +13,8 @@ max_rank = 1
 values = Dictionary[String, PackedFloat32Array]({
 "arc_degrees": PackedFloat32Array(120),
 "speed_scale": PackedFloat32Array(0.55),
-"protect_distance": PackedFloat32Array(120),
-"repel_speed": PackedFloat32Array(320),
+"protect_distance": PackedFloat32Array(2.4),
+"repel_speed": PackedFloat32Array(6.4),
 "repel_stagger": PackedFloat32Array(0.5),
 "cooldown": PackedFloat32Array(0)
 })

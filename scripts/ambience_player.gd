@@ -9,7 +9,7 @@ extends Node
 
 @export var audio_director: AudioDirector
 ## Small one-shots play this far around the camera (pixels).
-@export var small_spread: float = 700.0
+@export var small_spread: float = 14.0
 ## Seconds for the bed to follow a new level (set_bed_offset_db).
 @export var bed_fade_time: float = 2.0
 
@@ -79,8 +79,9 @@ func _process(delta: float) -> void:
 func _play_small() -> void:
 	if audio_director == null:
 		return
-	var camera: Camera2D = get_viewport().get_camera_2d()
-	var center: Vector2 = camera.get_screen_center_position() if camera else Vector2.ZERO
-	var at: Vector2 = center + Vector2.from_angle(_rng.randf() * TAU) * _rng.randf_range(0.3, 1.0) * small_spread
+	var camera: SharedCamera = SharedCamera.find(get_tree())
+	var center: Vector3 = camera.get_focus() if camera else Vector3.ZERO
+	var angle: float = _rng.randf() * TAU
+	var at: Vector3 = center + Vector3(cos(angle), 0.0, sin(angle)) * _rng.randf_range(0.3, 1.0) * small_spread
 	audio_director.play(_world.ambience_small_one_shot, at,
 		_rng.randf_range(_world.ambience_small_volume_min_db, _world.ambience_small_volume_max_db))

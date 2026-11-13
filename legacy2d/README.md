@@ -12,5 +12,7 @@ When a script is ported, move it back with `git mv` (history follows) and port i
 
 Scenes that use these scripts (e.g. `scenes/game.tscn`) stay where they are and do not load
 until their scripts are back. `tools/check_scripts.tscn` lists every script outside this
-folder that does not parse; it must stay at zero. Which phase ports what:
+folder that does not parse; it must stay at zero. Still here after Phase B step 2: the
+boss framework and the bosses (Phase D), harmless life, light shafts, the debug draws,
+the drop shadows, the level generator, the old tests and tools. Which phase ports what:
 `docs/3d_conversion_plan.md`, sections 6 and 9. The folder is deleted when it is empty.

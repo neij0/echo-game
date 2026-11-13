@@ -82,6 +82,14 @@ func _test_every_level_builds() -> void:
 			var targets: Array[Vector3] = []
 			for shard: EchoShard in test.builder.get_shards():
 				targets.append(shard.global_position)
+			# A boss level's exit is behind the arena door until every shard is in.
+			var door: ShardDoor = test.builder.get_exit_door()
+			if door:
+				_check(not _reachable(start, test.builder.get_goal().global_position), "%s: the arena is sealed by its door" % label)
+				test.builder.open_exit()
+				while test.builder.is_rebaking():
+					await get_tree().process_frame
+				await _frames(3)
 			targets.append(test.builder.get_goal().global_position)
 			var unreachable: int = 0
 			for target: Vector3 in targets:
