@@ -14,3 +14,6 @@
 Thumbs.db
 desktop.ini
 *.tmp
+
+# Python caches
+__pycache__/
