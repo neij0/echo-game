@@ -40,6 +40,8 @@ var _health_segments: HealthSegments
 var _pressure_bar: HudMeter
 var _pressure_label: Label
 var _distress_label: Label
+## The distress hint's row: the player's own action button + the text.
+var _distress_row: HBoxContainer
 var _distress: DistressPulse
 var _skill_row: HBoxContainer
 var _active_icon: SkillIcon
@@ -78,8 +80,13 @@ func _ready() -> void:
 	_pressure_label = _label(meter, &"DimLabel", small_font_size)
 
 	_distress = player.get_node_or_null("DistressPulse") as DistressPulse
-	_distress_label = _label(self, &"Label", small_font_size)
-	_distress_label.visible = false
+	_distress_row = _row(6)
+	_distress_row.visible = false
+	var distress_key := InputPrompt.new()
+	distress_key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_distress_row.add_child(distress_key)
+	distress_key.setup_for_player([{"actions": [StringName(player.input_prefix + "action")], "text": ""}], player.player_number)
+	_distress_label = _label(_distress_row, &"Label", small_font_size)
 
 	_skill_row = _row(6)
 	_pulse = player.get_node_or_null("Pulse") as PulseAbility
@@ -162,7 +169,7 @@ func _add_key(action: StringName) -> void:
 	var prompt := InputPrompt.new()
 	prompt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_skill_row.add_child(prompt)
-	prompt.setup([{"actions": [action], "text": ""}], InputGlyph.Device.GAMEPAD if player.uses_gamepad else InputGlyph.Device.KEYBOARD)
+	prompt.setup_for_player([{"actions": [action], "text": ""}], player.player_number)
 
 
 func _update_active_icon() -> void:
@@ -189,8 +196,8 @@ func get_active_icon() -> SkillIcon:
 
 
 func _update_distress_hint() -> void:
-	_distress_label.visible = _distress != null and player.health.is_downed
-	if not _distress_label.visible:
+	_distress_row.visible = _distress != null and player.health.is_downed
+	if not _distress_row.visible:
 		return
 	if _distress.is_ready():
 		_distress_label.text = Game.text("distress_ready")

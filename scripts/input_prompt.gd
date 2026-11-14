@@ -2,27 +2,31 @@ class_name InputPrompt
 extends HBoxContainer
 ## A row of button prompts: for each entry its drawn glyphs (InputGlyph) and a
 ## short label, e.g. "[W][S] choose   [Space] pick" or "(L↕) choose   (A) pick".
-## It follows the device in use: a player's own (their keys or their own
-## gamepad: any event of the entries' actions) or, for the menus (follow_any),
-## whatever was used last; menu_device keeps that between screens. On a gamepad
-## the stick / D-pad parts of one entry merge into one glyph (up + down = one
-## stick with both arrows). Mirrors in Arabic like any HBoxContainer.
+## It follows the device in use (InputDevices) and changes the moment it
+## changes, without the screen being opened again:
+## - menu prompts (setup with any_device): the device last used in any way,
+##   and on a gamepad that pad's kind (Xbox letters / PlayStation symbols);
+## - a player's prompts (setup_for_player): only that player's own device
+##   (their keys or their own gamepad), so two players each see their own.
+## On a gamepad the stick / D-pad parts of one entry merge into one glyph (up +
+## down = one stick with both arrows). Mirrors in Arabic like any HBoxContainer.
 
-## The device the menus' prompts show (the last one used in a menu).
-static var menu_device: InputGlyph.Device = InputGlyph.Device.KEYBOARD
+enum Follow { MENU, PLAYER, FIXED }
 
 ## Space between two entries.
 @export var entry_gap: int = 28
 ## Space between the glyphs of one entry and its label.
 @export var glyph_gap: int = 5
-## A stick moved further than this counts as using the gamepad.
-@export var axis_threshold: float = 0.5
 
+var follow: Follow = Follow.MENU
+## The player followed (Follow.PLAYER).
+var player_number: int = 1
+## What is shown right now.
 var device: InputGlyph.Device = InputGlyph.Device.KEYBOARD
-var follow_any: bool = false
+var style: InputDevices.PadStyle = InputDevices.PadStyle.XBOX
 ## [{"actions": Array[StringName], "text": String}]
 var _entries: Array[Dictionary] = []
-var _actions: Array[StringName] = []
+var _shown: String = ""
 
 
 func _init() -> void:
@@ -30,54 +34,50 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
-## entries: [{"actions": [&"p1_move_up", &"p1_move_down"], "text": "choose"}, ...].
-## any_device: follow whatever device is used (menus), starting at menu_device.
+## entries: [{"actions": [&"ui_up", &"ui_down"], "text": "choose"}, ...].
+## any_device: follow the menus' device (true), else stay on start_device.
 func setup(entries: Array[Dictionary], start_device: InputGlyph.Device, any_device: bool = false) -> void:
+	follow = Follow.MENU if any_device else Follow.FIXED
+	device = start_device
+	_set_entries(entries)
+
+
+## Follows one player's own device (their keys or their own gamepad).
+func setup_for_player(entries: Array[Dictionary], number: int) -> void:
+	follow = Follow.PLAYER
+	player_number = number
+	_set_entries(entries)
+
+
+func _set_entries(entries: Array[Dictionary]) -> void:
 	_entries = entries
-	follow_any = any_device
-	device = menu_device if any_device else start_device
-	_actions.clear()
-	for entry: Dictionary in entries:
-		for action: StringName in entry.get("actions", []):
-			_actions.append(action)
+	_shown = ""
+	_update()
+
+
+func _process(_delta: float) -> void:
+	_update()
+
+
+## Rebuilds when the followed device or pad kind changed.
+func _update() -> void:
+	match follow:
+		Follow.MENU:
+			device = InputDevices.menu_device
+			style = InputDevices.menu_style()
+		Follow.PLAYER:
+			device = InputDevices.player_device.get(player_number, InputGlyph.Device.KEYBOARD)
+			style = InputDevices.player_style(player_number)
+	var key: String = "%d:%d" % [device, style if device == InputGlyph.Device.GAMEPAD else 0]
+	if key == _shown:
+		return
+	_shown = key
 	_rebuild()
 
 
-func set_device(value: InputGlyph.Device) -> void:
-	if follow_any:
-		menu_device = value
-	if value != device:
-		device = value
-		_rebuild()
-
-
-func _input(event: InputEvent) -> void:
-	if not is_visible_in_tree() or _entries.is_empty():
-		return
-	var used: int = _device_of(event)
-	if used < 0:
-		return
-	if follow_any or _is_own(event):
-		set_device(used as InputGlyph.Device)
-
-
-## The device an event comes from, or -1 if it does not count (a release, a
-## stick barely moved, the mouse).
-func _device_of(event: InputEvent) -> int:
-	if event is InputEventKey:
-		return InputGlyph.Device.KEYBOARD if (event as InputEventKey).pressed else -1
-	if event is InputEventJoypadButton:
-		return InputGlyph.Device.GAMEPAD if (event as InputEventJoypadButton).pressed else -1
-	if event is InputEventJoypadMotion:
-		return InputGlyph.Device.GAMEPAD if absf((event as InputEventJoypadMotion).axis_value) >= axis_threshold else -1
-	return -1
-
-
-func _is_own(event: InputEvent) -> bool:
-	for action: StringName in _actions:
-		if InputMap.has_action(action) and event.is_action(action):
-			return true
-	return false
+## The pad whose names are shown (PS5 "Create" or PS4 "Share" for Back).
+func _pad() -> int:
+	return InputDevices.player_pad(player_number) if follow == Follow.PLAYER else InputDevices.menu_pad
 
 
 func _rebuild() -> void:
@@ -98,16 +98,26 @@ func _rebuild() -> void:
 		label.theme_type_variation = &"PromptLabel"
 		label.text = entry.get("text", "")
 		label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		label.visible = label.text != ""
 		group.add_child(label)
 		add_child(group)
+
+
+## The glyphs shown right now (tests): one spec per glyph.
+func get_shown_specs() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for entry: Dictionary in _entries:
+		result.append_array(_specs(entry.get("actions", [])))
+	return result
 
 
 ## The glyphs of one entry on the current device; on a gamepad the D-pad and
 ## stick parts of the same stick / pad merge into one glyph.
 func _specs(actions: Array) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
+	var newer: bool = InputDevices.is_newer_playstation(_pad())
 	for action: StringName in actions:
-		var spec: Dictionary = InputGlyph.spec_for(action, device)
+		var spec: Dictionary = InputGlyph.spec_for(action, device, style, newer)
 		if spec.is_empty():
 			continue
 		var merged: bool = false

@@ -6,8 +6,9 @@ extends CanvasLayer
 ## mirrored in Arabic; the text inside each half is). Each half is uncovered
 ## by a pulse wipe (PulseReveal); each player moves through their own cards
 ## (SkillCard: a glowing edge in their colour, a sonar ripple and a soft ping
-## when the cursor arrives) with their own controls (move up / down, action =
-## pick / unpick; drawn prompts for the device they use, InputPrompt) and is
+## when the cursor arrives) with their own controls (move up / down or their
+## own D-pad, action = pick / unpick; drawn prompts for the device each of them
+## uses, InputPrompt.setup_for_player) and is
 ## ready once they picked enough. When both are ready, both choices are shown
 ## with their co-op tips for summary_time seconds, then choose() returns.
 ## Works while the game is paused. Builds its UI in code.
@@ -174,6 +175,26 @@ func _process(delta: float) -> void:
 			press_pick(side.player)
 
 
+## Each player's own D-pad moves their cursor too (their move actions only
+## have the stick and the keys).
+func _input(event: InputEvent) -> void:
+	var button := event as InputEventJoypadButton
+	if not is_open or _summary or _delay_left > 0.0 or button == null or not button.pressed:
+		return
+	var step: int = 0
+	if button.button_index == JOY_BUTTON_DPAD_UP:
+		step = -1
+	elif button.button_index == JOY_BUTTON_DPAD_DOWN:
+		step = 1
+	if step == 0:
+		return
+	for side: ChoiceSide in _sides:
+		if InputDevices.player_pad(side.player.player_number) == button.device:
+			move_cursor(side.player, step)
+			get_viewport().set_input_as_handled()
+			return
+
+
 func _all_done() -> bool:
 	for side: ChoiceSide in _sides:
 		if not side.done:
@@ -231,11 +252,11 @@ func _build_sides(players: Array[Player], offers: Dictionary, pick_counts: Dicti
 		side.prompt = InputPrompt.new()
 		side.prompt.alignment = BoxContainer.ALIGNMENT_CENTER
 		side.root.add_child(side.prompt)
-		side.prompt.setup([
+		side.prompt.setup_for_player([
 			{"actions": [StringName(player.input_prefix + "move_up"), StringName(player.input_prefix + "move_down")],
 				"text": Game.text("prompt_choose")},
 			{"actions": [StringName(player.input_prefix + "action")], "text": Game.text("prompt_pick")},
-		], InputGlyph.Device.GAMEPAD if player.uses_gamepad else InputGlyph.Device.KEYBOARD)
+		], player.player_number)
 		side.status = _label(side.root, &"EchoLabel" if is_echo else &"GuardianLabel")
 		side.status.add_theme_font_size_override("font_size", name_font_size)
 		_sides.append(side)

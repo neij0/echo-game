@@ -48,6 +48,7 @@ var _button_start: float = 0.0
 
 
 func _ready() -> void:
+	add_to_group(FocusKeeper.GROUP)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	theme = Game.ui_theme
 	Game.apply_direction(self)
@@ -129,6 +130,12 @@ func _process(delta: float) -> void:
 	_prompt.position = Vector2((size.x - _prompt.size.x) * 0.5, size.y - screen_margin - _prompt.size.y)
 
 
+## The control focused while this screen is up (FocusKeeper): Continue once
+## it shows (before that a press shows every line at once).
+func get_default_focus() -> Control:
+	return null if _button.disabled else _button
+
+
 ## Any confirm press before the end shows everything at once (the next press
 ## continues).
 func _unhandled_input(event: InputEvent) -> void:
@@ -154,7 +161,7 @@ func _enable_button() -> void:
 
 
 func _set_prompt(key: String) -> void:
-	_prompt.setup([{"actions": [&"ui_accept"], "text": Game.text(key)}], InputPrompt.menu_device, true)
+	_prompt.setup([{"actions": [&"ui_accept"], "text": Game.text(key)}], InputDevices.menu_device, true)
 
 
 func _read_lines(path: String) -> PackedStringArray:

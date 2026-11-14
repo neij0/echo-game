@@ -109,6 +109,7 @@ func _ready() -> void:
 	_select(_current_world)
 	_camera = _camera_target()
 	_continue_button.focus_quietly()
+	add_to_group(FocusKeeper.GROUP)
 	Game.language_changed.connect(_refresh)
 	_refresh()
 
@@ -121,6 +122,11 @@ func _process(delta: float) -> void:
 	_holder.position = free.get_center() - _camera * view_scale
 	_sky.scroll = _camera
 	_update_fade()
+
+
+## The control focused while this screen is up (FocusKeeper).
+func get_default_focus() -> Control:
+	return _continue_button
 
 
 ## Up / down look at the worlds; any press skips the step animation.
@@ -320,7 +326,7 @@ func _refresh_prompt() -> void:
 		entries.append({"actions": [&"ui_up", &"ui_down"], "text": Game.text("prompt_worlds")})
 		entries.append({"actions": [&"ui_accept"], "text": Game.text("prompt_select")})
 		entries.append({"actions": [&"ui_cancel"], "text": Game.text("prompt_back")})
-	_prompt.setup(entries, InputPrompt.menu_device, true)
+	_prompt.setup(entries, InputDevices.menu_device, true)
 
 
 func _is_press(event: InputEvent) -> bool:

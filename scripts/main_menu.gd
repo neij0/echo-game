@@ -73,6 +73,7 @@ var _time: float = 0.0
 
 
 func _ready() -> void:
+	add_to_group(FocusKeeper.GROUP)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	theme = Game.ui_theme
 	_build_background()
@@ -229,9 +230,8 @@ func _refresh_prompt() -> void:
 		{"actions": [&"ui_up", &"ui_down"], "text": Game.text("prompt_navigate")},
 		{"actions": [&"ui_accept"], "text": Game.text("prompt_select")},
 	]
-	if _options.visible or _confirm.visible:
-		entries.append({"actions": [&"ui_cancel"], "text": Game.text("prompt_back")})
-	_prompt.setup(entries, InputPrompt.menu_device, true)
+	entries.append({"actions": [&"ui_cancel"], "text": Game.text("prompt_back")})
+	_prompt.setup(entries, InputDevices.menu_device, true)
 
 
 ## The pulse that uncovers the column starts from the side facing the tower.
@@ -239,10 +239,37 @@ func _reveal_column() -> void:
 	_reveal.reveal(Vector2(0.0 if Game.is_rtl() else 1.0, 0.55))
 
 
+## Left / right on the Mode and Language buttons switch them (like a toggle).
+func _input(event: InputEvent) -> void:
+	if not (event.is_action_pressed(&"ui_left") or event.is_action_pressed(&"ui_right")):
+		return
+	var focused: Control = get_viewport().gui_get_focus_owner()
+	if focused == _mode_button or focused == _language_button:
+		get_viewport().set_input_as_handled()
+		(focused as GlowButton).pressed.emit()
+
+
+## Back: from Options to the buttons; from the buttons to the title screen.
+## (The New Game question answers No itself: ConfirmPanel.)
 func _unhandled_input(event: InputEvent) -> void:
-	if _options.visible and event.is_action_pressed(&"ui_cancel"):
+	if not event.is_action_pressed(&"ui_cancel") or event.is_echo():
+		return
+	if _options.visible:
 		_show_options(false)
 		get_viewport().set_input_as_handled()
+	elif _column.visible:
+		get_viewport().set_input_as_handled()
+		UiAudio.play_in(get_tree(), &"ui_press")
+		Game.go_to_title()
+
+
+## The control focused while this screen is up (FocusKeeper).
+func get_default_focus() -> Control:
+	if _confirm.visible:
+		return _confirm.no_button
+	if _options.visible:
+		return _options.get_first_focus()
+	return _continue_button if _continue_button.visible else _new_game_button
 
 
 ## The Options page replaces the main buttons (same place on screen).

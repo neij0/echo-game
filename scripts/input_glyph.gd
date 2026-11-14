@@ -2,20 +2,30 @@ class_name InputGlyph
 extends Control
 ## One button prompt drawn in code (no textures, "silhouette + glow"): a
 ## keyboard key cap with its label or an arrow, or a gamepad part (a face
-## button with its letter, a D-pad or a stick with the directions that count).
-## specs_for(action, device) reads the InputMap, so a rebound key shows up by
-## itself. Colours and font: the theme's "GlyphPrompt" type.
+## button with its letter on an Xbox pad or its symbol on a PlayStation pad,
+## a D-pad or a stick with the directions that count, a named button).
+## spec_for(action, device, style) reads the InputMap, so a rebound key shows
+## up by itself. Colours and font: the theme's "GlyphPrompt" type.
 
 enum Device { KEYBOARD, GAMEPAD }
 enum Shape { KEY, ARROW_KEY, FACE_BUTTON, DPAD, STICK }
+## The PlayStation face buttons' symbols.
+enum Symbol { NONE, CROSS, CIRCLE, SQUARE, TRIANGLE }
 
 const THEME_TYPE: StringName = &"GlyphPrompt"
 const FACE_LABELS: Dictionary = {
 	JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y",
 }
+const FACE_SYMBOLS: Dictionary = {
+	JOY_BUTTON_A: Symbol.CROSS, JOY_BUTTON_B: Symbol.CIRCLE, JOY_BUTTON_X: Symbol.SQUARE, JOY_BUTTON_Y: Symbol.TRIANGLE,
+}
 const BUTTON_LABELS: Dictionary = {
-	JOY_BUTTON_BACK: "Back", JOY_BUTTON_START: "Start", JOY_BUTTON_LEFT_SHOULDER: "LB",
-	JOY_BUTTON_RIGHT_SHOULDER: "RB", JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3",
+	JOY_BUTTON_BACK: "View", JOY_BUTTON_START: "Menu", JOY_BUTTON_LEFT_SHOULDER: "LB",
+	JOY_BUTTON_RIGHT_SHOULDER: "RB", JOY_BUTTON_LEFT_STICK: "LS", JOY_BUTTON_RIGHT_STICK: "RS",
+}
+const PLAYSTATION_LABELS: Dictionary = {
+	JOY_BUTTON_BACK: "Share", JOY_BUTTON_START: "Options", JOY_BUTTON_LEFT_SHOULDER: "L1",
+	JOY_BUTTON_RIGHT_SHOULDER: "R1", JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3",
 }
 const DPAD_DIRECTIONS: Dictionary = {
 	JOY_BUTTON_DPAD_UP: Vector2.UP, JOY_BUTTON_DPAD_DOWN: Vector2.DOWN,
@@ -35,6 +45,7 @@ const KEY_NAMES: Dictionary = {KEY_ESCAPE: "Esc", KEY_KP_ENTER: "Enter"}
 
 var shape: Shape = Shape.KEY
 var label: String = ""
+var symbol: Symbol = Symbol.NONE
 ## Arrow / D-pad arms / stick directions shown.
 var directions: Array[Vector2] = []
 
@@ -43,14 +54,16 @@ var directions: Array[Vector2] = []
 func setup(spec: Dictionary) -> void:
 	shape = spec.get("shape", Shape.KEY)
 	label = spec.get("label", "")
+	symbol = spec.get("symbol", Symbol.NONE)
 	directions.assign(spec.get("directions", []))
 	custom_minimum_size = Vector2(_glyph_width(), glyph_height)
 	queue_redraw()
 
 
 ## The glyph for action on that device: the first key (keyboard), or the first
-## gamepad button, else the first stick axis (gamepad). Empty if none is bound.
-static func spec_for(action: StringName, device: Device) -> Dictionary:
+## gamepad button, else the first stick axis (gamepad; style = Xbox letters or
+## PlayStation symbols). Empty if none is bound.
+static func spec_for(action: StringName, device: Device, style: int = 0, newer_playstation: bool = true) -> Dictionary:
 	if not InputMap.has_action(action):
 		return {}
 	var fallback: Dictionary = {}
@@ -58,14 +71,16 @@ static func spec_for(action: StringName, device: Device) -> Dictionary:
 		if device == Device.KEYBOARD and event is InputEventKey:
 			return spec_of(event)
 		if device == Device.GAMEPAD and event is InputEventJoypadButton:
-			return spec_of(event)
+			return spec_of(event, style, newer_playstation)
 		if device == Device.GAMEPAD and event is InputEventJoypadMotion and fallback.is_empty():
-			fallback = spec_of(event)
+			fallback = spec_of(event, style, newer_playstation)
 	return fallback
 
 
-## {shape, label, directions} for one input event.
-static func spec_of(event: InputEvent) -> Dictionary:
+## {shape, label, symbol, directions} for one input event (style:
+## InputDevices.PadStyle; a PS5 pad calls Back "Create").
+static func spec_of(event: InputEvent, style: int = 0, newer_playstation: bool = true) -> Dictionary:
+	var playstation: bool = style == InputDevices.PadStyle.PLAYSTATION
 	if event is InputEventKey:
 		var key := event as InputEventKey
 		var code: Key = key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
@@ -81,9 +96,15 @@ static func spec_of(event: InputEvent) -> Dictionary:
 	if event is InputEventJoypadButton:
 		var index: JoyButton = (event as InputEventJoypadButton).button_index
 		if FACE_LABELS.has(index):
+			if playstation:
+				return {"shape": Shape.FACE_BUTTON, "label": "", "symbol": FACE_SYMBOLS[index]}
 			return {"shape": Shape.FACE_BUTTON, "label": FACE_LABELS[index]}
 		if DPAD_DIRECTIONS.has(index):
 			return {"shape": Shape.DPAD, "directions": [DPAD_DIRECTIONS[index]]}
+		if playstation:
+			if index == JOY_BUTTON_BACK and newer_playstation:
+				return {"shape": Shape.KEY, "label": "Create"}
+			return {"shape": Shape.KEY, "label": PLAYSTATION_LABELS.get(index, "?")}
 		return {"shape": Shape.KEY, "label": BUTTON_LABELS.get(index, "?")}
 	if event is InputEventJoypadMotion:
 		var motion := event as InputEventJoypadMotion
@@ -94,9 +115,9 @@ static func spec_of(event: InputEvent) -> Dictionary:
 			JOY_AXIS_LEFT_Y, JOY_AXIS_RIGHT_Y:
 				return {"shape": Shape.STICK, "label": "L" if motion.axis == JOY_AXIS_LEFT_Y else "R", "directions": [Vector2(0.0, sign_value)]}
 			JOY_AXIS_TRIGGER_LEFT:
-				return {"shape": Shape.KEY, "label": "LT"}
+				return {"shape": Shape.KEY, "label": "L2" if playstation else "LT"}
 			JOY_AXIS_TRIGGER_RIGHT:
-				return {"shape": Shape.KEY, "label": "RT"}
+				return {"shape": Shape.KEY, "label": "R2" if playstation else "RT"}
 	return {}
 
 
@@ -125,7 +146,10 @@ func _draw() -> void:
 		Shape.FACE_BUTTON:
 			draw_circle(center, radius, fill)
 			draw_arc(center, radius, 0.0, TAU, 32, line, line_width, true)
-			_draw_label(center, label)
+			if symbol == Symbol.NONE:
+				_draw_label(center, label)
+			else:
+				_draw_symbol(center, radius * 0.48, get_theme_color("glyph_text", THEME_TYPE))
 		Shape.DPAD:
 			_draw_dpad(center, radius, line, fill)
 		Shape.STICK:
@@ -154,6 +178,25 @@ func _draw_label(center: Vector2, text: String) -> void:
 	var baseline: float = center.y + (font.get_ascent(font_size) - font.get_descent(font_size)) * 0.5
 	draw_string(font, Vector2(center.x - text_size.x * 0.5, baseline), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size,
 		get_theme_color("glyph_text", THEME_TYPE))
+
+
+## A PlayStation face symbol (Cross, Circle, Square, Triangle) as thin lines.
+func _draw_symbol(center: Vector2, half: float, color: Color) -> void:
+	var width: float = line_width * 1.3
+	match symbol:
+		Symbol.CROSS:
+			draw_line(center + Vector2(-half, -half), center + Vector2(half, half), color, width, true)
+			draw_line(center + Vector2(-half, half), center + Vector2(half, -half), color, width, true)
+		Symbol.CIRCLE:
+			draw_arc(center, half, 0.0, TAU, 24, color, width, true)
+		Symbol.SQUARE:
+			var corners := PackedVector2Array([center + Vector2(-half, -half), center + Vector2(half, -half),
+				center + Vector2(half, half), center + Vector2(-half, half), center + Vector2(-half, -half)])
+			draw_polyline(corners, color, width, true)
+		Symbol.TRIANGLE:
+			var top: Vector2 = center + Vector2(0.0, -half * 1.05)
+			var points := PackedVector2Array([top, center + Vector2(half * 1.1, half * 0.8), center + Vector2(-half * 1.1, half * 0.8), top])
+			draw_polyline(points, color, width, true)
 
 
 ## A small filled triangle pointing along direction.

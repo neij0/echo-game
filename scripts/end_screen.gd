@@ -56,6 +56,7 @@ var _answered: bool = false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	add_to_group(FocusKeeper.GROUP)
 	_root = Control.new()
 	_root.theme = Game.ui_theme
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -166,6 +167,14 @@ func is_showing() -> bool:
 	return _root.visible
 
 
+## The control focused while a screen with a button is up (FocusKeeper; the
+## Level cleared card has none).
+func get_default_focus() -> Control:
+	if not _root.visible or not _button.visible or _button.disabled:
+		return null
+	return _button
+
+
 ## The stage is complete (the boss fell): stats, then Continue.
 func show_stage_cleared(stage_number: int, beat_boss: bool, saved: bool, stage_time: float, pulses: int, hits: int, kills: int, players: Array[Player]) -> void:
 	_start(summary_backdrop, &"HeaderLabel", victory_rule_color)
@@ -273,7 +282,7 @@ func _show_button(label: String, emits_continue: bool) -> void:
 	_button.visible = true
 	_button.disabled = false
 	_prompt.visible = true
-	_prompt.setup([{"actions": [&"ui_accept"], "text": label}], InputPrompt.menu_device, true)
+	_prompt.setup([{"actions": [&"ui_accept"], "text": label}], InputDevices.menu_device, true)
 
 
 func _open(take_focus: bool = true) -> void:

@@ -122,7 +122,15 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `near_floor_height`, `hover_height` or a parent's `get_hover_height()`): no furrow;
   only a light stir and faint, small puffs (`puff_strength`) when she swims fast or
   comes low over the floor.
-- **Tests on this branch**: `tools/test_game.tscn` (headless, the real `game.tscn` through
+- **Tests on this branch**: `tools/test_menus.tscn` (headless: every screen walked with
+  simulated keyboard, gamepad and mouse input (splash, title, main menu + Options + question,
+  Journey, story, and in `game.tscn` pause + its pages, skill choice, defeat, summary): a
+  visible control always focused, D-pad / stick / keys move it (one stick step per push,
+  repeats while held, no drift steps), A confirms, B goes back, the prompts follow the device
+  used last, Xbox / PlayStation glyphs by the pad's name, each player's own side; scene changes
+  only recorded, `Game.block_scene_changes`):
+  `godot --headless --path . --fixed-fps 60 res://tools/test_menus.tscn`;
+  `tools/test_game.tscn` (headless, the real `game.tscn` through
   `GameSceneLoader`: start + full HUD, level flow with the fade and the skill choice,
   defeat and retries per mode, lockdown (doorways, wave, oxygen, navigation), collapse
   escape, a boss level (door, vents, the stand-in light ends the stage), the three
@@ -493,7 +501,8 @@ and pulse behaviour. Only the Ocean exists so far.
 Controls: P1 Echo = WASD + Space (pulse) + Left Shift (skill) or gamepad 1 (left stick, A, X,
 right stick aims). P2 Guardian = arrow keys + Enter (attack) + Right Ctrl (skill) or gamepad 2
 (left stick, A, X, right stick aims skills and sword). Holding the action button next to a downed
-partner revives them. Esc / Start = pause.
+partner revives them. Esc / Start = pause. Menus: arrows / D-pad / left stick move, Enter /
+Space / A (Cross) confirm, Esc / B (Circle) back; any gamepad, the mouse too.
 
 ## Audio
 Everything is procedural (`tools/generate_sounds.py`, the `preview` section; no AI tools).
@@ -565,9 +574,31 @@ Ocean's own theme and placeholders for the other four worlds).
   one stays paused under the black; a second request is ignored), the game opens with a fade
   in; `UiAudio.play_in(tree, name)` plays the menu sounds on the UI bus (silent if missing).
 - **Button prompts** (`InputPrompt` + `InputGlyph`): drawn key caps, arrow keys, face buttons
-  (A / B / X / Y), D-pad, stick, read from the InputMap (a rebinding shows by itself). Player
-  prompts follow that player's own device; menu prompts follow whatever was used last
-  (`InputPrompt.menu_device`, kept between screens).
+  (Xbox A / B / X / Y letters, or PlayStation Cross / Circle / Square / Triangle symbols),
+  D-pad, stick, named buttons (Menu / View / LB... or Options / Create / L1...), read from the
+  InputMap (a rebinding shows by itself). They follow **`InputDevices`** (a child of the `Game`
+  autoload that sees every event first through the root window's `window_input`): menu
+  prompts (`setup(..., true)`) show the device used last (any key, a mouse click or the mouse
+  moved `mouse_switch_distance` = keyboard; a gamepad button or a stick / trigger past
+  `axis_deadzone` = that gamepad); player prompts (`setup_for_player`: the HUD's skill buttons,
+  the distress hint, each side of the skill choice) show that player's own device only (their
+  `pN_` keys or the pad their actions are bound to). The pad's kind comes from its name
+  (`InputDevices.style_for`: Sony names or vendor id = PlayStation, else Xbox). Prompts poll
+  `InputDevices.revision`, so they switch instantly, also on a screen already open.
+- **Menu input**: `InputDevices.setup_menu_actions` adds A / Cross to `ui_accept` and B /
+  Circle to `ui_cancel` (Godot's defaults have no gamepad there) and takes the left stick off
+  `ui_*` (an analog stick fired a navigation on every tiny change): the stick steps the focus
+  through `InputDevices` instead (past `stick_press`, back under `stick_release` before the
+  next step, repeating while held: `repeat_delay`, `repeat_interval`; a held D-pad repeats too;
+  only while a control has the focus, so gameplay never gets stray `ui_*` actions). B / Esc:
+  closes Options and questions (No), goes back a screen (main menu -> title, Journey -> main
+  menu), resumes from the pause menu; Start / Esc pauses. Left / right also switch the main
+  menu's Mode and Language and move the Options sliders. **`FocusKeeper`** (also in the
+  `Game` autoload): a screen in the `focus_screens` group answers `get_default_focus()` (its
+  page's first control, No in a question; null while closed / nothing to choose), and whenever
+  nothing usable has the focus (a click on empty space, a page hidden, a button disabled) that
+  control is focused again, quietly. The skill choice has no GUI focus: each player's own
+  cursor (their stick, D-pad or keys) is the focus there.
 - **Backdrop** (`NightSky`): navy gradient, twinkling stars, drifting motes, vignette (parallax
   `scroll`). Each menu screen has its own `GlowEnvironment`.
 - **Splash** (`SplashScreen`, the project's main scene): a sonar mark + `studio_name` fade in /

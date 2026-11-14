@@ -91,6 +91,12 @@ var player_on_gamepad: Dictionary = {1: false, 2: false}
 var fader: ScreenFader
 ## The menus' focus / press sounds.
 var ui_audio: UiAudio
+## The device in use (prompts, menu navigation) and the menus' focus.
+var input_devices: InputDevices
+var focus_keeper: FocusKeeper
+## Tests: scene changes are only recorded here, not made.
+var block_scene_changes: bool = false
+var last_scene_request: String = ""
 var _changing_scene: bool = false
 var _worlds_loaded: bool = false
 
@@ -101,6 +107,12 @@ func _ready() -> void:
 	add_child(fader)
 	ui_audio = UiAudio.new()
 	add_child(ui_audio)
+	input_devices = InputDevices.new()
+	input_devices.name = "InputDevices"
+	add_child(input_devices)
+	focus_keeper = FocusKeeper.new()
+	focus_keeper.name = "FocusKeeper"
+	add_child(focus_keeper)
 	_fade_in_new_scene.call_deferred()
 	language = default_language
 	preferred_mode = default_mode
@@ -376,6 +388,8 @@ func assign_player_one(gamepad_device: int) -> void:
 	player_on_gamepad = {1: gamepad_device >= 0, 2: false}
 	_bind_gamepad("p1_", first)
 	_bind_gamepad("p2_", second)
+	InputDevices.set_player_device(1, InputGlyph.Device.GAMEPAD if gamepad_device >= 0 else InputGlyph.Device.KEYBOARD)
+	InputDevices.set_player_device(2, InputGlyph.Device.KEYBOARD)
 
 
 func _other_pad(pads: Array[int], taken: int) -> int:
@@ -401,6 +415,9 @@ func _bind_gamepad(prefix: String, device: int) -> void:
 ## scene behind the black, then fades the new one in. A second request while
 ## one is under way is ignored (a double press).
 func _change_scene(path: String) -> void:
+	last_scene_request = path
+	if block_scene_changes:
+		return
 	if _changing_scene:
 		return
 	_changing_scene = true

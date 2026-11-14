@@ -80,7 +80,7 @@ const STRINGS: Dictionary = {
 	# Collapse escape (HUD timer)
 	"escape_timer": {"en": "COLLAPSE! Reach the ancient light: %d s", "ar": "انهيار! اوصلا إلى الضوء القديم: %d ث"},
 	# Downed Echo (HUD hint)
-	"distress_ready": {"en": "Downed: press the pulse button for a distress pulse", "ar": "سقطتِ: اضغطي زر النبضة لإطلاق نبضة استغاثة"},
+	"distress_ready": {"en": "Downed: distress pulse", "ar": "سقطتِ: نبضة استغاثة"},
 	"distress_cooldown": {"en": "Distress pulse in %.1f s", "ar": "نبضة الاستغاثة بعد %.1f ث"},
 	"arena_open": {"en": "The arena door is open", "ar": "انفتح باب الساحة"},
 
@@ -107,9 +107,6 @@ const STRINGS: Dictionary = {
 	"prompt_pick": {"en": "pick", "ar": "اختيار"},
 	"skill_waiting": {"en": "Ready! Waiting for your partner...", "ar": "جاهز! بانتظار شريكك..."},
 	"skill_summary_title": {"en": "Your new skills", "ar": "مهاراتكما الجديدة"},
-	"skill_key_echo": {"en": "L-Shift / X", "ar": "L-Shift / X"},
-	"skill_key_guardian": {"en": "R-Ctrl / X", "ar": "R-Ctrl / X"},
-	"pulse_key": {"en": "Space / A", "ar": "Space / A"},
 
 	# Pause menu
 	"pause_title": {"en": "Paused", "ar": "إيقاف مؤقت"},

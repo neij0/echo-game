@@ -126,6 +126,11 @@ func focus_first() -> void:
 	_brightness.slider.grab_focus()
 
 
+## The control focused when the page opens (FocusKeeper).
+func get_first_focus() -> Control:
+	return _brightness.slider
+
+
 ## The setting's name without its value (the texts are "Brightness: %d%%").
 func _setting_name(key: String) -> String:
 	var text: String = Game.text(key)

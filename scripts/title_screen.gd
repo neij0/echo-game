@@ -91,7 +91,7 @@ func accept(device: int) -> void:
 	_accepted = true
 	_burst_start = _time
 	UiAudio.play_in(get_tree(), press_sound)
-	InputPrompt.menu_device = InputGlyph.Device.KEYBOARD if device < 0 else InputGlyph.Device.GAMEPAD
+	# The menus' prompts already follow the device that pressed (InputDevices).
 	Game.assign_player_one(device)
 	Game.go_to_main_menu()
 

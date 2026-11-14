@@ -63,6 +63,7 @@ var _return_focus: GlowButton
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	add_to_group(FocusKeeper.GROUP)
 	_root = Control.new()
 	_root.theme = Game.ui_theme
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -184,6 +185,17 @@ func close() -> void:
 	closed.emit()
 
 
+## The control focused while the menu is open (FocusKeeper).
+func get_default_focus() -> Control:
+	if not is_open or not _root.visible:
+		return null
+	if _confirm.visible:
+		return _confirm.no_button
+	if _options.visible:
+		return _options.get_first_focus()
+	return _resume_button
+
+
 ## Esc / Start / ui_cancel: back to the main page, or resume from there.
 func _back() -> void:
 	if _main_page.visible:
@@ -283,7 +295,7 @@ func _refresh_prompt(page: String) -> void:
 		{"actions": [&"ui_accept"], "text": Game.text("prompt_select")},
 		{"actions": [&"ui_cancel"], "text": Game.text("pause_resume") if page == "main" else Game.text("prompt_back")},
 	]
-	_prompt.setup(entries, InputPrompt.menu_device, true)
+	_prompt.setup(entries, InputDevices.menu_device, true)
 
 
 ## The veil: darkest on the column's side, so the frozen level shows a little
