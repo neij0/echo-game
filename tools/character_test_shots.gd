@@ -3,13 +3,11 @@ extends Node
 ## Pictures of the blockouts (needs a window):
 ## godot --path . res://tools/character_test.tscn -- pictures <folder> [variants]
 ## - sheet_echo / sheet_guardian: the final blockout from the front, the side
-##   and the back, lights up, camera close (the game camera's angle). With
-##   the Guardian on a Mixamo body made, he is the second row.
+##   and the back, lights up, camera close (the game camera's angle).
 ## - game_...: the real players in their final blockouts at the game's camera
 ##   distance, cut out of the 1080p frame at its real pixels: in the dark, the
 ##   pulse (the Echo's pulse pose) and its afterglow, swimming / walking, the
-##   Guardian's sword swing; game_guardian_options: both Guardian options
-##   side by side (only with the Mixamo one made).
+##   Guardian's sword swing.
 ## - "variants": also the sheets of the first three variants of each.
 
 @export var test: CharacterTest
@@ -70,11 +68,8 @@ func _sheets() -> void:
 		player.global_position = sheet_spot
 		player.reset_physics_interpolation()
 	test.set_studio_light(true)
-	var guardians: Array[int] = [CharacterTest.FINAL]
-	if CharacterTest.has_model("guardian", CharacterTest.MIXAMO):
-		guardians.append(CharacterTest.MIXAMO)
 	await _sheet("sheet_echo", "echo", [CharacterTest.FINAL])
-	await _sheet("sheet_guardian", "guardian", guardians)
+	await _sheet("sheet_guardian", "guardian", [CharacterTest.FINAL])
 	await _moves_sheet()
 	if with_variants:
 		await _sheet("sheet_echo_variants", "echo", [0, 1, 2])
@@ -116,7 +111,7 @@ func _sheet(file_name: String, character: String, variants: Array[int]) -> void:
 			model.global_position = sheet_spot + right * (view - 1) * spacing.x + depth
 			model.rotation.y = atan2(facings[view].x, facings[view].z)
 		var label := Label3D.new()
-		label.text = "%s %s" % [["A", "B", "C", "Final", "On a"][variant], names[variant]]
+		label.text = "%s %s" % [["A", "B", "C", "Final"][variant], names[variant]]
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		label.no_depth_test = true
 		label.font_size = 64
@@ -168,15 +163,6 @@ func _game_pictures() -> void:
 	_place_pair(start, right, away)
 	await _wait(settle_time + maxf(pulse.cooldown_left, 0.0))
 	await _save("game_1_dark", true)
-	if CharacterTest.has_model("guardian", CharacterTest.MIXAMO):
-		var other := CharacterTest.GUARDIAN_BLOCKOUT.instantiate() as CharacterModel
-		other.model = CharacterTest.model_of("guardian", CharacterTest.MIXAMO)
-		test.add_child(other)
-		other.global_position = test.guardian.global_position + right * pair_distance
-		other.rotation.y = atan2(test.guardian.facing.x, test.guardian.facing.z)
-		await _wait(settle_time)
-		await _save("game_guardian_options", true)
-		other.free()
 	await get_tree().physics_frame
 	pulse.emit_pulse()
 	await _wait(pulse.pulse_expand_time * 0.3)

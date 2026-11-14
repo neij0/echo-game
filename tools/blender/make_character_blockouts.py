@@ -42,7 +42,7 @@ SHARP_DEGREES = 38.0
 # name: (colour, glow colour or None, glow strength)
 MATERIALS = {
     # The Echo: pale silver, glowing in the cyan / white of her pulse.
-    "echo_body": ((0.56, 0.66, 0.84), None, 0.0),
+    "echo_body": ((0.5, 0.64, 0.92), None, 0.0),
     "echo_shade": ((0.26, 0.36, 0.52), None, 0.0),
     "echo_glow": ((0.75, 0.95, 1.0), (0.55, 0.92, 1.0), 3.4),
     "echo_glow_soft": ((0.45, 0.75, 0.9), (0.3, 0.8, 1.0), 1.5),
@@ -485,20 +485,22 @@ def build_echo(variant, body_only=False):
     if final:
         # The merged blockout: the Bell body (bell skirt) and its two lantern
         # antennae, the Leaf ears, the Comet tail (three streamers).
+        # Soft leaf ears, swept back along the head.
         for side, name in ((1.0, "L"), (-1.0, "R")):
             m.ribbon("Ear" + name, [flip(p, side) for p in
-                [V(0.085, 0.01, 0.93), V(0.22, 0.05, 1.0), V(0.38, 0.13, 0.99), V(0.5, 0.22, 0.9)]], 3, "Head",
-                [0.02, 0.075, 0.062, 0.004], "echo_body", thick=0.009, wide=flip(V(0.0, 0.55, 0.85), side), glow=soft)
+                [V(0.09, 0.0, 0.94), V(0.17, 0.11, 1.01), V(0.23, 0.27, 1.02), V(0.25, 0.44, 0.95)]], 4, "Head",
+                [0.018, 0.05, 0.052, 0.036, 0.004], "echo_body", thick=0.008, wide=flip(V(0.45, 0.0, 0.9), side), glow=soft)
         echo_antennae(m, [V(0.04, -0.03, 0.985), V(0.12, -0.02, 1.17), V(0.22, 0.0, 1.32), V(0.28, 0.04, 1.4)], 4,
             (0.05, 0.05, 0.054), radius=0.012)
-        m.lathe([(0.585, 0.052, 0.04, 0.0), (0.52, 0.11, 0.095, 0.005), (0.43, 0.165, 0.15, 0.01), (0.34, 0.2, 0.185, 0.015)],
-            "echo_body", "Hips", sides=12, jag=0.035)
-        m.lathe([(0.375, 0.193, 0.178, 0.014), (0.352, 0.201, 0.186, 0.015)], soft, "Hips", sides=12, caps=(False, False))
+        # A slim skirt (a narrow bell), not a round body.
+        m.lathe([(0.585, 0.05, 0.04, 0.0), (0.52, 0.08, 0.066, 0.004), (0.42, 0.108, 0.092, 0.008), (0.31, 0.132, 0.115, 0.012)],
+            "echo_body", "Hips", sides=12, jag=0.04)
+        m.lathe([(0.345, 0.127, 0.11, 0.011), (0.322, 0.134, 0.117, 0.012)], "echo_glow_soft", "Hips", sides=12, caps=(False, False))
         for spread, name, length in ((0.0, "", 1.0), (1.0, "L", 0.86), (-1.0, "R", 0.86)):
             control = [tail_root + V(spread * 0.03, 0, 0), V(spread * 0.09, 0.3 * length, 0.39), V(spread * 0.17, 0.62 * length, 0.31),
                 V(spread * 0.22, 0.97 * length, 0.35)]
             path, names = m.ribbon("Tail" + name, control, 6, "Hips", [0.02, 0.036, 0.028, 0.004], "echo_body", thick=0.009,
-                glow=soft, glow_widths=[0.003, 0.012, 0.014, 0.003])
+                glow="echo_glow_soft", glow_widths=[0.003, 0.01, 0.012, 0.003])
             m.ball(path[-1], (0.022, 0.022, 0.042), "echo_glow", names[-1], sides=6, rings=3, axis=path[-1] - path[-2])
     elif variant == "a":
         # "Leaf": broad leaf ears swept out and back, arcing antennae with
@@ -747,9 +749,9 @@ GUARDIAN_FINAL_SIZE = {
     "head": 1.725, "head_y": -0.01, "head_r": (0.07, 0.08, 0.085), "neck_r": 0.042,
     "torso": [(0.05, 0.045), (0.125, 0.09), (0.098, 0.076), (0.205, 0.12), (0.235, 0.105), (0.05, 0.05)],
     "shoulder_x": 0.26, "elbow_x": 0.56, "wrist_x": 0.83, "hand_x": 0.94,
-    "arm_r": (0.075, 0.062, 0.046), "hand_r": (0.065, 0.04, 0.055),
-    "leg_x": 0.1, "knee": 0.53, "ankle": 0.09, "leg_r": (0.1, 0.07, 0.05),
-    "foot": 0.27, "heel": 0.07, "foot_w": 0.056,
+    "arm_r": (0.084, 0.07, 0.054), "hand_r": (0.07, 0.045, 0.06),
+    "leg_x": 0.105, "knee": 0.53, "ankle": 0.09, "leg_r": (0.112, 0.08, 0.058),
+    "foot": 0.28, "heel": 0.075, "foot_w": 0.064,
 }
 
 
@@ -757,8 +759,10 @@ def guardian_gear(m, d):
     """Everything the final Guardian wears over a humanoid body of sizes d
     (his own blockout body, or a Mixamo character scaled to it): helm with a
     gold brow band, crest and a glowing eye slit, Stag antlers, a cowl,
-    gold-rimmed pauldrons, gold on chest, belt, wrists and knees, a ragged
-    cape of six strips down to the knee (bone chains) and a long greatsword."""
+    gold-rimmed pauldrons, gauntlets and greaves, gold on chest, belt, wrists
+    and knees, a long scarf round the neck whose two ragged, gold-edged tails
+    trail behind him (bone chains), a short half-cape on the left shoulder
+    only, and a broad greatsword. Body, shoulders and legs stay in view."""
     if m.body_only:
         return
     shoulder, neck, head, waist, chest = d["shoulder"], d["neck"], d["head"], d["waist"], d["chest"]
@@ -790,23 +794,44 @@ def guardian_gear(m, d):
         rim = [middle + V(side * 0.152 * math.cos(a), 0.13 * math.sin(a), -0.022) for a in
             [math.radians(-105 + 210 * k / 6.0) for k in range(7)]]
         m.tube(rim, [0.016], "guardian_trim", "Chest", sides=4)
-        m.ball(V(side * d["wrist_x"], 0, arm_z), (0.035, d["arm_r"][2] * 1.5, d["arm_r"][2] * 1.5), "guardian_trim", name + "LowerArm",
+        # Gauntlet and greave: a flared sleeve of armour over forearm and shin.
+        elbow = V(side * d["elbow_x"], 0.004, arm_z)
+        wrist = V(side * d["wrist_x"], 0, arm_z)
+        m.tube([elbow.lerp(wrist, 0.12), elbow.lerp(wrist, 0.5), elbow.lerp(wrist, 0.97)],
+            [d["arm_r"][1] * 1.5, d["arm_r"][1] * 1.3, d["arm_r"][2] * 1.45], "guardian_mantle", name + "LowerArm", sides=6, wide=(0, 0, 1))
+        m.ball(elbow.lerp(wrist, 0.12), (0.03, d["arm_r"][1] * 1.62, d["arm_r"][1] * 1.62), "guardian_trim", name + "LowerArm",
             sides=6, rings=2, axis=(0, 0, 1))
+        knee = V(side * d["leg_x"] * 1.05, -d["leg_r"][1] * 0.3, d["knee"])
+        ankle = V(side * d["leg_x"] * 1.05, d["leg_r"][2] * 0.3, d["ankle"])
+        m.tube([knee.lerp(ankle, 0.06), knee.lerp(ankle, 0.5), knee.lerp(ankle, 0.95)],
+            [d["leg_r"][1] * 1.45, d["leg_r"][1] * 1.3, d["leg_r"][2] * 1.5], "guardian_mantle", name + "LowerLeg", sides=6)
         m.ball(V(side * d["leg_x"] * 1.05, -d["leg_r"][1] - 0.012, d["knee"]), (0.05, 0.03, 0.055), "guardian_trim", name + "LowerLeg",
             sides=6, rings=3)
     torso = d["torso"]
     m.ball(V(0, -torso[3][1] - 0.004, chest + 0.05), (0.042, 0.012, 0.062), "guardian_trim", "Chest", sides=4, rings=3)
     m.lathe([(waist - 0.085, torso[2][0] + 0.022, torso[2][1] + 0.02, 0.0), (waist - 0.135, torso[2][0] + 0.03, torso[2][1] + 0.027, 0.0)],
         "guardian_trim", "Hips", sides=10, caps=(False, False))
-    # The cape: ragged strips of uneven length hanging from the back of the
-    # shoulders to about the knee.
-    strips = ((-0.25, 0.62), (-0.15, 0.47), (-0.05, 0.57), (0.05, 0.5), (0.15, 0.61), (0.25, 0.45))
-    for i, (x, end) in enumerate(strips):
-        back = 0.095 + 0.014 * (i % 2)
-        m.ribbon("Cloak%d" % (i + 1), [V(x, back, shoulder - 0.02), V(x * 1.12, back + 0.1, shoulder - 0.42),
-            V(x * 1.28, back + 0.2, shoulder - 0.82), V(x * 1.38, back + 0.24, end)], 3, "Chest", [0.09, 0.125, 0.13, 0.012],
-            "guardian_cloak", thick=0.012, wide=V(1, 0, 0))
-    sword(m, d, 1.3, 0.06, 0.36, 0.16, tip=0.14, core=0.6)
+    # The scarf: a roll round the neck, two long tails down the back that end
+    # ragged (one longer) with a gold edge.
+    m.lathe([(neck + 0.01, 0.095, 0.09, 0.01), (neck + 0.05, 0.12, 0.115, 0.012), (neck + 0.085, 0.1, 0.095, 0.012)],
+        "guardian_cloak", "Chest", sides=10, caps=(True, True))
+    for side, name, length in ((1.0, "L", 1.0), (-1.0, "R", 0.78)):
+        control = [V(side * 0.05, 0.1, neck + 0.04), V(side * 0.1, 0.3 * length + 0.05, neck - 0.14),
+            V(side * 0.16, 0.62 * length + 0.05, neck - 0.42), V(side * 0.2, 0.95 * length + 0.05, neck - 0.68),
+            V(side * 0.23, 1.25 * length + 0.05, neck - 0.84)]
+        tail, names = m.ribbon("Scarf" + name, control, 6, "Chest", [0.06, 0.085, 0.1, 0.105, 0.03], "guardian_cloak",
+            thick=0.011, wide=V(1, 0, 0), samples=15)
+        # Gold along the ragged end only, and a second, shorter end beside it.
+        m.tube(tail[10:], [(0.085, 0.015), (0.07, 0.015), (0.022, 0.012)], "guardian_trim", names[-1], sides=4, wide=(1, 0, 0),
+            caps=(False, True))
+        m.tube([tail[10] + V(side * 0.05, 0, 0), tail[12] + V(side * 0.085, 0, -0.03), tail[13] + V(side * 0.1, 0.0, -0.06)],
+            [(0.05, 0.011), (0.04, 0.011), (0.006, 0.006)], "guardian_cloak", "Scarf%s_6" % name, sides=4, wide=(1, 0, 0))
+    # A short half-cape on the left shoulder only: three ragged, gold-edged strips.
+    for i, (x, y, end, wide) in enumerate(((0.19, 0.11, 1.0, V(1, 0, 0)), (0.31, 0.1, 0.9, V(1, 0.2, 0)), (0.41, 0.02, 1.03, V(0.3, 1, 0)))):
+        strip, names = m.ribbon("Cloak%d" % (i + 1), [V(x, y, shoulder + 0.02), V(x * 1.1, y + 0.06, shoulder - 0.3),
+            V(x * 1.17, y + 0.09, end)], 2, "Chest", [0.085, 0.11, 0.02], "guardian_cloak", thick=0.012, wide=wide)
+        m.tube(strip[3:], [(0.075, 0.016), (0.015, 0.012)], "guardian_trim", names[-1], sides=4, wide=wide, caps=(False, True))
+    sword(m, d, 1.3, 0.105, 0.4, 0.2, tip=0.17, core=0.36)
 
 
 def build_guardian_final(body_only=False):

@@ -552,3 +552,13 @@ After the first review: one final blockout each, the first variants kept for com
 - [x] `tools/test_characters.tscn`: 157 checks. Pictures: `docs/character_blockouts/final/`.
 - [ ] After the review: Mixamo rig + clips for the Guardian, the models in `echo.tscn` /
   `guardian.tscn`, the sword ability hands its blade to the model.
+
+### Phase C — character blockouts, third pass (waiting for review)
+- [x] The Mixamo knight as the Guardian body: dropped (realistic style clashes);
+  `make_guardian_mixamo.py` removed. Mixamo stays for his rig and animations only.
+- [x] Guardian: the back cape replaced by a long scarf (two ragged, gold-edged tails on
+  loose bone chains) and a short half-cape on the left shoulder; thicker arms and legs
+  with gauntlets and greaves; a broad greatsword.
+- [x] Echo: a slim skirt instead of the round bell, bluer pale silver (her warm light made
+  her cream), softer leaf ears swept back.
+- [x] Pictures retaken in `docs/character_blockouts/final/`; `test_characters`: 157 checks.

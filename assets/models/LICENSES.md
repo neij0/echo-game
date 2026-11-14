@@ -10,7 +10,7 @@ Every model, texture or animation that is not drawn in code is listed here, with
 | Ocean rock kit (18 models) | `assets/models/rocks/ocean/` | made by `tools/blender/make_rock_kit.py` | the project's own |
 | Character blockouts (Echo and Guardian: final + 3 first variants each) | `assets/models/characters/blockout/` | made by `tools/blender/make_character_blockouts.py` | the project's own |
 
-Mixamo downloads (the Guardian option on a Mixamo body, later his animations) go in
+Mixamo downloads (the rig and animations of the Guardian, later) go in
 `assets/models/characters/mixamo/` and stay out of the repository (see its `README.md`).
 
 **Blockouts**: every model named `*_blockout` is a placeholder made to choose a silhouette,

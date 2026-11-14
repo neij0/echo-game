@@ -22,10 +22,10 @@ sway_speed = 0.8
 [sub_resource type="Resource" id="chain_scarf"]
 script = ExtResource("2_chain")
 prefix = "Scarf"
-stiffness = 5.0
+stiffness = 4.0
 drag = 0.35
-gravity = 0.1
-sway = 0.12
+gravity = 0.05
+sway = 0.16
 sway_speed = 1.0
 
 [node name="GuardianBlockout" type="Node3D"]

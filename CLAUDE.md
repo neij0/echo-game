@@ -169,18 +169,19 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
 - **Character blockouts** (Phase C silhouette pass, second review pending; the game still
   uses the capsules; **placeholders, not final art**; the pictures in `docs/ref/` are mood
   references only). Made by `tools/blender/make_character_blockouts.py` ->
-  `assets/models/characters/blockout/`. **Final blockouts**: `echo_blockout.glb` (the
-  Bell body and lantern antennae, the Leaf ears, the Comet streamer tail, glowing eyes;
+  `assets/models/characters/blockout/`. **Final blockouts**: `echo_blockout.glb` (a
+  slim skirt and lantern antennae, soft leaf ears swept back, the Comet streamer tail,
+  glowing eyes; pale blue-silver so her warm light does not turn her cream;
   the body glow dim, brightest on core, lanterns and tips) and `guardian_blockout.glb`
-  (tall, V shape, small helmed head, long legs, Stag antlers, a ragged cape of strips
-  to the knee, gold on helm / shoulders / belt / wrists / knees, a glowing eye slit, a
-  long greatsword on its own `Sword` bone; faint cool rim). The first variants stay for
+  (tall, V shape, small helmed head, long legs, Stag antlers, gauntlets and greaves, a
+  long scarf round the neck with two ragged gold-edged tails trailing behind (`Scarf*`
+  chains), a short half-cape on the left shoulder only (`Cloak*`), gold on helm /
+  shoulders / belt / wrists / knees, a glowing eye slit, a broad greatsword on its own
+  `Sword` bone; faint cool rim; body, shoulders and legs stay in view). The first variants stay for
   comparison (`<character>_blockout_<a|b|c>.glb`: Echo Leaf / Comet / Bell, Guardian
-  Stag / Spire / Bulwark). **Guardian option 2**: the same gear on a Mixamo character
-  (`tools/blender/make_guardian_mixamo.py` -> `guardian_mixamo_blockout.glb`, only once
-  the character is downloaded: `assets/models/characters/mixamo/README.md` says which
-  one and how, and what to upload / download for the rig and animations; raw Mixamo
-  files stay out of git). **Basic animations in code** (`CharacterMoves` resources:
+  Stag / Spire / Bulwark). The Guardian keeps this own body (a Mixamo knight as the body was dropped: its
+  realistic style clashes); `assets/models/characters/mixamo/README.md` says what to
+  upload / download for his Mixamo rig and animations (raw Mixamo files stay out of git). **Basic animations in code** (`CharacterMoves` resources:
   `EchoMoves` idle / swim / pulse pose, `GuardianMoves` guard stance / walk / sword
   swing: every frame the bones are aimed again; the swing follows
   `SwordAbility.get_blade_direction()`), until Mixamo clips replace the Guardian's. Rig: Godot humanoid bone names (T-pose) plus
@@ -194,7 +195,7 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   enough that it trails without streaming out flat: trail per joint is about
   drag x speed / stiffness). **Silhouette test**: `tools/character_test.tscn` (F6; the
   core test stage with the players wearing the models): 7 / 8 the final Echo / Guardian,
-  9 the Guardian on the Mixamo body (if made), 1-3 / 4-6 the first variants, 0 capsules,
+  1-3 / 4-6 the first variants, 0 capsules,
   L studio light, Z close view; `-- pictures <folder> [variants]` saves the front / side
   / back sheets, the sheet of the moves and the game-distance pictures (dark, pulse,
   afterglow, swing, moving) (`docs/character_blockouts/final/`; the first review's

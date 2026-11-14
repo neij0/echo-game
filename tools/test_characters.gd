@@ -129,7 +129,7 @@ func _check_character(character: String, variant: int, scene: PackedScene, speed
 	if character == "guardian":
 		expected = ["CloakL", "CloakFL", "CloakFR", "CloakR", "CloakBR", "CloakBL"]
 		if variant == CharacterTest.FINAL:
-			expected = ["Cloak1", "Cloak2", "Cloak3", "Cloak4", "Cloak5", "Cloak6"]
+			expected = ["ScarfL", "ScarfR", "Cloak1", "Cloak2", "Cloak3"]
 	var absent := PackedStringArray()
 	for chain: String in expected:
 		if not chains.has(chain):

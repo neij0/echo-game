@@ -24,8 +24,4 @@ silhouette for each character; they are replaced when the final models are made.
   that profile play on it), plus bone chains named `<Name>_1 ... <Name>_end` (antennae,
   ears, tails, cloak, scarf) that the game moves with springs (`BoneSway`), and a `Sword`
   bone on the right hand of the Guardian.
-- `guardian_mixamo_blockout.glb` (not in the repository until someone makes it): the
-  same gear on a Mixamo character, made by `tools/blender/make_guardian_mixamo.py` from a
-  download (see `assets/models/characters/mixamo/README.md`; Mixamo: free to use in a
-  game, not CC0, never redistributed on its own).
 - Rebuild: `blender --background --python tools/blender/make_character_blockouts.py -- assets/models/characters/blockout assets/models/characters/blockout/mixamo_upload`

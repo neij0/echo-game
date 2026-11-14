@@ -29,7 +29,7 @@ func aims(time: float, stride: float, speed: float, action: float, action_direct
 	var attack: float = smoothstep(0.0, 1.0, action)
 	var slash: Vector3 = action_direction.normalized() if action_direction.length() > 0.01 else Vector3.BACK
 	# Legs: a guard stance standing, a stride walking.
-	var left_thigh := Vector3(0.08, -1.0, 0.16).lerp(Vector3(0.04, -1.0, leg_swing * swing), walk)
+	var left_thigh := Vector3(0.08, -1.0, 0.09).lerp(Vector3(0.04, -1.0, leg_swing * swing), walk)
 	var left_shin := Vector3(0.05, -1.0, -0.05).lerp(Vector3(0.04, -1.0, leg_swing * swing - knee_bend * maxf(lift, 0.0) - 0.05), walk)
 	var right_thigh := Vector3(-0.1, -1.0, -0.1).lerp(Vector3(-0.04, -1.0, -leg_swing * swing), walk)
 	var right_shin := Vector3(-0.08, -1.0, -0.24).lerp(Vector3(-0.04, -1.0, -leg_swing * swing - knee_bend * maxf(-lift, 0.0) - 0.05), walk)

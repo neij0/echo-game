@@ -21,7 +21,7 @@ sway_speed = 1.3
 [sub_resource type="Resource" id="chain_ear"]
 script = ExtResource("2_chain")
 prefix = "Ear"
-stiffness = 10.0
+stiffness = 7.0
 drag = 0.4
 sway = 0.15
 sway_speed = 1.0
