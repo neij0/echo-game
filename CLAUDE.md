@@ -166,6 +166,28 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   and no oxygen drain): K = classic / natural look, H = silt haze, plus the level-test
   keys. `-- look <folder> [level] [pictures]`: old / new pictures (dark, pulse front,
   afterglow, lit) + FPS of both looks.
+- **Character blockouts** (Phase C silhouette pass, waiting for review; the game still
+  uses the capsules): three silhouette variants each of the Echo (A Leaf, B Comet, C Bell:
+  pale silver, cyan / white glow, no gold, human legs and flat feet) and the Guardian
+  (A Stag, B Spire, C Bulwark: dark cloak, antlers, amber / gold trims and blade), made
+  by `tools/blender/make_character_blockouts.py` -> `assets/models/characters/blockout/
+  <character>_blockout_<a|b|c>.glb` (**placeholders, not final art**; the pictures in
+  `docs/ref/` are mood references only). Rig: Godot humanoid bone names (T-pose) plus
+  bone chains `<Name>_1 ... <Name>_end`. **`CharacterModel`**
+  (`scenes/characters/echo_blockout.tscn` / `guardian_blockout.tscn`) shows a model in
+  place of the `CapsuleBody`: the shared `character.gdshader` on every surface (the
+  model material gives the colour and the glow: `glow_color` / `glow_energy`), the
+  outline through rock, a pose (`pose`: bone -> the direction it points along), facing,
+  hover + bob, lean, pulse flare, downed; every chain gets a **`BoneSway`** (a
+  `SpringBoneSimulator3D` + a slow drift; `BoneChainSettings` per chain name: stiff
+  enough that it trails without streaming out flat: trail per joint is about
+  drag x speed / stiffness). **Silhouette test**: `tools/character_test.tscn` (F6; the
+  core test stage with the players wearing the models): 1-3 Echo variant, 4-6 Guardian
+  variant, 0 capsules, L studio light, Z close view; `-- pictures <folder>` saves the
+  sheets and the game-distance pictures (dark, pulse, afterglow, swimming) of every
+  variant (`docs/character_blockouts/`). `tools/test_characters.tscn` (headless: rig,
+  shader, colours, feet, pose, chains drift / trail / settle):
+  `godot --headless --path . --fixed-fps 60 res://tools/test_characters.tscn [-- log]`.
 - **Level play-test**: `tools/level_test.tscn` (F6): the real Ocean levels (exports
   `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player
   blocks; a stand-in level flow (shards -> light -> next level; both down = again). Keys:

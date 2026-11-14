@@ -505,3 +505,32 @@ Updated with every step, so a new session knows where the conversion stands.
   Cost (RX 7800 XT, 1080p, vsync off): level 1 900 -> 751 FPS (GPU 0.58 -> 0.80 ms),
   level 7 (16 rooms, 9643 pieces) 901 -> 716 FPS; build +0.1-0.2 s.
 - [ ] After the review: the natural look on in the game, then the characters.
+
+### Phase C — character silhouette pass (step 2, waiting for review)
+Blockout placeholders only (named `*_blockout`), to choose a silhouette before any final
+model is made. The game still uses the capsules.
+- [x] `tools/blender/make_character_blockouts.py` (Blender 5.2 headless, no source model):
+  three variants each, rigged, about 2,000-2,300 triangles, in
+  `assets/models/characters/blockout/` (`LICENSE.md` beside them, listed in
+  `assets/models/LICENSES.md`).
+  - Echo (pale silver, cyan / white glow, human legs and flat feet): A Leaf (broad leaf
+    ears, arcing antennae, petal skirt, plume tail), B Comet (tall ears, crest, antennae
+    and three tail streamers trailing back), C Bell (ear frill, two lantern antennae,
+    bell skirt, veil tail).
+  - Guardian (dark cloak, antlers, amber / gold trims and blade): A Stag (wide antlers,
+    ragged mantle and long cloak, greatsword), B Spire (tall narrow: lyre antlers, glowing
+    collar, slim cloak, scarf, long thin blade), C Bulwark (broad: pauldrons, wide
+    swept-back antlers, knee-length cape, cleaver).
+- [x] Rig: Godot humanoid bone names in T-pose (Mixamo animations retargeted to that
+  profile play on it); the bare Guardian body for the Mixamo upload is in
+  `mixamo_upload/`. Chains (antennae, ears, tails, cloak, scarf) sway with springs in
+  Godot (`BoneSway`).
+- [x] `CharacterModel` + `scenes/characters/*_blockout.tscn`; the shared character shader
+  got a glow for the glowing parts.
+- [x] `tools/character_test.tscn` (the real camera, darkness and pulse; keys 1-6 switch
+  variants) and `tools/test_characters.tscn` (headless, 100 checks).
+- [x] Pictures of every variant in `docs/character_blockouts/` (sheets with the lights
+  up; at game distance: dark, pulse, afterglow, swimming).
+- [ ] After the review: the chosen silhouettes become the final models (Mixamo rig and
+  animations for the Guardian), `echo.tscn` / `guardian.tscn` switch from the capsule
+  to `CharacterModel`, and the sword ability drives the model sword.
