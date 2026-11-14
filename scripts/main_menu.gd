@@ -239,8 +239,15 @@ func _reveal_column() -> void:
 	_reveal.reveal(Vector2(0.0 if Game.is_rtl() else 1.0, 0.55))
 
 
+## Back (B / Circle / Esc): from Options or the New Game question to the
+## buttons; from the buttons to the title screen. Read in _input, before the
+## GUI can use it, like the Journey and the pause menu.
 ## Left / right on the Mode and Language buttons switch them (like a toggle).
 func _input(event: InputEvent) -> void:
+	if event.is_action_pressed(&"ui_cancel") and not event.is_echo():
+		get_viewport().set_input_as_handled()
+		_go_back()
+		return
 	if not (event.is_action_pressed(&"ui_left") or event.is_action_pressed(&"ui_right")):
 		return
 	var focused: Control = get_viewport().gui_get_focus_owner()
@@ -249,16 +256,12 @@ func _input(event: InputEvent) -> void:
 		(focused as GlowButton).pressed.emit()
 
 
-## Back: from Options to the buttons; from the buttons to the title screen.
-## (The New Game question answers No itself: ConfirmPanel.)
-func _unhandled_input(event: InputEvent) -> void:
-	if not event.is_action_pressed(&"ui_cancel") or event.is_echo():
-		return
-	if _options.visible:
+func _go_back() -> void:
+	if _confirm.visible:
+		_show_confirm(false)
+	elif _options.visible:
 		_show_options(false)
-		get_viewport().set_input_as_handled()
 	elif _column.visible:
-		get_viewport().set_input_as_handled()
 		UiAudio.play_in(get_tree(), &"ui_press")
 		Game.go_to_title()
 
