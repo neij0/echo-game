@@ -485,3 +485,23 @@ Updated with every step, so a new session knows where the conversion stands.
   ring on creatures is very bright and dominates the screen; tone it down then.
 - [ ] Fish (harmless life) get a `SandTrailMaker` when they are rebuilt (Phase C/E).
 
+### Phase C — look-dev room (step 1, waiting for review)
+- [x] CC0 textures from Poly Haven (`assets/textures/ocean/`: Dense Sand, Rock Face, 1K
+  albedo / normal / ARM, a `LICENSE.md` beside each, index `assets/models/LICENSES.md`).
+- [x] Rock kit: 18 pieces made by `tools/blender/make_rock_kit.py` (Blender 5.2 headless,
+  no source model) -> `assets/models/rocks/ocean/ocean_rock_kit.glb`.
+- [x] `WorldLook` (`worlds/ocean_look.tres`, `WorldConfig.look`): the floor / rock
+  materials and the kit placement. `RockDresser` dresses each room's rock (pieces
+  along every outline, more on wide tops, pebbles on the sand; MultiMesh per piece
+  and room); the extruded rock stays as the core and the colliders are unchanged.
+- [x] Shaders: `ocean_floor` (two texture layers, ripples in patches, sparkle that
+  also flares in the pulse), `ocean_rock` (three-sided projection, strata, cracks,
+  dark sandy base, silt on tops, moss in shelter, barnacles low), both with the depth
+  tint (`surface_detail.gdshaderinc`), the world ambient, the sonar wave and the
+  cut-away; `silt_haze` (a fog volume near the floor).
+- [x] `LevelBuilder.natural_look` (off by default: the game still uses the classic
+  look until the review) / `set_natural_look`. Look-dev room: `tools/lookdev_room.tscn`.
+- [x] Pictures in `docs/lookdev_ocean/` (old / new, dark / pulse front / afterglow).
+  Cost (RX 7800 XT, 1080p, vsync off): level 1 900 -> 751 FPS (GPU 0.58 -> 0.80 ms),
+  level 7 (16 rooms, 9643 pieces) 901 -> 716 FPS; build +0.1-0.2 s.
+- [ ] After the review: the natural look on in the game, then the characters.

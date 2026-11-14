@@ -154,6 +154,18 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   sense, distress pulse, sonar blocked by rock, revive decay, mending, goal arrow):
   `godot --headless --path . --fixed-fps 60 res://tools/test_core.tscn`; `tools/test_save.gd`;
   `tools/check_scripts.tscn`.
+- **Natural look** (Phase C look-dev, off in the game until reviewed):
+  `LevelBuilder.natural_look` / `set_natural_look(on)` uses `WorldConfig.look`
+  (`WorldLook`, `worlds/ocean_look.tres`: floor + rock `ShaderMaterial`s with CC0 Poly
+  Haven textures, `shaders/ocean_floor.gdshader` / `ocean_rock.gdshader` /
+  `surface_detail.gdshaderinc` (depth tint) / `silt_haze.gdshader`, and the rock kit
+  `assets/models/rocks/ocean/ocean_rock_kit.glb` from `tools/blender/make_rock_kit.py`).
+  `RockDresser` puts kit pieces along each rock outline (only looks; the colliders stay
+  `RockMesher.add_colliders` on the outline). Licences: `assets/models/LICENSES.md`.
+  **Look-dev room**: `tools/lookdev_room.tscn` (F6; the level test with creatures frozen
+  and no oxygen drain): K = classic / natural look, H = silt haze, plus the level-test
+  keys. `-- look <folder> [level] [pictures]`: old / new pictures (dark, pulse front,
+  afterglow, lit) + FPS of both looks.
 - **Level play-test**: `tools/level_test.tscn` (F6): the real Ocean levels (exports
   `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player
   blocks; a stand-in level flow (shards -> light -> next level; both down = again). Keys:

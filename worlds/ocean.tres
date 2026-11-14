@@ -20,6 +20,7 @@
 [ext_resource type="PackedScene" path="res://scenes/life/ocean/kelp_tuft.tscn" id="20_kelp"]
 [ext_resource type="PackedScene" path="res://scenes/life/ocean/anemone_clump.tscn" id="21_anemone"]
 [ext_resource type="Script" uid="uid://c5yr2kw8elslv" path="res://scripts/skill_text_override.gd" id="27_es8hr"]
+[ext_resource type="Resource" path="res://worlds/ocean_look.tres" id="28_look"]
 [ext_resource type="Resource" uid="uid://dtxgcadupccta" path="res://worlds/ocean/level_1_1.tres" id="level_1_1"]
 [ext_resource type="Resource" uid="uid://coki7010bilum" path="res://worlds/ocean/level_1_2.tres" id="level_1_2"]
 [ext_resource type="Resource" uid="uid://d1gdj2i2nyvjw" path="res://worlds/ocean/level_1_3.tres" id="level_1_3"]
@@ -100,6 +101,7 @@ world_ambient_scale = 0.7
 [resource]
 script = ExtResource("1_world")
 stages = Array[ExtResource("2_stage")]([SubResource("Stage1"), SubResource("Stage2"), SubResource("Stage3")])
+look = ExtResource("28_look")
 world_ambient_color = Color(0.14, 0.26, 0.62, 1)
 world_ambient_energy = 0.42
 world_ambient_fog_begin = 9.0

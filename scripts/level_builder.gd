@@ -34,6 +34,7 @@ signal navigation_rebaked
 
 const ROCK_SHADER: Shader = preload("res://shaders/rock_surface.gdshader")
 const FLOOR_SHADER: Shader = preload("res://shaders/floor_surface.gdshader")
+const HAZE_SHADER: Shader = preload("res://shaders/silt_haze.gdshader")
 
 @export var world: WorldConfig
 ## -1 = a random spawn seed on every attempt. Any other value makes the attempts
@@ -64,6 +65,12 @@ const FLOOR_SHADER: Shader = preload("res://shaders/floor_surface.gdshader")
 @export var rock_piece_length: float = 20.0
 ## Height of a landmark's solid footprint until the landmark models (pixels).
 @export var landmark_rock_height: float = 40.0
+
+@export_group("Natural Look")
+## On = the world's natural look (WorldConfig.look: real textures, walls
+## dressed with the rock kit, silt haze). Off = the classic look. A built
+## level is switched with set_natural_look.
+@export var natural_look: bool = false
 
 @export_group("Gates")
 ## Lowest height (units) of a lockdown barrier or the arena door.
@@ -250,6 +257,16 @@ var _floor_material: ShaderMaterial
 var _rock_material: ShaderMaterial
 var _outer_material: ShaderMaterial
 var _materials_registered: bool = false
+## The natural look's own copies of the WorldLook materials.
+var _natural_floor_material: ShaderMaterial
+var _natural_rock_material: ShaderMaterial
+var _natural_outer_material: ShaderMaterial
+var _natural_registered: bool = false
+## One entry per room: its floor, rock mesh, rock data (for the dressing),
+## bounds, seed and the dressing once it is built.
+var _look_rooms: Array[Dictionary] = []
+var _outer_instance: MeshInstance3D
+var _haze: FogVolume
 
 
 func _ready() -> void:
@@ -632,11 +649,13 @@ static func _nearest(points: Array[Vector2], to: Vector2) -> Vector2:
 
 func _instantiate(layout: Layout) -> void:
 	_register_materials()
+	_look_rooms.clear()
+	level_height = layout.height
+	_prepare_natural_look()
 	_layout = layout
 	_level = Node3D.new()
 	_level.name = "Level"
 	add_child(_level)
-	level_height = layout.height
 	var doorways: Array[Rect2] = _doorway_corridors(layout)
 
 	# Floors and rock, one mesh and one collider per room.
@@ -651,7 +670,7 @@ func _instantiate(layout: Layout) -> void:
 		var floor_instance := MeshInstance3D.new()
 		floor_instance.name = "Floor"
 		floor_instance.mesh = floor_mesh
-		floor_instance.material_override = _floor_material
+		floor_instance.material_override = _natural_floor_material if _uses_natural_look() else _floor_material
 		floor_instance.position = to_world((Vector2(cell) + Vector2(0.5, 0.5)) * size)
 		room.add_child(floor_instance)
 		var rocks: Array[Dictionary] = []
@@ -670,8 +689,14 @@ func _instantiate(layout: Layout) -> void:
 				continue
 			for polygon: PackedVector2Array in layout.landmarks[i].get_placed_footprints():
 				rocks.append({"outline": polygon, "height": landmark_rock_height, "spread": 0.0})
-		room.add_child(_room_rock(rocks, doorways))
+		var dress_rocks: Array[Dictionary] = []
+		var rock_body: StaticBody3D = _room_rock(rocks, doorways, dress_rocks)
+		room.add_child(rock_body)
+		_look_rooms.append({"floor": floor_instance, "rock": rock_body.get_node("Mesh"), "body": rock_body, "rocks": dress_rocks,
+			"bounds": Rect2(Vector2(cell) * size * _units(), Vector2.ONE * size * _units()),
+			"seed": hash(Vector3i(cell.x, cell.y, global_level_index)), "dressing": null})
 	_add_outer_rock(layout)
+	_apply_look()
 
 	_player_spawns = layout.player_spawns
 	shard_spots = layout.shards
@@ -733,6 +758,124 @@ func _register_materials() -> void:
 			darkness.register_material(material)
 
 
+# --- Natural look (WorldLook) -------------------------------------------------------
+
+## Switches the built level (and every later one) between the classic look
+## and the world's natural look. Gates built before the switch keep theirs.
+func set_natural_look(on: bool) -> void:
+	natural_look = on
+	_prepare_natural_look()
+	_apply_look()
+
+
+## True while the natural look is on and the world has one.
+func _uses_natural_look() -> bool:
+	return natural_look and _natural_floor_material != null
+
+
+## Number of kit pieces in the built level (0 in the classic look).
+func get_dressing_piece_count() -> int:
+	var total: int = 0
+	for entry: Dictionary in _look_rooms:
+		if entry["dressing"] != null:
+			total += RockDresser.count_pieces(entry["dressing"] as Node3D)
+	return total
+
+
+## The natural look's materials (copies of the WorldLook's, so the level can
+## set its depth on them), made the first time they are needed and joined to
+## the sonar, the cut-away, the sand trails and the world ambient.
+func _prepare_natural_look() -> void:
+	if not natural_look or world == null or world.look == null:
+		return
+	var look: WorldLook = world.look
+	if _natural_floor_material == null:
+		if look.floor_material == null or look.rock_material == null:
+			push_warning("LevelBuilder: the world's look has no materials; the classic look is used.")
+			return
+		_natural_floor_material = look.floor_material.duplicate() as ShaderMaterial
+		_natural_rock_material = look.rock_material.duplicate() as ShaderMaterial
+		_natural_rock_material.set_shader_parameter("cut_enabled", true)
+		_natural_outer_material = look.rock_material.duplicate() as ShaderMaterial
+		_natural_outer_material.set_shader_parameter("cut_enabled", true)
+		_natural_outer_material.set_shader_parameter("pulse_share", 0.0)
+		var rock_base: Variant = look.rock_material.get_shader_parameter("base_color")
+		if rock_base is Color:
+			_natural_outer_material.set_shader_parameter("base_color", (rock_base as Color).darkened(look.outer_rock_darken))
+	if not _natural_registered and is_inside_tree():
+		var sonar: Sonar = Sonar.find(get_tree())
+		if sonar:
+			_natural_registered = true
+			var materials: Array[ShaderMaterial] = [_natural_floor_material, _natural_rock_material, _natural_outer_material]
+			for material: ShaderMaterial in materials:
+				sonar.register_material(material)
+			var cutaway: ViewCutaway = ViewCutaway.find(get_tree())
+			if cutaway:
+				cutaway.register_material(_natural_rock_material)
+				cutaway.register_material(_natural_outer_material)
+			var trails: SandTrails = SandTrails.find(get_tree())
+			if trails:
+				trails.register_material(_natural_floor_material)
+			var darkness: Darkness = Darkness.find(get_tree())
+			if darkness:
+				for material: ShaderMaterial in materials:
+					darkness.register_material(material)
+	# Depth: the stage's progress at the top of this level and per world unit.
+	var per_unit: float = 1.0 / maxf(level_height * _units() * maxf(level_count, 1.0), 0.01)
+	for material: ShaderMaterial in [_natural_floor_material, _natural_rock_material, _natural_outer_material]:
+		material.set_shader_parameter("depth_start", float(level_index) / maxf(level_count, 1.0))
+		material.set_shader_parameter("depth_per_unit", per_unit)
+
+
+## Gives every room the materials of the look in use, builds the rock
+## dressing of rooms that have none yet (natural look only) and shows or
+## hides it and the silt haze.
+func _apply_look() -> void:
+	if _level == null:
+		return
+	var natural: bool = _uses_natural_look()
+	for entry: Dictionary in _look_rooms:
+		(entry["floor"] as MeshInstance3D).material_override = _natural_floor_material if natural else _floor_material
+		(entry["rock"] as MeshInstance3D).material_override = _natural_rock_material if natural else _rock_material
+		if natural and entry["dressing"] == null:
+			var dress_rocks: Array[Dictionary] = []
+			dress_rocks.assign(entry["rocks"] as Array)
+			var dressing: Node3D = RockDresser.dress(world.look, dress_rocks, entry["bounds"] as Rect2,
+				_natural_rock_material, entry["seed"] as int)
+			(entry["body"] as Node3D).add_child(dressing)
+			entry["dressing"] = dressing
+		if entry["dressing"] != null:
+			(entry["dressing"] as Node3D).visible = natural
+	if _outer_instance and is_instance_valid(_outer_instance):
+		_outer_instance.material_override = _natural_outer_material if natural else _outer_material
+	_update_haze(natural)
+
+
+## The silt haze: one fog volume over the whole level, near the floor.
+func _update_haze(natural: bool) -> void:
+	var wanted: bool = natural and world.look.haze_density > 0.0
+	if not wanted:
+		if _haze:
+			_haze.visible = false
+		return
+	if _haze == null:
+		_haze = FogVolume.new()
+		_haze.name = "SiltHaze"
+		_haze.shape = RenderingServer.FOG_VOLUME_SHAPE_WORLD
+		var material := ShaderMaterial.new()
+		material.shader = HAZE_SHADER
+		_haze.material = material
+		add_child(_haze)
+	var look: WorldLook = world.look
+	var haze_material := _haze.material as ShaderMaterial
+	haze_material.set_shader_parameter("density", look.haze_density)
+	haze_material.set_shader_parameter("height", look.haze_height)
+	haze_material.set_shader_parameter("cloud_size", look.haze_cloud_size)
+	haze_material.set_shader_parameter("drift", look.haze_drift)
+	haze_material.set_shader_parameter("color", look.haze_color)
+	_haze.visible = true
+
+
 func _surface_material(shader: Shader, color: Color) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = shader
@@ -742,7 +885,7 @@ func _surface_material(shader: Shader, color: Color) -> ShaderMaterial:
 
 ## The rocks of one room as one mesh and one body with their colliders. rocks: outline (plan
 ## space), middle height and spread (pixels).
-func _room_rock(rocks: Array[Dictionary], doorways: Array[Rect2]) -> StaticBody3D:
+func _room_rock(rocks: Array[Dictionary], doorways: Array[Rect2], dress_rocks: Array[Dictionary] = []) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = "Rock"
 	body.collision_layer = 1
@@ -762,13 +905,14 @@ func _room_rock(rocks: Array[Dictionary], doorways: Array[Rect2]) -> StaticBody3
 		var height_at: Callable = func(point: Vector2) -> float:
 			return rock_height_at(point / units, middle, spread, zones) * units
 		var mesh: ArrayMesh = RockMesher.rock_mesh(_to_units(outline), middle * units, rock_smooth_degrees, height_at)
+		dress_rocks.append({"outline": _to_units(rock["outline"] as PackedVector2Array), "height_at": height_at})
 		if mesh.get_surface_count() > 0:
 			tool.append_from(mesh, 0, Transform3D.IDENTITY)
 	var merged: ArrayMesh = tool.commit()
 	var instance := MeshInstance3D.new()
 	instance.name = "Mesh"
 	instance.mesh = merged
-	instance.material_override = _rock_material
+	instance.material_override = _natural_rock_material if _uses_natural_look() else _rock_material
 	body.add_child(instance)
 	# Colliders from the base outlines, upright and taller than any body
 	# (never the drawn shape: a low rock near a doorway could be climbed).
@@ -827,9 +971,10 @@ func _add_outer_rock(layout: Layout) -> void:
 	var instance := MeshInstance3D.new()
 	instance.name = "OuterRock"
 	instance.mesh = tool.commit()
-	instance.material_override = _outer_material
+	instance.material_override = _natural_outer_material if _uses_natural_look() else _outer_material
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_level.add_child(instance)
+	_outer_instance = instance
 
 
 ## The lockdown event of the level's lockdown room (LockdownRoom).
@@ -846,7 +991,7 @@ func _add_lockdown(layout: Layout) -> void:
 	for polygon: PackedVector2Array in layout.lockdown_barriers:
 		_lockdown.barrier_polygons.append(_to_units(polygon))
 	_lockdown.barrier_height = _gate_height(_definition.lockdown_cell if _definition else Vector2i.ZERO, layout)
-	_lockdown.barrier_material = _rock_material
+	_lockdown.barrier_material = _natural_rock_material if _uses_natural_look() else _rock_material
 	for spot: Vector2 in layout.lockdown_spawns:
 		_lockdown.spawn_points.append(to_world(spot))
 	_lockdown.creature_scene = world.lockdown_creature_scene
@@ -868,7 +1013,7 @@ func _add_door(layout: Layout) -> void:
 	_door.name = "ArenaDoor"
 	_door.outline = _to_units(layout.door_polygon)
 	_door.height = _gate_height(_definition.exit_cell if _definition else Vector2i.ZERO, layout)
-	_door.material = _rock_material
+	_door.material = _natural_rock_material if _uses_natural_look() else _rock_material
 	_level.add_child(_door)
 
 
@@ -978,6 +1123,8 @@ func _clear() -> void:
 		remove_child(_level)
 		_level.queue_free()
 		_level = null
+	_look_rooms.clear()
+	_outer_instance = null
 	if _layout:
 		_layout.free_chunks()
 		_layout = null

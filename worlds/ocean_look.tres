@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="WorldLook" load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://scripts/world_look.gd" id="1_look"]
+[ext_resource type="Shader" path="res://shaders/ocean_floor.gdshader" id="2_floor"]
+[ext_resource type="Shader" path="res://shaders/ocean_rock.gdshader" id="3_rock"]
+[ext_resource type="Texture2D" path="res://assets/textures/ocean/dense_sand/dense_sand_diff_1k.jpg" id="4_sand_diff"]
+[ext_resource type="Texture2D" path="res://assets/textures/ocean/dense_sand/dense_sand_nor_gl_1k.jpg" id="5_sand_nor"]
+[ext_resource type="Texture2D" path="res://assets/textures/ocean/dense_sand/dense_sand_arm_1k.jpg" id="6_sand_arm"]
+[ext_resource type="Texture2D" path="res://assets/textures/ocean/rock_face/rock_face_diff_1k.jpg" id="7_rock_diff"]
+[ext_resource type="Texture2D" path="res://assets/textures/ocean/rock_face/rock_face_nor_gl_1k.jpg" id="8_rock_nor"]
+[ext_resource type="Texture2D" path="res://assets/textures/ocean/rock_face/rock_face_arm_1k.jpg" id="9_rock_arm"]
+[ext_resource type="PackedScene" path="res://assets/models/rocks/ocean/ocean_rock_kit.glb" id="10_kit"]
+
+[sub_resource type="ShaderMaterial" id="Floor"]
+shader = ExtResource("2_floor")
+shader_parameter/base_color = Color(0.15, 0.19, 0.25, 1)
+shader_parameter/sand_albedo = ExtResource("4_sand_diff")
+shader_parameter/sand_normal = ExtResource("5_sand_nor")
+shader_parameter/sand_arm = ExtResource("6_sand_arm")
+shader_parameter/texture_mean = Vector3(0.291, 0.216, 0.125)
+
+[sub_resource type="ShaderMaterial" id="Rock"]
+shader = ExtResource("3_rock")
+shader_parameter/base_color = Color(0.24, 0.29, 0.36, 1)
+shader_parameter/rock_albedo = ExtResource("7_rock_diff")
+shader_parameter/rock_normal = ExtResource("8_rock_nor")
+shader_parameter/rock_arm = ExtResource("9_rock_arm")
+shader_parameter/texture_mean = Vector3(0.121, 0.061, 0.031)
+shader_parameter/sand_color = Color(0.15, 0.19, 0.25, 1)
+
+[resource]
+script = ExtResource("1_look")
+floor_material = SubResource("Floor")
+rock_material = SubResource("Rock")
+rock_kit = ExtResource("10_kit")

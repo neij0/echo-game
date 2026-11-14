@@ -68,6 +68,12 @@ extends Resource
 @export var world_ambient_fog_begin: float = 9.0
 @export var world_ambient_fog_end: float = 22.0
 
+@export_group("Natural Look")
+## 3D: the world's natural look (real textures on floor and rock, walls
+## dressed with a rock kit, silt haze). Used while LevelBuilder.natural_look
+## is on; null = the world only has the classic look.
+@export var look: WorldLook
+
 @export_group("Palette")
 ## The base darkness (ambient colour) is set per stage, in each StageDefinition.
 @export var floor_color_shallow: Color = Color(0.2, 0.3, 0.36)
