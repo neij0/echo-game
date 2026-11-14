@@ -1,8 +1,14 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/character_model.gd" id="1_model"]
 [ext_resource type="Script" path="res://scripts/bone_chain_settings.gd" id="2_chain"]
-[ext_resource type="PackedScene" path="res://assets/models/characters/blockout/guardian_blockout_a.glb" id="3_glb"]
+[ext_resource type="PackedScene" path="res://assets/models/characters/blockout/guardian_blockout.glb" id="3_glb"]
+
+[ext_resource type="Script" path="res://scripts/guardian_moves.gd" id="4_moves"]
+
+[sub_resource type="Resource" id="moves"]
+script = ExtResource("4_moves")
+stride_length = 1.7
 
 [sub_resource type="Resource" id="chain_cloak"]
 script = ExtResource("2_chain")
@@ -25,16 +31,10 @@ sway_speed = 1.0
 [node name="GuardianBlockout" type="Node3D"]
 script = ExtResource("1_model")
 model = ExtResource("3_glb")
-rim_color = Color(1, 0.7, 0.3, 1)
-rim_energy = 0.4
+rim_color = Color(0.5, 0.68, 1, 1)
+rim_energy = 0.32
 outline_color = Color(1, 0.75, 0.25, 1)
-pose = Dictionary[String, Vector3]({
-"LeftLowerArm": Vector3(0.08, -1, 0.12),
-"LeftUpperArm": Vector3(0.12, -1, 0),
-"RightLowerArm": Vector3(-0.25, -0.75, 0.6),
-"RightUpperArm": Vector3(-0.45, -1, 0.25),
-"Sword": Vector3(-0.3, -0.55, 0.78)
-})
-lean_degrees = 7.0
+moves = SubResource("moves")
+lean_degrees = 5.0
 downed_tilt_degrees = 40.0
 chains = Array[ExtResource("2_chain")]([SubResource("chain_cloak"), SubResource("chain_scarf")])

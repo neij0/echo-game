@@ -166,13 +166,24 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   and no oxygen drain): K = classic / natural look, H = silt haze, plus the level-test
   keys. `-- look <folder> [level] [pictures]`: old / new pictures (dark, pulse front,
   afterglow, lit) + FPS of both looks.
-- **Character blockouts** (Phase C silhouette pass, waiting for review; the game still
-  uses the capsules): three silhouette variants each of the Echo (A Leaf, B Comet, C Bell:
-  pale silver, cyan / white glow, no gold, human legs and flat feet) and the Guardian
-  (A Stag, B Spire, C Bulwark: dark cloak, antlers, amber / gold trims and blade), made
-  by `tools/blender/make_character_blockouts.py` -> `assets/models/characters/blockout/
-  <character>_blockout_<a|b|c>.glb` (**placeholders, not final art**; the pictures in
-  `docs/ref/` are mood references only). Rig: Godot humanoid bone names (T-pose) plus
+- **Character blockouts** (Phase C silhouette pass, second review pending; the game still
+  uses the capsules; **placeholders, not final art**; the pictures in `docs/ref/` are mood
+  references only). Made by `tools/blender/make_character_blockouts.py` ->
+  `assets/models/characters/blockout/`. **Final blockouts**: `echo_blockout.glb` (the
+  Bell body and lantern antennae, the Leaf ears, the Comet streamer tail, glowing eyes;
+  the body glow dim, brightest on core, lanterns and tips) and `guardian_blockout.glb`
+  (tall, V shape, small helmed head, long legs, Stag antlers, a ragged cape of strips
+  to the knee, gold on helm / shoulders / belt / wrists / knees, a glowing eye slit, a
+  long greatsword on its own `Sword` bone; faint cool rim). The first variants stay for
+  comparison (`<character>_blockout_<a|b|c>.glb`: Echo Leaf / Comet / Bell, Guardian
+  Stag / Spire / Bulwark). **Guardian option 2**: the same gear on a Mixamo character
+  (`tools/blender/make_guardian_mixamo.py` -> `guardian_mixamo_blockout.glb`, only once
+  the character is downloaded: `assets/models/characters/mixamo/README.md` says which
+  one and how, and what to upload / download for the rig and animations; raw Mixamo
+  files stay out of git). **Basic animations in code** (`CharacterMoves` resources:
+  `EchoMoves` idle / swim / pulse pose, `GuardianMoves` guard stance / walk / sword
+  swing: every frame the bones are aimed again; the swing follows
+  `SwordAbility.get_blade_direction()`), until Mixamo clips replace the Guardian's. Rig: Godot humanoid bone names (T-pose) plus
   bone chains `<Name>_1 ... <Name>_end`. **`CharacterModel`**
   (`scenes/characters/echo_blockout.tscn` / `guardian_blockout.tscn`) shows a model in
   place of the `CapsuleBody`: the shared `character.gdshader` on every surface (the
@@ -182,11 +193,13 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `SpringBoneSimulator3D` + a slow drift; `BoneChainSettings` per chain name: stiff
   enough that it trails without streaming out flat: trail per joint is about
   drag x speed / stiffness). **Silhouette test**: `tools/character_test.tscn` (F6; the
-  core test stage with the players wearing the models): 1-3 Echo variant, 4-6 Guardian
-  variant, 0 capsules, L studio light, Z close view; `-- pictures <folder>` saves the
-  sheets and the game-distance pictures (dark, pulse, afterglow, swimming) of every
-  variant (`docs/character_blockouts/`). `tools/test_characters.tscn` (headless: rig,
-  shader, colours, feet, pose, chains drift / trail / settle):
+  core test stage with the players wearing the models): 7 / 8 the final Echo / Guardian,
+  9 the Guardian on the Mixamo body (if made), 1-3 / 4-6 the first variants, 0 capsules,
+  L studio light, Z close view; `-- pictures <folder> [variants]` saves the front / side
+  / back sheets, the sheet of the moves and the game-distance pictures (dark, pulse,
+  afterglow, swing, moving) (`docs/character_blockouts/final/`; the first review's
+  pictures are in `docs/character_blockouts/`). `tools/test_characters.tscn` (headless:
+  rig, shader, colours, feet, pose, chains drift / trail / settle, the moves):
   `godot --headless --path . --fixed-fps 60 res://tools/test_characters.tscn [-- log]`.
 - **Level play-test**: `tools/level_test.tscn` (F6): the real Ocean levels (exports
   `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player

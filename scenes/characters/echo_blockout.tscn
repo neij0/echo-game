@@ -1,8 +1,14 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/character_model.gd" id="1_model"]
 [ext_resource type="Script" path="res://scripts/bone_chain_settings.gd" id="2_chain"]
-[ext_resource type="PackedScene" path="res://assets/models/characters/blockout/echo_blockout_a.glb" id="3_glb"]
+[ext_resource type="PackedScene" path="res://assets/models/characters/blockout/echo_blockout.glb" id="3_glb"]
+
+[ext_resource type="Script" path="res://scripts/echo_moves.gd" id="4_moves"]
+
+[sub_resource type="Resource" id="moves"]
+script = ExtResource("4_moves")
+stride_length = 1.1
 
 [sub_resource type="Resource" id="chain_antenna"]
 script = ExtResource("2_chain")
@@ -32,23 +38,12 @@ sway_speed = 1.1
 script = ExtResource("1_model")
 model = ExtResource("3_glb")
 rim_color = Color(0.45, 0.9, 1, 1)
-rim_energy = 0.7
+rim_energy = 0.28
 outline_color = Color(0.3, 0.9, 1, 1)
-pose = Dictionary[String, Vector3]({
-"LeftFoot": Vector3(0, -0.5, 0.87),
-"LeftLowerArm": Vector3(0.3, -1, 0.2),
-"LeftLowerLeg": Vector3(0.03, -1, -0.32),
-"LeftUpperArm": Vector3(0.4, -1, -0.15),
-"LeftUpperLeg": Vector3(0.05, -1, 0.2),
-"RightFoot": Vector3(0, -0.42, 0.9),
-"RightLowerArm": Vector3(-0.3, -1, 0.2),
-"RightLowerLeg": Vector3(-0.03, -1, -0.12),
-"RightUpperArm": Vector3(-0.4, -1, -0.15),
-"RightUpperLeg": Vector3(-0.05, -1, 0.03)
-})
+moves = SubResource("moves")
 hover_height = 0.2
 bob_height = 0.035
-lean_degrees = 14.0
+lean_degrees = 24.0
 pulse_flare = 1.5
 downed_height = 0.02
 downed_tilt_degrees = 70.0

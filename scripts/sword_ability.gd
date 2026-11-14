@@ -196,6 +196,12 @@ func is_attacking() -> bool:
 	return hit_index >= 0
 
 
+## Where the blade points right now (world space, unit): during a hit it
+## sweeps through the slash (a character model aims its sword along it).
+func get_blade_direction() -> Vector3:
+	return _blade_dir.normalized()
+
+
 ## True while the right stick aims (the tick is drawn).
 func is_showing_aim_tick() -> bool:
 	return player != null and not player.health.is_downed and hit_index < 0 and player.get_stick_aim() != Vector3.ZERO

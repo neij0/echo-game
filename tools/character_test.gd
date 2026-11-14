@@ -5,8 +5,12 @@ extends CoreTest
 ## wearing the BLOCKOUT character models instead of the capsules, to choose a
 ## silhouette for the Echo and the Guardian. Blockouts are placeholders, not
 ## final art (tools/blender/make_character_blockouts.py).
-## Keys: 1 / 2 / 3 = the Echo's variant (Leaf, Comet, Bell), 4 / 5 / 6 = the
-## Guardian's (Stag, Spire, Bulwark), 0 = the capsules again, L = studio light
+## Both start in their final blockout (the variants merged after the first
+## review), with the basic animations (idle, swim / walk, pulse pose, sword
+## swing). Keys: 7 = the Echo's final blockout, 1 / 2 / 3 = her first variants
+## (Leaf, Comet, Bell); 8 = the Guardian's final blockout, 9 = the Guardian on
+## a Mixamo body (if that model was made), 4 / 5 / 6 = his first variants
+## (Stag, Spire, Bulwark); 0 = the capsules again, L = studio light
 ## (to look at the shapes), Z = close view / game distance, plus the keys of
 ## the core test (F creatures, C cut-away, R restart...). The creatures start
 ## frozen and hidden.
@@ -14,14 +18,19 @@ extends CoreTest
 
 const ECHO_BLOCKOUT: PackedScene = preload("res://scenes/characters/echo_blockout.tscn")
 const GUARDIAN_BLOCKOUT: PackedScene = preload("res://scenes/characters/guardian_blockout.tscn")
-const MODEL_PATH: String = "res://assets/models/characters/blockout/%s_blockout_%s.glb"
-const VARIANTS: Array[String] = ["a", "b", "c"]
-const ECHO_NAMES: Array[String] = ["Leaf", "Comet", "Bell"]
-const GUARDIAN_NAMES: Array[String] = ["Stag", "Spire", "Bulwark"]
+const MODEL_PATH: String = "res://assets/models/characters/blockout/%s%s.glb"
+## Variants 0-2 = the first three, FINAL = the merged blockout, MIXAMO = the
+## Guardian gear on a Mixamo body (tools/blender/make_guardian_mixamo.py).
+const FILES: Array[String] = ["_blockout_a", "_blockout_b", "_blockout_c", "_blockout", "_mixamo_blockout"]
+const VARIANTS: Array[String] = ["a", "b", "c", "final", "mixamo"]
+const ECHO_NAMES: Array[String] = ["Leaf", "Comet", "Bell", "blockout", "-"]
+const GUARDIAN_NAMES: Array[String] = ["Stag", "Spire", "Bulwark", "blockout", "Mixamo body"]
+const FINAL: int = 3
+const MIXAMO: int = 4
 
-## The variant each player starts in (0-2; -1 = the capsule).
-@export_range(-1, 2) var echo_variant: int = 0
-@export_range(-1, 2) var guardian_variant: int = 0
+## The variant each player starts in (0-2, FINAL, MIXAMO; -1 = the capsule).
+@export_range(-1, 4) var echo_variant: int = 3
+@export_range(-1, 4) var guardian_variant: int = 3
 ## Freeze and hide the creatures at the start.
 @export var calm_start: bool = true
 
@@ -59,6 +68,7 @@ func _ready() -> void:
 		var shots := CharacterTestShots.new()
 		shots.test = self
 		shots.folder = arguments[1]
+		shots.with_variants = arguments.has("variants")
 		add_child(shots)
 
 
@@ -71,6 +81,16 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			KEY_4, KEY_5, KEY_6:
 				set_variants(echo_variant, key.physical_keycode - KEY_4)
+				return
+			KEY_7:
+				set_variants(FINAL, guardian_variant)
+				return
+			KEY_8:
+				set_variants(echo_variant, FINAL)
+				return
+			KEY_9:
+				if has_model("guardian", MIXAMO):
+					set_variants(echo_variant, MIXAMO)
 				return
 			KEY_0:
 				set_variants(-1, -1)
@@ -86,14 +106,19 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	super._process(delta)
-	_info.text += "\nBLOCKOUTS (placeholders)   [1-3] Echo: %s   [4-6] Guardian: %s   [0] capsules   [L] studio light: %s   [Z] view: %s" % [
+	_info.text += "\nBLOCKOUTS (placeholders)   [7 / 1-3] Echo: %s   [8 / 9 / 4-6] Guardian: %s   [0] capsules   [L] studio light: %s   [Z] view: %s" % [
 		_variant_name(echo_variant, ECHO_NAMES), _variant_name(guardian_variant, GUARDIAN_NAMES),
 		"ON" if studio_light else "off", "CLOSE" if close_view else "game"]
 
 
 ## The model scene of a character's variant ("echo" / "guardian", 0-2).
 static func model_of(character: String, variant: int) -> PackedScene:
-	return load(MODEL_PATH % [character, VARIANTS[variant]]) as PackedScene
+	return load(MODEL_PATH % [character, FILES[variant]]) as PackedScene
+
+
+## False when that model was not made (the Mixamo option needs a download).
+static func has_model(character: String, variant: int) -> bool:
+	return ResourceLoader.exists(MODEL_PATH % [character, FILES[variant]])
 
 
 ## The variant each player wears (0-2; -1 = the capsule of the game).

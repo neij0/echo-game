@@ -1,5 +1,7 @@
-"""Builds the BLOCKOUT models of the Echo and the Guardian (three silhouette
-variants each) and exports one rigged .glb per variant.
+"""Builds the BLOCKOUT models of the Echo and the Guardian and exports one
+rigged .glb each: the final blockouts (echo_blockout, guardian_blockout: the
+variants merged after the first review) and the three first silhouette
+variants of each (..._a / _b / _c, kept for comparison).
 
 Run headless:
   blender --background --python tools/blender/make_character_blockouts.py -- <out folder> [mixamo folder]
@@ -44,6 +46,9 @@ MATERIALS = {
     "echo_shade": ((0.26, 0.36, 0.52), None, 0.0),
     "echo_glow": ((0.75, 0.95, 1.0), (0.55, 0.92, 1.0), 3.4),
     "echo_glow_soft": ((0.45, 0.75, 0.9), (0.3, 0.8, 1.0), 1.5),
+    # The final blockout: a dimmer body glow, so the core, lanterns and tips lead.
+    "echo_glow_dim": ((0.4, 0.62, 0.8), (0.3, 0.8, 1.0), 0.45),
+    "echo_glow_eye": ((0.8, 0.97, 1.0), (0.6, 0.95, 1.0), 2.4),
     # The Guardian: dark, with amber / gold trims and blade.
     "guardian_armor": ((0.035, 0.035, 0.05), None, 0.0),
     "guardian_cloak": ((0.022, 0.024, 0.045), None, 0.0),
@@ -279,8 +284,10 @@ class Model:
     def triangle_count(self):
         return sum(len(face) - 2 for face in self.faces)
 
-    def build(self, with_rig=True):
-        """Makes the Blender objects; returns them."""
+    def build(self, with_rig=True, rig=None):
+        """Makes the Blender objects; returns them. rig: an armature object
+        that already has the body bones (a Mixamo character): the mesh is
+        skinned to it and only the bones it lacks are added."""
         mesh = bpy.data.meshes.new(self.name)
         mesh.from_pydata([tuple(v) for v in self.verts], [], self.faces)
         for name in self.materials:
@@ -310,15 +317,21 @@ class Model:
                     groups[bone] = body.vertex_groups.new(name=bone)
                 groups[bone].add([i], value / total, "REPLACE")
         known = {bone[0] for bone in self.bones}
+        made = [body]
+        if rig is None:
+            rig = bpy.data.objects.new("Armature", bpy.data.armatures.new(self.name + "_rig"))
+            bpy.context.scene.collection.objects.link(rig)
+            made.append(rig)
+        armature = rig.data
+        known |= {bone.name for bone in armature.bones}
         missing = sorted(set(groups) - known)
         if missing:
             raise SystemExit("%s: weights on bones that do not exist: %s" % (self.name, missing))
-        armature = bpy.data.armatures.new(self.name + "_rig")
-        rig = bpy.data.objects.new("Armature", armature)
-        bpy.context.scene.collection.objects.link(rig)
         bpy.context.view_layer.objects.active = rig
         bpy.ops.object.mode_set(mode="EDIT")
         for name, head, tail, parent, connect in self.bones:
+            if name in armature.edit_bones:
+                continue
             bone = armature.edit_bones.new(name)
             bone.head = head
             bone.tail = tail
@@ -329,7 +342,7 @@ class Model:
         body.parent = rig
         modifier = body.modifiers.new("Armature", "ARMATURE")
         modifier.object = rig
-        return [body, rig]
+        return made
 
 
 def material(name):
@@ -449,20 +462,45 @@ def echo_ears(m, control, bones, widths, wide):
 
 
 def build_echo(variant, body_only=False):
-    m = Model("echo_blockout_" + variant, body_only)
+    final = variant == "final"
+    soft = "echo_glow_dim" if final else "echo_glow_soft"
+    m = Model("echo_blockout" if final else "echo_blockout_" + variant, body_only)
     d = ECHO_SIZE
     humanoid(m, d, "echo_body")
     # The core in her chest, small lights at the wrists and ankles, eyes.
     m.ball(V(0, -0.047, 0.675), (0.03, 0.02, 0.042), "echo_glow", "Chest", sides=6, rings=3)
     for side, name in ((1.0, "Left"), (-1.0, "Right")):
-        m.ball(V(side * d["wrist_x"], 0, d["shoulder"] - d["arm_r"][0] * 0.6), (0.02, 0.02, 0.012), "echo_glow_soft",
+        m.ball(V(side * d["wrist_x"], 0, d["shoulder"] - d["arm_r"][0] * 0.6), (0.02, 0.02, 0.012), soft,
             name + "LowerArm", sides=6, rings=2, axis=(1, 0, 0), wide=(0, 1, 0))
-        m.ball(V(side * d["leg_x"] * 1.05, 0.004, d["ankle"] + 0.03), (0.026, 0.026, 0.012), "echo_glow_soft",
+        m.ball(V(side * d["leg_x"] * 1.05, 0.004, d["ankle"] + 0.03), (0.026, 0.026, 0.012), soft,
             name + "LowerLeg", sides=6, rings=2)
-        m.ball(V(side * 0.047, -0.112, 0.905), (0.02, 0.008, 0.027), "echo_glow_soft", "Head", sides=6, rings=2)
+        if final:
+            # Two clear, glowing eyes: a face.
+            m.ball(V(side * 0.052, -0.104, 0.9), (0.042, 0.012, 0.054), "echo_shade", "Head", sides=8, rings=3)
+            m.ball(V(side * 0.052, -0.112, 0.9), (0.028, 0.012, 0.038), "echo_glow_eye", "Head", sides=8, rings=3)
+        else:
+            m.ball(V(side * 0.047, -0.112, 0.905), (0.02, 0.008, 0.027), "echo_glow_soft", "Head", sides=6, rings=2)
 
     tail_root = V(0, 0.045, 0.5)
-    if variant == "a":
+    if final:
+        # The merged blockout: the Bell body (bell skirt) and its two lantern
+        # antennae, the Leaf ears, the Comet tail (three streamers).
+        for side, name in ((1.0, "L"), (-1.0, "R")):
+            m.ribbon("Ear" + name, [flip(p, side) for p in
+                [V(0.085, 0.01, 0.93), V(0.22, 0.05, 1.0), V(0.38, 0.13, 0.99), V(0.5, 0.22, 0.9)]], 3, "Head",
+                [0.02, 0.075, 0.062, 0.004], "echo_body", thick=0.009, wide=flip(V(0.0, 0.55, 0.85), side), glow=soft)
+        echo_antennae(m, [V(0.04, -0.03, 0.985), V(0.12, -0.02, 1.17), V(0.22, 0.0, 1.32), V(0.28, 0.04, 1.4)], 4,
+            (0.05, 0.05, 0.054), radius=0.012)
+        m.lathe([(0.585, 0.052, 0.04, 0.0), (0.52, 0.11, 0.095, 0.005), (0.43, 0.165, 0.15, 0.01), (0.34, 0.2, 0.185, 0.015)],
+            "echo_body", "Hips", sides=12, jag=0.035)
+        m.lathe([(0.375, 0.193, 0.178, 0.014), (0.352, 0.201, 0.186, 0.015)], soft, "Hips", sides=12, caps=(False, False))
+        for spread, name, length in ((0.0, "", 1.0), (1.0, "L", 0.86), (-1.0, "R", 0.86)):
+            control = [tail_root + V(spread * 0.03, 0, 0), V(spread * 0.09, 0.3 * length, 0.39), V(spread * 0.17, 0.62 * length, 0.31),
+                V(spread * 0.22, 0.97 * length, 0.35)]
+            path, names = m.ribbon("Tail" + name, control, 6, "Hips", [0.02, 0.036, 0.028, 0.004], "echo_body", thick=0.009,
+                glow=soft, glow_widths=[0.003, 0.012, 0.014, 0.003])
+            m.ball(path[-1], (0.022, 0.022, 0.042), "echo_glow", names[-1], sides=6, rings=3, axis=path[-1] - path[-2])
+    elif variant == "a":
         # "Leaf": broad leaf ears swept out and back, arcing antennae with
         # teardrop tips, a petal skirt and one broad plume tail with two streamers.
         echo_ears(m, [V(0.085, 0.01, 0.93), V(0.22, 0.05, 1.0), V(0.38, 0.13, 0.99), V(0.5, 0.22, 0.9)], 3,
@@ -702,6 +740,82 @@ def build_guardian(variant, body_only=False):
     return m
 
 
+# The final blockout: tall, broad shoulders over a narrow waist, a small head,
+# long legs.
+GUARDIAN_FINAL_SIZE = {
+    "hip": 1.0, "waist": 1.16, "chest": 1.4, "shoulder": 1.57, "neck": 1.63,
+    "head": 1.725, "head_y": -0.01, "head_r": (0.07, 0.08, 0.085), "neck_r": 0.042,
+    "torso": [(0.05, 0.045), (0.125, 0.09), (0.098, 0.076), (0.205, 0.12), (0.235, 0.105), (0.05, 0.05)],
+    "shoulder_x": 0.26, "elbow_x": 0.56, "wrist_x": 0.83, "hand_x": 0.94,
+    "arm_r": (0.075, 0.062, 0.046), "hand_r": (0.065, 0.04, 0.055),
+    "leg_x": 0.1, "knee": 0.53, "ankle": 0.09, "leg_r": (0.1, 0.07, 0.05),
+    "foot": 0.27, "heel": 0.07, "foot_w": 0.056,
+}
+
+
+def guardian_gear(m, d):
+    """Everything the final Guardian wears over a humanoid body of sizes d
+    (his own blockout body, or a Mixamo character scaled to it): helm with a
+    gold brow band, crest and a glowing eye slit, Stag antlers, a cowl,
+    gold-rimmed pauldrons, gold on chest, belt, wrists and knees, a ragged
+    cape of six strips down to the knee (bone chains) and a long greatsword."""
+    if m.body_only:
+        return
+    shoulder, neck, head, waist, chest = d["shoulder"], d["neck"], d["head"], d["waist"], d["chest"]
+    hr = d["head_r"]
+    head_y = d["head_y"]
+    reach = d["shoulder_x"]
+    arm_z = shoulder - d["arm_r"][0] * 0.6
+    # Helm.
+    m.ball(V(0, head_y, head), (hr[0] * 1.2, hr[1] * 1.2, hr[2] * 1.16), "guardian_armor", "Head", sides=10, rings=5)
+    m.tube([V(0, head_y - hr[1] * 0.5, head + hr[2] * 1.05), V(0, head_y + hr[1] * 0.4, head + hr[2] * 1.3),
+        V(0, head_y + hr[1] * 1.5, head + hr[2] * 0.8)], [(0.012, 0.03), (0.012, 0.045), (0.004, 0.01)], "guardian_trim", "Head",
+        sides=4, wide=(1, 0, 0))
+    m.lathe([(head + hr[2] * 0.5, hr[0] * 1.19, hr[1] * 1.19, head_y), (head + hr[2] * 0.28, hr[0] * 1.27, hr[1] * 1.27, head_y)],
+        "guardian_trim", "Head", sides=10, caps=(False, False))
+    m.ball(V(0, head_y - hr[1] * 1.17, head - hr[2] * 0.02), (hr[0] * 0.8, 0.014, 0.013), "guardian_eye", "Head", sides=6, rings=2)
+    rise = head + hr[2] * 0.9 - 1.62
+    antlers(m, [V(0.06, 0.02, 1.62 + rise), V(0.23, 0.05, 1.8 + rise), V(0.4, 0.04, 1.98 + rise), V(0.48, -0.02, 2.2 + rise)],
+        [(0.3, V(0.1, -0.55, 0.8), 0.24), (0.55, V(0.7, -0.15, 0.7), 0.24), (0.78, V(-0.55, 0.0, 0.85), 0.2)], 0.036)
+    for side in (1.0, -1.0):
+        m.ball(V(side * 0.062, 0.02, head + hr[2] * 0.95), (0.035, 0.035, 0.025), "guardian_trim", "Head", sides=6, rings=2)
+    # Cowl round the neck, pauldrons with a gold rim.
+    m.lathe([(neck + 0.035, 0.068, 0.068, 0.0), (shoulder + 0.03, reach * 0.72, 0.145, 0.02), (shoulder - 0.09, reach * 0.8, 0.165, 0.03)],
+        "guardian_mantle", "Chest", sides=12, caps=(True, True), jag=0.045)
+    for side, name in ((1.0, "Left"), (-1.0, "Right")):
+        middle = V(side * (reach + 0.02), 0.0, shoulder + 0.035)
+        # Two flat, angular plates, the lower one further out.
+        m.ball(middle, (0.15, 0.128, 0.06), "guardian_armor", "Chest", sides=6, rings=3)
+        m.ball(middle + V(side * 0.075, 0.0, -0.06), (0.11, 0.11, 0.045), "guardian_armor", "Chest", sides=6, rings=3)
+        rim = [middle + V(side * 0.152 * math.cos(a), 0.13 * math.sin(a), -0.022) for a in
+            [math.radians(-105 + 210 * k / 6.0) for k in range(7)]]
+        m.tube(rim, [0.016], "guardian_trim", "Chest", sides=4)
+        m.ball(V(side * d["wrist_x"], 0, arm_z), (0.035, d["arm_r"][2] * 1.5, d["arm_r"][2] * 1.5), "guardian_trim", name + "LowerArm",
+            sides=6, rings=2, axis=(0, 0, 1))
+        m.ball(V(side * d["leg_x"] * 1.05, -d["leg_r"][1] - 0.012, d["knee"]), (0.05, 0.03, 0.055), "guardian_trim", name + "LowerLeg",
+            sides=6, rings=3)
+    torso = d["torso"]
+    m.ball(V(0, -torso[3][1] - 0.004, chest + 0.05), (0.042, 0.012, 0.062), "guardian_trim", "Chest", sides=4, rings=3)
+    m.lathe([(waist - 0.085, torso[2][0] + 0.022, torso[2][1] + 0.02, 0.0), (waist - 0.135, torso[2][0] + 0.03, torso[2][1] + 0.027, 0.0)],
+        "guardian_trim", "Hips", sides=10, caps=(False, False))
+    # The cape: ragged strips of uneven length hanging from the back of the
+    # shoulders to about the knee.
+    strips = ((-0.25, 0.62), (-0.15, 0.47), (-0.05, 0.57), (0.05, 0.5), (0.15, 0.61), (0.25, 0.45))
+    for i, (x, end) in enumerate(strips):
+        back = 0.095 + 0.014 * (i % 2)
+        m.ribbon("Cloak%d" % (i + 1), [V(x, back, shoulder - 0.02), V(x * 1.12, back + 0.1, shoulder - 0.42),
+            V(x * 1.28, back + 0.2, shoulder - 0.82), V(x * 1.38, back + 0.24, end)], 3, "Chest", [0.09, 0.125, 0.13, 0.012],
+            "guardian_cloak", thick=0.012, wide=V(1, 0, 0))
+    sword(m, d, 1.3, 0.06, 0.36, 0.16, tip=0.14, core=0.6)
+
+
+def build_guardian_final(body_only=False):
+    m = Model("guardian_blockout", body_only)
+    humanoid(m, GUARDIAN_FINAL_SIZE, "guardian_armor")
+    guardian_gear(m, GUARDIAN_FINAL_SIZE)
+    return m
+
+
 # ------------------------------------------------------------------ export
 
 def export(model, folder):
@@ -731,13 +845,16 @@ def main():
     if not arguments:
         raise SystemExit("usage: -- <out folder> [mixamo folder]")
     os.makedirs(arguments[0], exist_ok=True)
+    export(build_echo("final"), arguments[0])
+    export(build_guardian_final(), arguments[0])
     for variant in ("a", "b", "c"):
         export(build_echo(variant), arguments[0])
         export(build_guardian(variant), arguments[0])
     if len(arguments) > 1:
         os.makedirs(arguments[1], exist_ok=True)
-        export_body(build_guardian("a", True), arguments[1])
+        export_body(build_guardian_final(True), arguments[1])
     print("BLOCKOUTS done -> %s" % arguments[0])
 
 
-main()
+if __name__ == "__main__":
+    main()

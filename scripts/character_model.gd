@@ -10,7 +10,11 @@ extends Node3D
 ## follows the player's drawn position, turns to face where the player
 ## faces, hovers and bobs, leans into the movement, flares its glow with the
 ## pulse, sinks and dims when downed and takes the sword's small lunge.
-## Without a player it just stands where it is put (tools).
+## Its basic animations come from a CharacterMoves resource (idle, swim /
+## walk by the distance travelled, the pulse pose, the sword swing following
+## the slash of the SwordAbility): every frame the bones are aimed again.
+## Without a player it just stands where it is put (tools; preview_speed and
+## preview_swing play its moves there).
 
 const BODY_SHADER: Shader = preload("res://shaders/character.gdshader")
 const SEE_THROUGH_SHADER: Shader = preload("res://shaders/see_through.gdshader")
@@ -35,6 +39,17 @@ const SEE_THROUGH_SHADER: Shader = preload("res://shaders/see_through.gdshader")
 @export var pose: Dictionary[String, Vector3] = {}
 ## Bone name -> a turn about its own length, in degrees, after the aim.
 @export var rolls: Dictionary[String, float] = {}
+
+@export_group("Moves")
+## The basic animations (null = only the pose above).
+@export var moves: CharacterMoves
+## Seconds the pulse pose lasts.
+@export var pulse_pose_time: float = 0.55
+## How fast the swing pose comes in and goes out (per second).
+@export var swing_in: float = 16.0
+@export var swing_out: float = 6.0
+## Speed that counts as full speed when there is no player (tools).
+@export var preview_max_speed: float = 5.0
 
 @export_group("Motion")
 ## How fast it turns to the player's facing.
@@ -76,6 +91,14 @@ var _downed: float = 0.0
 var _lean: float = 0.0
 var _flare: float = 0.0
 var _time: float = 0.0
+var _stride: float = 0.0
+var _pulse_pose: float = 0.0
+var _swing: float = 0.0
+var _swing_direction: Vector3 = Vector3.BACK
+## Tools (no player): the speed it moves at (units / s), and the direction of
+## a sword swing in the model space (zero = no swing).
+var preview_speed: float = 0.0
+var preview_swing: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
@@ -121,29 +144,46 @@ func get_hover_height() -> float:
 	return hover_height
 
 
-## Starts the glow flare of a pulse.
+## Starts the glow flare and the pose of a pulse.
 func flare() -> void:
 	_flare = 1.0
+	_pulse_pose = 1.0
 
 
 func _process(delta: float) -> void:
 	_time += delta
-	var speed_share: float = 0.0
+	var speed: float = preview_speed
+	var speed_share: float = clampf(preview_speed / maxf(preview_max_speed, 0.01), 0.0, 1.0)
 	var downed: bool = false
+	var swinging: bool = preview_swing != Vector3.ZERO
+	if swinging:
+		_swing_direction = preview_swing
 	if player:
 		var facing: Vector3 = player.facing
 		_yaw = lerp_angle(_yaw, atan2(facing.x, facing.z), 1.0 - exp(-turn_speed * delta))
 		var sword := player.get_node_or_null("Sword") as SwordAbility
 		var lunge: Vector3 = sword.get_lunge_offset() if sword else Vector3.ZERO
 		global_transform = Transform3D(Basis(Vector3.UP, _yaw), player.get_global_transform_interpolated().origin + lunge)
-		speed_share = clampf(Vector2(player.velocity.x, player.velocity.z).length() / maxf(player.max_speed, 0.01), 0.0, 1.0)
+		speed = Vector2(player.velocity.x, player.velocity.z).length()
+		speed_share = clampf(speed / maxf(player.max_speed, 0.01), 0.0, 1.0)
 		downed = player.health != null and player.health.is_downed
+		swinging = sword != null and sword.is_attacking() and not downed
+		if swinging:
+			# The direction of the blade in the slash, in the model space.
+			_swing_direction = global_transform.basis.inverse() * sword.get_blade_direction()
 	_downed = move_toward(_downed, 1.0 if downed else 0.0, change_speed * delta)
 	_lean = lerpf(_lean, speed_share, 1.0 - exp(-lean_speed * delta))
 	_flare = maxf(_flare - delta / maxf(pulse_flare_time, 0.01), 0.0)
 	var height: float = lerpf(hover_height + sin(_time * bob_speed) * bob_height, downed_height, _downed)
 	var tilt: float = deg_to_rad(lerpf(lean_degrees * _lean, downed_tilt_degrees, _downed))
 	_holder.transform = Transform3D(Basis(Vector3.RIGHT, tilt), Vector3(0.0, height, 0.0))
+	if moves and _skeleton:
+		_stride += speed * delta / maxf(moves.stride_length, 0.01) * TAU
+		_pulse_pose = maxf(_pulse_pose - delta / maxf(pulse_pose_time, 0.01), 0.0)
+		_swing = move_toward(_swing, 1.0 if swinging else 0.0, (swing_in if swinging else swing_out) * delta)
+		var aims: Dictionary[String, Vector3] = pose.duplicate()
+		aims.merge(moves.aims(_time, _stride, speed_share * (1.0 - _downed), maxf(_pulse_pose, _swing), _swing_direction), true)
+		_apply_pose(aims)
 	var dim: float = lerpf(1.0, downed_glow_share, _downed)
 	for surface: Dictionary in _surfaces:
 		var material := surface["material"] as ShaderMaterial
@@ -180,7 +220,7 @@ func _build() -> void:
 	if skeletons.is_empty():
 		return
 	_skeleton = skeletons[0] as Skeleton3D
-	_apply_pose()
+	_apply_pose(pose)
 	_add_chains()
 
 
@@ -207,24 +247,24 @@ func _material_for(source: Material) -> ShaderMaterial:
 
 
 ## Aims the listed bones, parents before children.
-func _apply_pose() -> void:
+func _apply_pose(aims: Dictionary[String, Vector3]) -> void:
 	_skeleton.reset_bone_poses()
 	for bone: int in _skeleton.get_parentless_bones():
-		_pose_bone(bone)
+		_pose_bone(bone, aims)
 
 
-func _pose_bone(bone: int) -> void:
+func _pose_bone(bone: int, aims: Dictionary[String, Vector3]) -> void:
 	var bone_name: String = _skeleton.get_bone_name(bone)
-	if pose.has(bone_name) or rolls.has(bone_name):
+	if aims.has(bone_name) or rolls.has(bone_name):
 		var global: Transform3D = _skeleton.get_bone_global_pose(bone)
-		if pose.has(bone_name) and not pose[bone_name].is_zero_approx():
+		if aims.has(bone_name) and not aims[bone_name].is_zero_approx():
 			# A bone points along its own y.
-			global.basis = Basis(Quaternion(global.basis.y.normalized(), pose[bone_name].normalized())) * global.basis
+			global.basis = Basis(Quaternion(global.basis.y.normalized(), aims[bone_name].normalized())) * global.basis
 		if rolls.has(bone_name):
 			global.basis = Basis(global.basis.y.normalized(), deg_to_rad(rolls[bone_name])) * global.basis
 		_skeleton.set_bone_global_pose(bone, global)
 	for child: int in _skeleton.get_bone_children(bone):
-		_pose_bone(child)
+		_pose_bone(child, aims)
 
 
 ## A BoneSway for every chain (<Name>_1 ... <Name>_end) that has settings.

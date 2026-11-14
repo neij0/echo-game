@@ -7,7 +7,8 @@ extends Node3D
 ## pale, glows only in the pulse's cyan / white (no gold), is small and has
 ## flat human feet; the Guardian is dark and tall, glows only in warm amber /
 ## gold and carries his sword; the chains drift a little at rest, trail when
-## the character moves (without streaming out flat) and settle again.
+## the character moves (without streaming out flat) and settle again; the
+## basic animations (legs moving, the pulse pose, the sword hold and swing).
 ## "-- log" prints how far every chain's end moves.
 
 const HUMANOID: Array[String] = ["Hips", "Spine", "Chest", "Neck", "Head",
@@ -43,7 +44,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	var heads: Dictionary[String, float] = {}
-	for variant: int in 3:
+	for variant: int in [CharacterTest.FINAL, 0, 1, 2]:
 		heads["echo"] = await _check_character("echo", variant, CharacterTest.ECHO_BLOCKOUT, 5.2)
 		heads["guardian"] = await _check_character("guardian", variant, CharacterTest.GUARDIAN_BLOCKOUT, 4.6)
 	_check(heads["guardian"] > heads["echo"] * 1.5, "the Guardian stands at least 1.5x as tall as the Echo (%.2f vs %.2f)" % [
@@ -58,6 +59,8 @@ func _check_character(character: String, variant: int, scene: PackedScene, speed
 	var model := scene.instantiate() as CharacterModel
 	model.model = CharacterTest.model_of(character, variant)
 	add_child(model)
+	await get_tree().process_frame
+	await get_tree().process_frame
 	var skeleton: Skeleton3D = model.get_skeleton()
 	_check(skeleton != null, "%s: has a skeleton" % label)
 	if skeleton == null:
@@ -125,6 +128,8 @@ func _check_character(character: String, variant: int, scene: PackedScene, speed
 	var expected: Array[String] = ["AntennaL", "AntennaR", "Tail"]
 	if character == "guardian":
 		expected = ["CloakL", "CloakFL", "CloakFR", "CloakR", "CloakBR", "CloakBL"]
+		if variant == CharacterTest.FINAL:
+			expected = ["Cloak1", "Cloak2", "Cloak3", "Cloak4", "Cloak5", "Cloak6"]
 	var absent := PackedStringArray()
 	for chain: String in expected:
 		if not chains.has(chain):
@@ -173,10 +178,52 @@ func _check_character(character: String, variant: int, scene: PackedScene, speed
 			print("  %s %-10s rest: drift %.1f, swing %.1f   moving: swing %.1f   settled: %.1f (degrees)" % [label, chain,
 				rest[chain].x, rest[chain].y, moving[chain].y, settled[chain].y])
 
+	await _check_moves(label, character, model, skeleton, speed)
 	var head: float = skeleton.get_bone_global_rest(skeleton.find_bone("Head")).origin.y
 	_watched = null
 	model.free()
 	return head
+
+
+## The basic animations: the legs move with the distance travelled; the Echo
+## raises her arms in the pulse pose and lowers them again; the Guardian holds
+## his sword at an angle and the blade follows a swing.
+func _check_moves(label: String, character: String, model: CharacterModel, skeleton: Skeleton3D, speed: float) -> void:
+	var foot: int = skeleton.find_bone("LeftFoot")
+	var low: float = INF
+	var high: float = -INF
+	model.preview_speed = speed
+	for i: int in 60:
+		await get_tree().process_frame
+		var z: float = skeleton.get_bone_global_pose(foot).origin.z
+		low = minf(low, z)
+		high = maxf(high, z)
+	model.preview_speed = 0.0
+	_check(high - low > 0.05, "%s: the legs move while it travels (the foot swings %.2f)" % [label, high - low])
+	await get_tree().create_timer(0.6).timeout
+	if character == "echo":
+		var hand: int = skeleton.find_bone("LeftHand")
+		var shoulder: float = skeleton.get_bone_global_pose(skeleton.find_bone("LeftUpperArm")).origin.y
+		model.flare()
+		await get_tree().create_timer(0.1).timeout
+		var raised: float = skeleton.get_bone_global_pose(hand).origin.y
+		await get_tree().create_timer(1.0).timeout
+		var lowered: float = skeleton.get_bone_global_pose(hand).origin.y
+		_check(raised > shoulder and lowered < shoulder - 0.1, "%s: the pulse pose raises the arms, then they come down (%.2f, then %.2f; shoulder %.2f)" % [
+			label, raised, lowered, shoulder])
+	else:
+		var sword: int = skeleton.find_bone("Sword")
+		var rest: Vector3 = skeleton.get_bone_global_pose(sword).basis.y.normalized()
+		_check(rest.y < -0.1 and rest.y > -0.8, "%s: the sword is held at an angle, not hanging straight down (%.2f)" % [label, rest.y])
+		var slash := Vector3(0.5, 0.0, 0.85).normalized()
+		model.preview_swing = slash
+		await get_tree().create_timer(0.3).timeout
+		var blade: Vector3 = skeleton.get_bone_global_pose(sword).basis.y.normalized()
+		model.preview_swing = Vector3.ZERO
+		_check(blade.dot(slash) > 0.95, "%s: the blade follows the swing (%.2f)" % [label, blade.dot(slash)])
+		await get_tree().create_timer(0.6).timeout
+		var back: Vector3 = skeleton.get_bone_global_pose(sword).basis.y.normalized()
+		_check(back.dot(rest) > 0.98, "%s: the sword returns to its hold after the swing" % label)
 
 
 ## Watches the chains' ends for some seconds while the model moves at

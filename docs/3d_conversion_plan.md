@@ -534,3 +534,21 @@ model is made. The game still uses the capsules.
 - [ ] After the review: the chosen silhouettes become the final models (Mixamo rig and
   animations for the Guardian), `echo.tscn` / `guardian.tscn` switch from the capsule
   to `CharacterModel`, and the sword ability drives the model sword.
+
+### Phase C — character blockouts, second pass (waiting for review)
+After the first review: one final blockout each, the first variants kept for comparison.
+- [x] Echo: the Bell body and lantern antennae + the Leaf ears + the Comet streamer tail;
+  body glow dimmer (core, lanterns and tips lead); glowing eyes (a face).
+- [x] Guardian rebuilt: tall, broad shoulders over a narrow waist, small helmed head, long
+  legs, Stag antlers, ragged cape strips to the knee (bone chains), forward lean, long
+  greatsword held out low at an angle, faint cool rim, gold on helm / shoulders / belt /
+  wrists / knees, glowing eye slit.
+- [x] Basic animations in code (`CharacterMoves`: `EchoMoves`, `GuardianMoves`): idle, swim
+  / walk, the pulse pose, the sword swing following the slash of the `SwordAbility`.
+- [x] Guardian option 2 prepared: `tools/blender/make_guardian_mixamo.py` puts the same gear
+  on a Mixamo character (tried with a stand-in file only). **Needs a download**:
+  `assets/models/characters/mixamo/README.md` (which character, how, and what to upload /
+  download for the rig and animations of our own body).
+- [x] `tools/test_characters.tscn`: 157 checks. Pictures: `docs/character_blockouts/final/`.
+- [ ] After the review: Mixamo rig + clips for the Guardian, the models in `echo.tscn` /
+  `guardian.tscn`, the sword ability hands its blade to the model.
