@@ -17,3 +17,7 @@ desktop.ini
 
 # Python caches
 __pycache__/
+
+# Blender backups (art/): the .blend itself stays in git while under 50 MB
+*.blend1
+*.blend2

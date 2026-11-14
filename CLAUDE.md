@@ -202,6 +202,17 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   pictures are in `docs/character_blockouts/`). `tools/test_characters.tscn` (headless:
   rig, shader, colours, feet, pose, chains drift / trail / settle, the moves):
   `godot --headless --path . --fixed-fps 60 res://tools/test_characters.tscn [-- log]`.
+- **Hand-made final Echo** (modelled by the user in Blender; tools never make or change
+  character shapes): `art/echo/echo_model.blend` (front / side / back pictures from
+  `docs/ref/echo_*.png` on orthographic image empties, scaled so the head top = the
+  blockout's 1.007 m; metres = Godot units; faces -Y; collection "Echo" = the model).
+  Scripts (Blender headless, guide in `art/echo/README.md`): `crop_reference.py` (cuts
+  the reference sheet), `setup_reference.py` (makes the .blend; refuses to overwrite it
+  without `-- --force`), `check_model.py` (report only: triangles, flipped / inside-out
+  normals, non-manifold, loose, unapplied transforms, height, file size; exit 1 on
+  problems), `export_to_godot.py` (the "Echo" collection ->
+  `assets/models/characters/final/echo.glb`; not used by the game yet). `art/` has a
+  `.gdignore`; `*.blend1` backups are ignored; the .blend leaves git above 50 MB.
 - **Level play-test**: `tools/level_test.tscn` (F6): the real Ocean levels (exports
   `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player
   blocks; a stand-in level flow (shards -> light -> next level; both down = again). Keys:
