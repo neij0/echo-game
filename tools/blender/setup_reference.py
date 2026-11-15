@@ -4,6 +4,7 @@ Technical setup only: it makes no character shapes.
 Run headless (from the project folder):
   blender --background --python tools/blender/setup_reference.py
   blender --background --python tools/blender/setup_reference.py -- --force   (replace an existing file)
+  blender --background --python tools/blender/setup_reference.py -- --update  (only re-set how the pictures show in an existing file)
 
 What the file holds:
 - Units like Godot: metric, 1 Blender unit = 1 metre = 1 Godot world unit. The
@@ -41,6 +42,8 @@ VIEWS = {
     "side": ((90.0, 0.0, 90.0), (-1.5, 0.0, 0.0)),
     "back": ((90.0, 0.0, 180.0), (0.0, -1.5, 0.0)),
 }
+# Pictures hidden when the file is made (eye icon to show them).
+HIDDEN_VIEWS = {"back"}
 # How transparent the pictures are (0 = invisible, 1 = solid).
 PICTURE_OPACITY = 0.5
 BACKGROUND_TOLERANCE = 0.06
@@ -98,8 +101,39 @@ def blockout_head_top():
     return top, guide
 
 
+def configure_picture(empty, name):
+    """How a reference picture shows: only in the orthographic view it was made
+    for (never edge-on or mirrored from behind), half transparent; the back
+    picture is hidden by default (it shares the Y axis with the front one: turn
+    it on with its eye icon, Outliner > Reference)."""
+    empty.show_empty_image_perspective = False
+    empty.show_empty_image_orthographic = True
+    empty.show_empty_image_only_axis_aligned = True
+    empty.empty_image_side = "FRONT"
+    empty.use_empty_image_alpha = True
+    empty.color[3] = PICTURE_OPACITY
+    empty.hide_set(name in HIDDEN_VIEWS)
+
+
+def update_existing():
+    """Re-applies the picture settings to the pictures of an existing
+    echo_model.blend and saves it. Touches nothing else (the Echo collection
+    stays as it is)."""
+    bpy.ops.wm.open_mainfile(filepath=BLEND)
+    for name in VIEWS:
+        empty = bpy.data.objects.get("Reference " + name)
+        if empty is None:
+            raise SystemExit("no object \"Reference %s\" in %s" % (name, BLEND))
+        configure_picture(empty, name)
+    bpy.ops.wm.save_as_mainfile(filepath=BLEND)
+    print("UPDATE: reference pictures re-set in %s (hidden: %s)" % (BLEND, ", ".join(sorted(HIDDEN_VIEWS))))
+
+
 def main():
     arguments = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    if "--update" in arguments:
+        update_existing()
+        return
     if os.path.exists(BLEND) and "--force" not in arguments:
         raise SystemExit("%s exists (your work?): nothing done. Add -- --force to replace it." % BLEND)
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -141,9 +175,7 @@ def main():
         empty.empty_image_depth = "BACK"
         empty.show_empty_image_perspective = False
         empty.show_empty_image_orthographic = True
-        empty.show_empty_image_only_axis_aligned = True
-        empty.use_empty_image_alpha = True
-        empty.color[3] = PICTURE_OPACITY
+        configure_picture(empty, name)
 
     # New objects go into "Echo".
     bpy.context.view_layer.active_layer_collection = bpy.context.view_layer.layer_collection.children["Echo"]
