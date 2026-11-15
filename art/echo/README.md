@@ -33,7 +33,7 @@ Move the mouse over the 3D view, then press (number pad keys):
   then Properties (right) > Object Data tab (picture icon) > **Opacity**. Its eye icon
   in the Outliner hides it.
 
-The back picture is hidden by default (it sits on the same axis as the front one): toggle any reference picture with its **eye icon** in the Outliner (Reference collection).
+The side picture is centred on the legs (not the toes or the tail), so the body is over the origin in every view. The back picture is hidden by default (it sits on the same axis as the front one): toggle any reference picture with its **eye icon** in the Outliner (Reference collection).
 
 Save often (**Ctrl + S**). Blender also writes `echo_model.blend1` backups: git ignores them.
 

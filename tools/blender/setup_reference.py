@@ -44,6 +44,10 @@ VIEWS = {
 }
 # Pictures hidden when the file is made (eye icon to show them).
 HIDDEN_VIEWS = {"back"}
+# Pictures centred on the legs instead of the feet (the side view).
+LEG_VIEWS = {"side"}
+# The rows (share of the figure's height from the head) of the shins.
+LEG_ROWS = (0.72, 0.82)
 # How transparent the pictures are (0 = invisible, 1 = solid).
 PICTURE_OPACITY = 0.5
 BACKGROUND_TOLERANCE = 0.06
@@ -56,10 +60,27 @@ FEET_SHARE = 0.03
 GUIDE_BAND = 0.02
 
 
-def picture_marks(path):
+def leg_centre(content, top, sole):
+    """Column of the centre line of the legs: the middle of the first (leftmost)
+    run of body pixels on the rows of the shins, averaged. Used for the side
+    view, whose crop also holds the tail and the toes, so the middle of the feet
+    is not the middle of the body."""
+    centres = []
+    for row in range(int(top + (sole - top) * LEG_ROWS[0]), int(top + (sole - top) * LEG_ROWS[1])):
+        columns = np.where(content[row])[0]
+        if len(columns) == 0:
+            continue
+        end = columns[0]
+        while end + 1 < content.shape[1] and content[row, end + 1]:
+            end += 1
+        centres.append((columns[0] + end) * 0.5)
+    return float(np.mean(centres))
+
+
+def picture_marks(path, legs=False):
     """Size of a picture and, in pixels from its top left: the row of the
-    soles, the column in the middle of the feet, and the top of the head
-    in that column."""
+    soles, the column in the middle of the feet (legs = True: of the legs),
+    and the top of the head in that column."""
     image = bpy.data.images.load(path)
     width, height = image.size
     pixels = np.array(image.pixels[:], dtype=np.float32).reshape(height, width, 4)[::-1]
@@ -69,7 +90,7 @@ def picture_marks(path):
     top, sole = rows.min(), rows.max()
     feet_rows = content[int(sole - (sole - top) * FEET_SHARE):sole + 1]
     feet = np.where(feet_rows.any(axis=0))[0]
-    middle = (feet.min() + feet.max()) * 0.5
+    middle = leg_centre(content, top, sole) if legs else (feet.min() + feet.max()) * 0.5
     band = content[:, int(middle) - HEAD_BAND:int(middle) + HEAD_BAND + 1]
     head = np.where(band.any(axis=1))[0].min()
     return image, width, height, sole, middle, head
@@ -125,8 +146,11 @@ def update_existing():
         if empty is None:
             raise SystemExit("no object \"Reference %s\" in %s" % (name, BLEND))
         configure_picture(empty, name)
+        # Centre line of the body on the origin (feet / legs on Y = 0 or X = 0).
+        _, width, height, sole, middle, _ = picture_marks(PICTURES % name, name in LEG_VIEWS)
+        empty.empty_image_offset = (-middle / width, -(height - sole) / height)
     bpy.ops.wm.save_as_mainfile(filepath=BLEND)
-    print("UPDATE: reference pictures re-set in %s (hidden: %s)" % (BLEND, ", ".join(sorted(HIDDEN_VIEWS))))
+    print("UPDATE: reference pictures re-set in %s (hidden: %s; centred again)" % (BLEND, ", ".join(sorted(HIDDEN_VIEWS))))
 
 
 def main():
@@ -162,7 +186,7 @@ def main():
     _, _, _, sole, _, head = picture_marks(PICTURES % "front")
     metres_per_pixel = head_top / float(sole - head)
     for name, (rotation, location) in VIEWS.items():
-        image, width, height, sole, middle, _ = picture_marks(PICTURES % name)
+        image, width, height, sole, middle, _ = picture_marks(PICTURES % name, name in LEG_VIEWS)
         empty = bpy.data.objects.new("Reference " + name, None)
         reference.objects.link(empty)
         empty.empty_display_type = "IMAGE"
