@@ -5,8 +5,9 @@ Run headless (from the project folder):
   blender --background art/echo/echo_model.blend --python tools/blender/check_model.py
   ... --python tools/blender/check_model.py -- --collection Echo --budget 6000
 
-For every mesh in the collection (default "Echo"; modifiers applied, as the
-export will see it):
+For every mesh and curve in the collection (default "Echo"; modifiers
+applied, as the export will see it: a bevelled curve exports as a mesh, a
+curve without thickness, e.g. a Curve modifier's path, exports nothing):
 - triangles (and the total against the budget);
 - flipped normals: faces whose winding disagrees with a neighbour (one of the
   two is flipped), and closed parts that are inside out;
@@ -14,7 +15,7 @@ export will see it):
   fine for thin fins) and edges shared by 3+ faces (always a problem);
 - loose vertices and loose edges (not part of any face);
 - unapplied scale / rotation (also on the armature), negative scale;
-- the model's height and where it stands (soles at z = 0, centred on x / y);
+- the model's height and its lowest point, after modifiers (soles at z = 0);
 - the size of the .blend (keep it in git only while it is under 50 MB).
 Ends with "CHECK: n problem(s), m warning(s)"; the exit code is 1 when there
 are problems.
@@ -27,8 +28,11 @@ import bmesh
 import bpy
 
 DEFAULT_COLLECTION = "Echo"
-# Triangles for the whole character (the blockouts are ~2,000-3,000).
-DEFAULT_BUDGET = 8000
+# Triangles for the whole character (the hand-made Echo, Subdivision at its
+# viewport level as exported).
+DEFAULT_BUDGET = 12000
+# Object types whose evaluated geometry is exported as a mesh.
+GEOMETRY_TYPES = ("MESH", "CURVE")
 # Bigger .blend files should leave git (see art/echo/README.md).
 BLEND_LIMIT_MB = 50.0
 EPSILON = 1e-4
@@ -75,9 +79,15 @@ def inconsistent_edges(mesh):
 def check_object(item, depsgraph, report):
     evaluated = item.evaluated_get(depsgraph)
     data = evaluated.to_mesh()
+    heights = [(evaluated.matrix_world @ vertex.co).z for vertex in data.vertices]
     mesh = bmesh.new()
     mesh.from_mesh(data)
     evaluated.to_mesh_clear()
+    if item.type == "CURVE" and not mesh.faces:
+        mesh.free()
+        print("  %s: curve without thickness (a path: exports nothing)" % item.name)
+        check_transform(item, report)
+        return 0, None, None
     triangles = sum(len(face.verts) - 2 for face in mesh.faces)
     open_edges = sum(1 for edge in mesh.edges if len(edge.link_faces) == 1)
     crowded = sum(1 for edge in mesh.edges if len(edge.link_faces) > 2)
@@ -114,7 +124,7 @@ def check_object(item, depsgraph, report):
             piece.free()
     mesh.free()
 
-    line = "  %s: %d triangles" % (item.name, triangles)
+    line = "  %s: %d triangles%s" % (item.name, triangles, " (curve)" if item.type == "CURVE" else "")
     print(line)
     if flipped:
         report.problem(item.name, "%d edge(s) between faces that look opposite ways (flipped normals: Mesh > Normals > Recalculate Outside)" % flipped)
@@ -129,7 +139,9 @@ def check_object(item, depsgraph, report):
     if loose_edges:
         report.warning(item.name, "%d loose edge(s) (no face)" % loose_edges)
     check_transform(item, report)
-    return triangles
+    if not heights:
+        return triangles, None, None
+    return triangles, min(heights), max(heights)
 
 
 def check_transform(item, report):
@@ -169,30 +181,33 @@ def main():
         print("CHECK: 1 problem(s), 0 warning(s)")
         sys.exit(1)
     objects = list(collection.all_objects)
-    meshes = [item for item in objects if item.type == "MESH"]
-    if not meshes:
+    meshes = [item for item in objects if item.type in GEOMETRY_TYPES]
+    if not any(item.type == "MESH" for item in meshes):
         report.warning(options["collection"], "no mesh yet")
     depsgraph = bpy.context.evaluated_depsgraph_get()
     total = 0
     low = high = None
+    lowest_name = ""
     for item in meshes:
-        total += check_object(item, depsgraph, report)
-        corners = [item.matrix_world @ v.co for v in item.data.vertices]
-        if corners:
-            zs = [c.z for c in corners]
-            low = min(zs) if low is None else min(low, min(zs))
-            high = max(zs) if high is None else max(high, max(zs))
+        triangles, item_low, item_high = check_object(item, depsgraph, report)
+        total += triangles
+        if item_low is None:
+            continue
+        if low is None or item_low < low:
+            low = item_low
+            lowest_name = item.name
+        high = item_high if high is None else max(high, item_high)
     for item in objects:
         if item.type == "ARMATURE":
             print("  %s: armature, %d bones" % (item.name, len(item.data.bones)))
             check_transform(item, report)
-        elif item.type not in ("MESH", "ARMATURE", "EMPTY"):
+        elif item.type not in GEOMETRY_TYPES + ("ARMATURE", "EMPTY"):
             report.warning(item.name, "a %s is in the collection: it will not export as a mesh" % item.type.lower())
-    if meshes:
+    if meshes and low is not None:
         print("  total: %d triangles (budget %d)" % (total, options["budget"]))
         if total > options["budget"]:
             report.problem(options["collection"], "%d triangles, over the budget of %d" % (total, options["budget"]))
-        print("  height: %.3f m (lowest point %.3f m; the soles belong on z = 0)" % (high - low, low))
+        print("  height: %.3f m (lowest point %.3f m, %s; the soles belong on z = 0)" % (high - low, low, lowest_name))
         if abs(low) > 0.05:
             report.warning(options["collection"], "the lowest point is at z = %.3f: the feet should stand on the floor (z = 0)" % low)
     if bpy.data.filepath:
