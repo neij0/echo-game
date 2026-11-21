@@ -11,7 +11,9 @@ extends Node
 ## - "variants": also the sheets of the first three variants of each.
 ## - "final": only the hand-made final Echo (final_...): close (dark, pulse,
 ##   afterglow, studio light) and at the game distance (dark, pulse,
-##   afterglow), beside the Guardian's final blockout.
+##   afterglow) beside the Guardian's final blockout, then at the game
+##   distance for each of the test's final_scales (final_game_scale_<x>_...:
+##   dark and pulse).
 
 @export var test: CharacterTest
 @export var folder: String = ""
@@ -83,10 +85,15 @@ func _final_pictures() -> void:
 	test.set_close_view(false)
 	_place_pair(start, right, away)
 	await _pulse_pictures("final_game", true)
+	for index: int in test.final_scales.size():
+		test.set_final_scale(index)
+		_place_pair(start, right, away)
+		await _pulse_pictures("final_game_scale_%d" % roundi(test.final_scales[index] * 100.0), true, false)
+	test.set_final_scale(0)
 
 
 ## Dark, the pulse front and the afterglow (prefix_1_dark ...).
-func _pulse_pictures(prefix: String, cut_out: bool) -> void:
+func _pulse_pictures(prefix: String, cut_out: bool, afterglow: bool = true) -> void:
 	var pulse := test.echo.get_node("Pulse") as PulseAbility
 	await _wait(settle_time + maxf(pulse.cooldown_left, 0.0))
 	await _save(prefix + "_1_dark", cut_out)
@@ -95,7 +102,8 @@ func _pulse_pictures(prefix: String, cut_out: bool) -> void:
 	await _wait(pulse.pulse_expand_time * 0.3)
 	await _save(prefix + "_2_pulse", cut_out)
 	await _wait(pulse.pulse_expand_time * 0.7 + 1.0)
-	await _save(prefix + "_3_afterglow", cut_out)
+	if afterglow:
+		await _save(prefix + "_3_afterglow", cut_out)
 	await _wait(test.sonar.get_lifetime(pulse.pulse_expand_time))
 
 

@@ -9,7 +9,8 @@ extends CoreTest
 ## review), with the basic animations (idle, swim / walk, pulse pose, sword
 ## swing). Keys: E = the hand-made final Echo (characters/final/echo.glb,
 ## static: no rig yet), 7 = the Echo's final blockout, 1 / 2 / 3 = her first
-## variants (Leaf, Comet, Bell); 8 = the Guardian's final blockout, 4 / 5 / 6 = his first variants
+## variants (Leaf, Comet, Bell); 9 = the final Echo's size (final_scales, the
+## model only: her collision stays); 8 = the Guardian's final blockout, 4 / 5 / 6 = his first variants
 ## (Stag, Spire, Bulwark); 0 = the capsules again, L = studio light
 ## (to look at the shapes), Z = close view / game distance, plus the keys of
 ## the core test (F creatures, C cut-away, R restart...). The creatures start
@@ -34,6 +35,8 @@ const HAND: int = 4
 ## the capsule).
 @export_range(-1, 4) var echo_variant: int = 3
 @export_range(-1, 3) var guardian_variant: int = 3
+## Key 9: the sizes tried for the hand-made final Echo (1 = as modelled).
+@export var final_scales: Array[float] = [1.0, 1.15, 1.3]
 ## Freeze and hide the creatures at the start.
 @export var calm_start: bool = true
 
@@ -46,6 +49,7 @@ const HAND: int = 4
 
 var echo_model: CharacterModel
 var echo_final_model: CharacterModel
+var final_scale_index: int = 0
 var guardian_model: CharacterModel
 var darkness: Darkness
 var studio_light: bool = false
@@ -94,6 +98,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_E:
 				set_variants(HAND, guardian_variant)
 				return
+			KEY_9:
+				set_final_scale((final_scale_index + 1) % final_scales.size())
+				return
 			KEY_8:
 				set_variants(echo_variant, FINAL)
 				return
@@ -111,8 +118,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	super._process(delta)
-	_info.text += "\nBLOCKOUTS (placeholders)   [E / 7 / 1-3] Echo: %s   [8 / 4-6] Guardian: %s   [0] capsules   [L] studio light: %s   [Z] view: %s" % [
-		_variant_name(echo_variant, ECHO_NAMES), _variant_name(guardian_variant, GUARDIAN_NAMES),
+	_info.text += "\nBLOCKOUTS (placeholders)   [E / 7 / 1-3] Echo: %s   [9] final Echo size: %.2f   [8 / 4-6] Guardian: %s   [0] capsules   [L] studio light: %s   [Z] view: %s" % [
+		_variant_name(echo_variant, ECHO_NAMES), echo_final_model.model_scale, _variant_name(guardian_variant, GUARDIAN_NAMES),
 		"ON" if studio_light else "off", "CLOSE" if close_view else "game"]
 
 
@@ -120,6 +127,12 @@ func _process(delta: float) -> void:
 static func model_of(character: String, variant: int) -> PackedScene:
 	return load(MODEL_PATH % [character, FILES[variant]]) as PackedScene
 
+
+
+## The hand-made final Echo's size: final_scales[index].
+func set_final_scale(index: int) -> void:
+	final_scale_index = index
+	echo_final_model.model_scale = final_scales[index]
 
 
 ## The variant each player wears (0-2; -1 = the capsule of the game).

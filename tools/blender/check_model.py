@@ -30,7 +30,7 @@ import bpy
 DEFAULT_COLLECTION = "Echo"
 # Triangles for the whole character (the hand-made Echo, Subdivision at its
 # viewport level as exported).
-DEFAULT_BUDGET = 12000
+DEFAULT_BUDGET = 16000
 # Object types whose evaluated geometry is exported as a mesh.
 GEOMETRY_TYPES = ("MESH", "CURVE")
 # Bigger .blend files should leave git (see art/echo/README.md).

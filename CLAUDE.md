@@ -217,7 +217,10 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   in `tools/character_test.tscn` (key E; `-- pictures <folder> final`): `CharacterModel`
   `use_vertex_colors` (the shared shader multiplies the vertex colours) and
   `glow_materials` (material name -> glow energy, for a glowing part whose material has
-  no emission: the Blender Glow material has none; its colour is the glow). `art/` has a
+  no emission: the Blender Glow material has none; its colour is the glow); key 9 tries
+  her size (`final_scales` 1 / 1.15 / 1.3: `CharacterModel.model_scale`, the look only,
+  the collision stays). The Echo's own light is cool white-blue (`echo.tscn`
+  `PlayerLight.light_color_tint`), so her white body does not turn cream. `art/` has a
   `.gdignore`; `*.blend1` backups are ignored; the .blend leaves git above 50 MB.
 - **Level play-test**: `tools/level_test.tscn` (F6): the real Ocean levels (exports
   `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player

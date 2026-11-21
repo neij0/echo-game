@@ -17,6 +17,9 @@ light_reveal_radius = 2.3
 color = Color(0.3, 0.9, 1, 1)
 rim_energy = 2.2
 
+[node name="PlayerLight" parent="." index="2"]
+light_color_tint = Color(0.82, 0.91, 1, 1)
+
 [node name="Pulse" type="Node" parent="." node_paths=PackedStringArray("player", "ready_cue")]
 script = ExtResource("2_pulse")
 player = NodePath("..")

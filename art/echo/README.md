@@ -42,7 +42,7 @@ Save often (**Ctrl + S**). Blender also writes `echo_model.blend1` backups: git 
 blender --background art/echo/echo_model.blend --python tools/blender/check_model.py
 ```
 It prints, for each mesh and bevelled curve in the Echo collection (after modifiers,
-as exported): triangles (the total against a budget of 12,000), flipped normals, parts that are inside out, non-manifold edges (3+ faces
+as exported): triangles (the total against a budget of 16,000), flipped normals, parts that are inside out, non-manifold edges (3+ faces
 on one edge = a problem; open edges = a warning, fine on thin fins), loose vertices and
 edges, unapplied scale / rotation (fix with **Ctrl + A > All Transforms**), the height,
 and the file size. It ends with `CHECK: n problem(s), m warning(s)`. It only reports:

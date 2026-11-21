@@ -29,6 +29,9 @@ const SEE_THROUGH_SHADER: Shader = preload("res://shaders/see_through.gdshader")
 @export var rim_color: Color = Color(0.3, 0.9, 1.0)
 @export var rim_energy: float = 0.6
 @export var rim_power: float = 2.5
+## Size of the drawn model (1 = as modelled). Only the look: the player's
+## collision stays as it is.
+@export var model_scale: float = 1.0
 ## Multiplies the glow of the model's glowing parts.
 @export var glow_scale: float = 1.0
 ## Colour of the outline shown through rock.
@@ -185,7 +188,7 @@ func _process(delta: float) -> void:
 	_flare = maxf(_flare - delta / maxf(pulse_flare_time, 0.01), 0.0)
 	var height: float = lerpf(hover_height + sin(_time * bob_speed) * bob_height, downed_height, _downed)
 	var tilt: float = deg_to_rad(lerpf(lean_degrees * _lean, downed_tilt_degrees, _downed))
-	_holder.transform = Transform3D(Basis(Vector3.RIGHT, tilt), Vector3(0.0, height, 0.0))
+	_holder.transform = Transform3D(Basis(Vector3.RIGHT, tilt).scaled(Vector3.ONE * model_scale), Vector3(0.0, height, 0.0))
 	if moves and _skeleton:
 		_stride += speed * delta / maxf(moves.stride_length, 0.01) * TAU
 		_pulse_pose = maxf(_pulse_pose - delta / maxf(pulse_pose_time, 0.01), 0.0)

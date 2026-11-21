@@ -1,7 +1,8 @@
 class_name PlayerLight
 extends OmniLight3D
 ## A player's own light, with real shadows: rock blocks it. The Echo carries
-## the main light of the game (warm, soft, 5.6 units = the 2D game's ~280 px);
+## the main light of the game (soft, 5.6 units = the 2D game's ~280 px; cool
+## white-blue, set in echo.tscn, so her white body stays white);
 ## the Guardian only a faint, small one, just enough to see himself and the
 ## rock right beside him, so he has to stay near the Echo to see. It also
 ## lights the fog round the player (volumetric fog).
