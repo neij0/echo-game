@@ -219,7 +219,18 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   `glow_materials` (material name -> glow energy, for a glowing part whose material has
   no emission: the Blender Glow material has none; its colour is the glow); key 9 tries
   her size (`final_scales` 1 / 1.15 / 1.3: `CharacterModel.model_scale`, the look only,
-  the collision stays). The Echo's own light is cool white-blue (`echo.tscn`
+  the collision stays). **Rig** (`tools/blender/rig_echo.py`, refuses if `EchoRig` exists):
+  `EchoRig`, joints measured on the mesh; humanoid bones (`.L` / `.R`) mapped onto
+  `SkeletonProfileHumanoid` by `tools/setup_echo_bone_map.gd` (writes the BoneMap into
+  `echo.glb.import`; Godot renames them, e.g. `LeftUpperArm`, skeleton `GeneralSkeleton`);
+  extras keep their names (`Toe1-5_1/2`, `TailMid` / `TailLeft` / `TailRight_1-6` + `_end`,
+  `Antenna_1-4` + `Lantern`, `Ear_1-3` + `_end`, `Skirt1-7_1/2` + `_end`, `SkirtFront`,
+  `SkirtBack`, `Crown`, `CheekTuft`; `CharacterModel` sways no chain of it yet). Body
+  weights = Blender's automatic weights on a cleaned copy; thin parts = smooth chain
+  weights; the Antenna curve became a mesh and the Eye's Shrinkwrap was applied (originals
+  in the excluded collection "Echo sources (not exported)"). Test poses:
+  `tools/blender/pose_test_echo.py` (pictures in `docs/character_blockouts/final_echo/rig_poses/`).
+  The Echo's own light is cool white-blue (`echo.tscn`
   `PlayerLight.light_color_tint`), so her white body does not turn cream. `art/` has a
   `.gdignore`; `*.blend1` backups are ignored; the .blend leaves git above 50 MB.
 - **Level play-test**: `tools/level_test.tscn` (F6): the real Ocean levels (exports
