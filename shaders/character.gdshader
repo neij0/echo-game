@@ -6,6 +6,8 @@ shader_type spatial;
 render_mode depth_draw_always, cull_back;
 
 uniform vec3 body_color : source_color = vec3(0.02, 0.03, 0.04);
+// The model's painted vertex colours (linear) multiply the body colour.
+uniform bool use_vertex_color = false;
 uniform vec3 rim_color : source_color = vec3(0.3, 0.9, 1.0);
 uniform float rim_energy = 1.0;
 uniform float rim_power = 2.5;
@@ -14,7 +16,7 @@ uniform vec3 glow_color : source_color = vec3(0.0);
 uniform float glow_energy = 0.0;
 
 void fragment() {
-	ALBEDO = body_color;
+	ALBEDO = body_color * (use_vertex_color ? COLOR.rgb : vec3(1.0));
 	ROUGHNESS = 0.9;
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), rim_power);
 	EMISSION = rim_color * rim * rim_energy + glow_color * glow_energy;

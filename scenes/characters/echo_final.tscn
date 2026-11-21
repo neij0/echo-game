@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/character_model.gd" id="1_model"]
+[ext_resource type="PackedScene" path="res://assets/models/characters/final/echo.glb" id="2_glb"]
+
+[node name="EchoFinal" type="Node3D"]
+script = ExtResource("1_model")
+model = ExtResource("2_glb")
+rim_color = Color(0.45, 0.9, 1, 1)
+rim_energy = 0.28
+outline_color = Color(0.3, 0.9, 1, 1)
+use_vertex_colors = true
+glow_materials = Dictionary[String, float]({
+"Glow": 2.5
+})
+hover_height = 0.2
+bob_height = 0.035
+lean_degrees = 24.0
+pulse_flare = 1.5
+downed_height = 0.02
+downed_tilt_degrees = 70.0

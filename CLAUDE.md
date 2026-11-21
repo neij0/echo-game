@@ -211,7 +211,13 @@ the 2D game until a phase replaces it (this file is updated at the end of every 
   without `-- --force`), `check_model.py` (report only: triangles, flipped / inside-out
   normals, non-manifold, loose, unapplied transforms, height, file size; exit 1 on
   problems), `export_to_godot.py` (the "Echo" collection ->
-  `assets/models/characters/final/echo.glb`; not used by the game yet). `art/` has a
+  `assets/models/characters/final/echo.glb`; not used by the game yet). The exported Echo
+  (materials Body / Glow / Petal, painted gradients in the colour attribute "Attribute"
+  on the Petal parts) is shown, static (no rig yet), by `scenes/characters/echo_final.tscn`
+  in `tools/character_test.tscn` (key E; `-- pictures <folder> final`): `CharacterModel`
+  `use_vertex_colors` (the shared shader multiplies the vertex colours) and
+  `glow_materials` (material name -> glow energy, for a glowing part whose material has
+  no emission: the Blender Glow material has none; its colour is the glow). `art/` has a
   `.gdignore`; `*.blend1` backups are ignored; the .blend leaves git above 50 MB.
 - **Level play-test**: `tools/level_test.tscn` (F6): the real Ocean levels (exports
   `stage_index`, `level_index`, `challenge_mode`, `forced_seed`) with the HUD's player

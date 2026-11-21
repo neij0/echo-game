@@ -1,7 +1,9 @@
 class_name CharacterModel
 extends Node3D
 ## A player's 3D model in place of the CapsuleBody. For now it shows the
-## BLOCKOUT placeholders (assets/models/characters/blockout, not final art).
+## BLOCKOUT placeholders (assets/models/characters/blockout, not final art)
+## in the game, and the hand-made final Echo (characters/final/echo.glb, no
+## rig yet) in tools/character_test.tscn.
 ## It puts the game's shared character shader on every surface of the model
 ## (the model's own materials only say the colour and the glow of each part),
 ## the same outline through rock as the capsule, sets a standing pose on the
@@ -31,6 +33,13 @@ const SEE_THROUGH_SHADER: Shader = preload("res://shaders/see_through.gdshader")
 @export var glow_scale: float = 1.0
 ## Colour of the outline shown through rock.
 @export var outline_color: Color = Color(0.3, 0.9, 1.0)
+## Use the model's painted vertex colours on the surfaces that have them
+## (they multiply the part's colour). Off for the blockouts.
+@export var use_vertex_colors: bool = false
+## Material name -> glow energy, for a part whose material has no emission
+## of its own (its glow colour is then its own colour). The model's emission,
+## when it has one, wins.
+@export var glow_materials: Dictionary[String, float] = {}
 
 @export_group("Pose")
 ## Bone name -> the direction it points along, in the model's own space
@@ -215,7 +224,8 @@ func _build() -> void:
 	for node: Node in instance.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := node as MeshInstance3D
 		for surface: int in mesh_instance.mesh.get_surface_count():
-			mesh_instance.set_surface_override_material(surface, _material_for(mesh_instance.mesh.surface_get_material(surface)))
+			var painted: bool = use_vertex_colors and (mesh_instance.mesh.surface_get_format(surface) & Mesh.ARRAY_FORMAT_COLOR) != 0
+			mesh_instance.set_surface_override_material(surface, _material_for(mesh_instance.mesh.surface_get_material(surface), painted))
 	var skeletons: Array[Node] = instance.find_children("*", "Skeleton3D", true, false)
 	if skeletons.is_empty():
 		return
@@ -225,13 +235,15 @@ func _build() -> void:
 
 
 ## The shared character material for one surface: the model's material gives
-## the colour of the part and, if it glows, the glow.
-func _material_for(source: Material) -> ShaderMaterial:
+## the colour of the part and, if it glows, the glow. painted: the surface's
+## vertex colours multiply the colour.
+func _material_for(source: Material, painted: bool = false) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = BODY_SHADER
 	material.set_shader_parameter("rim_color", rim_color)
 	material.set_shader_parameter("rim_energy", rim_energy)
 	material.set_shader_parameter("rim_power", rim_power)
+	material.set_shader_parameter("use_vertex_color", painted)
 	var glow: float = 0.0
 	var standard := source as BaseMaterial3D
 	if standard:
@@ -240,6 +252,10 @@ func _material_for(source: Material) -> ShaderMaterial:
 		if standard.emission_enabled:
 			glow = standard.emission_energy_multiplier
 			material.set_shader_parameter("glow_color", standard.emission)
+			material.set_shader_parameter("glow_energy", glow * glow_scale)
+		elif glow_materials.has(standard.resource_name):
+			glow = glow_materials[standard.resource_name]
+			material.set_shader_parameter("glow_color", standard.albedo_color)
 			material.set_shader_parameter("glow_energy", glow * glow_scale)
 	material.next_pass = _see_through
 	_surfaces.append({"material": material, "glow": glow})

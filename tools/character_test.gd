@@ -7,16 +7,19 @@ extends CoreTest
 ## final art (tools/blender/make_character_blockouts.py).
 ## Both start in their final blockout (the variants merged after the first
 ## review), with the basic animations (idle, swim / walk, pulse pose, sword
-## swing). Keys: 7 = the Echo's final blockout, 1 / 2 / 3 = her first variants
-## (Leaf, Comet, Bell); 8 = the Guardian's final blockout, 4 / 5 / 6 = his first variants
+## swing). Keys: E = the hand-made final Echo (characters/final/echo.glb,
+## static: no rig yet), 7 = the Echo's final blockout, 1 / 2 / 3 = her first
+## variants (Leaf, Comet, Bell); 8 = the Guardian's final blockout, 4 / 5 / 6 = his first variants
 ## (Stag, Spire, Bulwark); 0 = the capsules again, L = studio light
 ## (to look at the shapes), Z = close view / game distance, plus the keys of
 ## the core test (F creatures, C cut-away, R restart...). The creatures start
 ## frozen and hidden.
-## "-- pictures <folder>" saves pictures of every variant (CharacterTestShots).
+## "-- pictures <folder>" saves pictures of every variant (CharacterTestShots);
+## "-- pictures <folder> final" only those of the hand-made final Echo.
 
 const ECHO_BLOCKOUT: PackedScene = preload("res://scenes/characters/echo_blockout.tscn")
 const GUARDIAN_BLOCKOUT: PackedScene = preload("res://scenes/characters/guardian_blockout.tscn")
+const ECHO_FINAL: PackedScene = preload("res://scenes/characters/echo_final.tscn")
 const MODEL_PATH: String = "res://assets/models/characters/blockout/%s%s.glb"
 ## Variants 0-2 = the first three, FINAL = the merged blockout.
 const FILES: Array[String] = ["_blockout_a", "_blockout_b", "_blockout_c", "_blockout"]
@@ -24,9 +27,12 @@ const VARIANTS: Array[String] = ["a", "b", "c", "final"]
 const ECHO_NAMES: Array[String] = ["Leaf", "Comet", "Bell", "blockout"]
 const GUARDIAN_NAMES: Array[String] = ["Stag", "Spire", "Bulwark", "blockout"]
 const FINAL: int = 3
+## The Echo only: the hand-made final model.
+const HAND: int = 4
 
-## The variant each player starts in (0-2, FINAL; -1 = the capsule).
-@export_range(-1, 3) var echo_variant: int = 3
+## The variant each player starts in (0-2, FINAL, the Echo also HAND; -1 =
+## the capsule).
+@export_range(-1, 4) var echo_variant: int = 3
 @export_range(-1, 3) var guardian_variant: int = 3
 ## Freeze and hide the creatures at the start.
 @export var calm_start: bool = true
@@ -39,6 +45,7 @@ const FINAL: int = 3
 @export var close_size: float = 6.0
 
 var echo_model: CharacterModel
+var echo_final_model: CharacterModel
 var guardian_model: CharacterModel
 var darkness: Darkness
 var studio_light: bool = false
@@ -58,6 +65,7 @@ func _ready() -> void:
 	if calm_start:
 		set_creatures_frozen(true)
 	echo_model = _wear(echo, ECHO_BLOCKOUT)
+	echo_final_model = _wear(echo, ECHO_FINAL)
 	guardian_model = _wear(guardian, GUARDIAN_BLOCKOUT)
 	set_variants(echo_variant, guardian_variant)
 	var arguments: PackedStringArray = OS.get_cmdline_user_args()
@@ -66,6 +74,7 @@ func _ready() -> void:
 		shots.test = self
 		shots.folder = arguments[1]
 		shots.with_variants = arguments.has("variants")
+		shots.final_only = arguments.has("final")
 		add_child(shots)
 
 
@@ -81,6 +90,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			KEY_7:
 				set_variants(FINAL, guardian_variant)
+				return
+			KEY_E:
+				set_variants(HAND, guardian_variant)
 				return
 			KEY_8:
 				set_variants(echo_variant, FINAL)
@@ -99,7 +111,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	super._process(delta)
-	_info.text += "\nBLOCKOUTS (placeholders)   [7 / 1-3] Echo: %s   [8 / 4-6] Guardian: %s   [0] capsules   [L] studio light: %s   [Z] view: %s" % [
+	_info.text += "\nBLOCKOUTS (placeholders)   [E / 7 / 1-3] Echo: %s   [8 / 4-6] Guardian: %s   [0] capsules   [L] studio light: %s   [Z] view: %s" % [
 		_variant_name(echo_variant, ECHO_NAMES), _variant_name(guardian_variant, GUARDIAN_NAMES),
 		"ON" if studio_light else "off", "CLOSE" if close_view else "game"]
 
@@ -114,7 +126,10 @@ static func model_of(character: String, variant: int) -> PackedScene:
 func set_variants(echo_index: int, guardian_index: int) -> void:
 	echo_variant = echo_index
 	guardian_variant = guardian_index
-	_show(echo, echo_model, "echo", echo_index)
+	_show(echo, echo_model, "echo", -1 if echo_index == HAND else echo_index)
+	echo_final_model.visible = echo_index == HAND
+	if echo_index == HAND:
+		(echo.get_node("Body") as Node3D).visible = false
 	_show(guardian, guardian_model, "guardian", guardian_index)
 	# The model carries its own sword: the sword ability's stand-in blade is
 	# hidden (its slash arc and hits stay).
@@ -170,4 +185,6 @@ func _show(player: Player, model: CharacterModel, character: String, variant: in
 
 
 func _variant_name(variant: int, names: Array[String]) -> String:
+	if variant == HAND:
+		return "FINAL (hand-made)"
 	return "capsule" if variant < 0 else "%s (%s)" % [VARIANTS[variant].to_upper(), names[variant]]

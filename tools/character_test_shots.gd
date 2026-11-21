@@ -9,11 +9,19 @@ extends Node
 ##   pulse (the Echo's pulse pose) and its afterglow, swimming / walking, the
 ##   Guardian's sword swing.
 ## - "variants": also the sheets of the first three variants of each.
+## - "final": only the hand-made final Echo (final_...): close (dark, pulse,
+##   afterglow, studio light) and at the game distance (dark, pulse,
+##   afterglow), beside the Guardian's final blockout.
 
 @export var test: CharacterTest
 @export var folder: String = ""
 ## Also the sheets of the first variants (A, B, C).
 @export var with_variants: bool = false
+## Only the pictures of the hand-made final Echo.
+@export var final_only: bool = false
+## The final Echo's close view: the view height and the units between the two.
+@export var final_close_view: float = 2.4
+@export var final_close_distance: float = 1.3
 @export var settle_time: float = 1.2
 ## Where the sheets are set up (clear of the rooms), and their floor's size.
 @export var sheet_spot: Vector3 = Vector3(-60.0, 0.0, -60.0)
@@ -49,9 +57,46 @@ func _run() -> void:
 	test._info.visible = false
 	test.set_creatures_frozen(true)
 	await _wait(0.5)
+	if final_only:
+		await _final_pictures()
+		get_tree().quit()
+		return
 	await _sheets()
 	await _game_pictures()
 	get_tree().quit()
+
+
+## The hand-made final Echo, static: close, then at the game distance; each
+## in the dark, at the pulse front and in its afterglow.
+func _final_pictures() -> void:
+	var start: Vector3 = test.echo.global_position
+	var right: Vector3 = _flat(test.camera.global_basis.x)
+	var away: Vector3 = _flat(-test.camera.global_basis.z)
+	test.set_variants(CharacterTest.HAND, CharacterTest.FINAL)
+	test.set_close_view(true, final_close_view)
+	_place_pair(start, right, away, final_close_distance)
+	await _pulse_pictures("final_close", false)
+	test.set_studio_light(true)
+	await _wait(0.3)
+	await _save("final_close_studio")
+	test.set_studio_light(false)
+	test.set_close_view(false)
+	_place_pair(start, right, away)
+	await _pulse_pictures("final_game", true)
+
+
+## Dark, the pulse front and the afterglow (prefix_1_dark ...).
+func _pulse_pictures(prefix: String, cut_out: bool) -> void:
+	var pulse := test.echo.get_node("Pulse") as PulseAbility
+	await _wait(settle_time + maxf(pulse.cooldown_left, 0.0))
+	await _save(prefix + "_1_dark", cut_out)
+	await get_tree().physics_frame
+	pulse.emit_pulse()
+	await _wait(pulse.pulse_expand_time * 0.3)
+	await _save(prefix + "_2_pulse", cut_out)
+	await _wait(pulse.pulse_expand_time * 0.7 + 1.0)
+	await _save(prefix + "_3_afterglow", cut_out)
+	await _wait(test.sonar.get_lifetime(pulse.pulse_expand_time))
 
 
 func _sheets() -> void:
@@ -188,9 +233,9 @@ func _game_pictures() -> void:
 	await _wait(0.6)
 
 
-func _place_pair(start: Vector3, right: Vector3, away: Vector3) -> void:
+func _place_pair(start: Vector3, right: Vector3, away: Vector3, distance: float = 0.0) -> void:
 	test.echo.global_position = start
-	test.guardian.global_position = start + right * pair_distance
+	test.guardian.global_position = start + right * (distance if distance > 0.0 else pair_distance)
 	test.echo.facing = (-away + right * 0.45).normalized()
 	test.guardian.facing = (-away - right * 0.45).normalized()
 	for player: Player in [test.echo, test.guardian]:
